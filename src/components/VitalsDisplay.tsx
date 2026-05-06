@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import useStore from '../store/useStore';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../utils/cn';
@@ -29,18 +29,15 @@ const VitalCard: React.FC<{
   <div className="flex flex-col items-center">
     <div className="flex items-center gap-1">
       <div className="flex items-baseline">
-        <motion.span 
-          key={String(status.value)}
-          initial={{ opacity: 0, y: status.trend === 'up' ? 5 : -5 }}
-          animate={{ opacity: 1, y: 0 }}
+        <span 
           className={cn(
-            "font-light tracking-tight transition-all duration-300",
+            "font-light tracking-tight transition-colors duration-300",
             size === 'xl' ? 'text-7xl' : size === 'normal' ? 'text-4xl' : 'text-2xl',
             color
           )}
         >
           {status.value}
-        </motion.span>
+        </span>
         {showUnit && status.unit && (
           <span className={cn(
             "font-light transition-all duration-300 ml-1",

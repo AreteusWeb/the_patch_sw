@@ -3,7 +3,7 @@ import useStore from '../store/useStore';
 import WaveformCanvas from './WaveformCanvas';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-react';
-import { usePhysiologicalData } from '../hooks/usePhysiologicalData';
+import { useWebSocket, CH_RANGES } from '../hooks/useWebSocket';
 
 import CustomDropdown from './ui/CustomDropdown';
 
@@ -16,7 +16,7 @@ const WaveformContainer: React.FC = () => {
   const advancedEcgMode = useStore(state => state.advancedEcgMode);
   const setAdvancedEcgMode = useStore(state => state.setAdvancedEcgMode);
 
-  const { waveforms } = usePhysiologicalData();
+  const { waveforms } = useWebSocket();
   const vitals = useStore(state => state.vitals);
 
   const [isListening, setIsListening] = React.useState(false);
@@ -49,7 +49,7 @@ const WaveformContainer: React.FC = () => {
               <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Good</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setIsEcgExpanded(!isEcgExpanded)}
             className="text-[11px] font-bold text-slate-500 uppercase tracking-widest hover:text-white transition-colors"
           >
@@ -60,15 +60,14 @@ const WaveformContainer: React.FC = () => {
           "relative bg-slate-950/40 rounded-xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-300",
           isEcgExpanded ? "h-[500px]" : "h-24"
         )}>
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
-            style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }} 
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+            style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}
           />
-          <WaveformCanvas 
-            data={waveforms[selectedLeadIndex % 4]} 
-            height={isEcgExpanded ? 500 : 96} 
-            color="#2dd4bf" 
-            min={-1.5} 
-            max={1.5}
+          <WaveformCanvas
+            data={waveforms[selectedLeadIndex % 4]}
+            height={isEcgExpanded ? 500 : 96}
+            color="#2dd4bf"
+            min={CH_RANGES[0][0]} max={CH_RANGES[0][1]}
             lineWidth={isEcgExpanded ? 2.5 : 1.5}
             gridLines={isEcgExpanded}
           />
@@ -81,13 +80,13 @@ const WaveformContainer: React.FC = () => {
     <div className="flex flex-col p-2 pt-0.5 gap-1 bg-black flex-1 justify-between">
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-4 text-[9px] font-bold uppercase tracking-[0.2em]">
-          <button 
+          <button
             onClick={() => setAdvancedEcgMode('Single')}
             className={cn("transition-colors", advancedEcgMode === 'Single' ? "text-white border-b border-white pb-0.5" : "text-slate-500")}
           >
             SINGLE LEAD
           </button>
-          <button 
+          <button
             onClick={() => setAdvancedEcgMode('All')}
             className={cn("transition-colors", advancedEcgMode === 'All' ? "text-white border-b border-white pb-0.5" : "text-slate-500")}
           >
@@ -119,12 +118,11 @@ const WaveformContainer: React.FC = () => {
           leads.map((label, i) => (
             <div key={label} className="relative bg-slate-900/10 rounded-sm border-b border-slate-900/10">
               <div className="absolute left-1 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">{label}</div>
-              <WaveformCanvas 
-                data={waveforms[i % 4]} 
-                height={28} 
-                color="#2dd4bf" 
-                min={-1.5} 
-                max={1.5} 
+              <WaveformCanvas
+                data={waveforms[i % 4]}
+                height={28}
+                color="#2dd4bf"
+                min={CH_RANGES[0][0]} max={CH_RANGES[0][1]}
                 gridLines={false}
                 lineWidth={1}
               />
@@ -139,18 +137,17 @@ const WaveformContainer: React.FC = () => {
               <span className="text-[10px] font-bold text-slate-300 uppercase">{leads[selectedLeadIndex]}</span>
               <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">Status: Optimal</span>
             </div>
-            <button 
+            <button
               onClick={() => setIsEcgExpanded(!isEcgExpanded)}
               className="absolute right-2 top-2 z-10 text-[9px] font-medium text-slate-500 uppercase tracking-widest hover:text-white transition-colors"
             >
               {isEcgExpanded ? '< COLLAPSE' : 'EXPAND >'}
             </button>
-            <WaveformCanvas 
-              data={waveforms[selectedLeadIndex % 4]} 
-              height={isEcgExpanded ? 300 : 144} 
-              color="#2dd4bf" 
-              min={-1.5} 
-              max={1.5} 
+            <WaveformCanvas
+              data={waveforms[selectedLeadIndex % 4]}
+              height={isEcgExpanded ? 300 : 144}
+              color="#2dd4bf"
+              min={CH_RANGES[0][0]} max={CH_RANGES[0][1]}
               gridLines={true}
               lineWidth={2}
             />
@@ -165,12 +162,11 @@ const WaveformContainer: React.FC = () => {
           <span className="text-[10px] font-bold text-teal-400 tabular-nums">{vitals.respirationRate.value}{vitals.respirationRate.unit}</span>
         </div>
         <div className="bg-slate-950/40 rounded border border-white/5 h-8">
-          <WaveformCanvas 
-            data={waveforms[4]} 
-            height={32} 
-            color="#5eead4" 
-            min={-1} 
-            max={1} 
+          <WaveformCanvas
+            data={waveforms[4]}
+            height={32}
+            color="#5eead4"
+            min={CH_RANGES[4][0]} max={CH_RANGES[4][1]}
             gridLines={false}
             lineWidth={1}
           />
@@ -185,11 +181,11 @@ const WaveformContainer: React.FC = () => {
         </div>
         <div className="flex items-end gap-[0.5px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/40 rounded border border-white/5">
           {waveforms[5].slice(-180).map((val, i) => (
-             <div 
-               key={i} 
-               className="bg-teal-500/20 w-[2px] rounded-t-[1px] flex-shrink-0" 
-               style={{ height: `${Math.max(10, Math.min(100, val * 100))}%` }} 
-             />
+            <div
+              key={i}
+              className="bg-teal-500/20 w-[2px] rounded-t-[1px] flex-shrink-0"
+              style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[5][1]) * 100))}%` }}
+            />
           ))}
         </div>
       </div>
@@ -198,12 +194,12 @@ const WaveformContainer: React.FC = () => {
       <div className="flex flex-col mt-1">
         <div className="flex items-center justify-between px-1 mb-0.5">
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">Auscultation</h4>
-          <button 
+          <button
             onClick={() => setIsListening(!isListening)}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-bold uppercase tracking-widest transition-all border",
-              isListening 
-                ? "bg-rose-500/10 border-rose-500/50 text-rose-400" 
+              isListening
+                ? "bg-rose-500/10 border-rose-500/50 text-rose-400"
                 : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-teal-500/50"
             )}
           >
@@ -228,17 +224,17 @@ const WaveformContainer: React.FC = () => {
         <div className="flex flex-col gap-1">
           <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded border border-white/5">
             <div className="flex flex-col">
-              <span className="text-[10px] font-medium text-slate-200">Elevated Heart Rate</span>
+              <span className="text-[10px] font-medium text-white">Elevated Heart Rate</span>
               <span className="text-[8px] text-slate-500 font-bold uppercase">10:11 AM</span>
             </div>
-            <div className="text-[8px] font-bold text-rose-500 uppercase px-1.5 py-0.5 bg-rose-500/10 rounded">BPM 142</div>
+            <div className="text-[10px] font-medium text-slate-500">142 BPM</div>
           </div>
           <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded border border-white/5">
             <div className="flex flex-col">
-              <span className="text-[10px] font-medium text-slate-200">SpO2 Threshold Drop</span>
+              <span className="text-[10px] font-medium text-white">SpO2 Threshold Drop</span>
               <span className="text-[8px] text-slate-500 font-bold uppercase">10:35 AM</span>
             </div>
-            <div className="text-[8px] font-bold text-yellow-500 uppercase px-1.5 py-0.5 bg-yellow-500/10 rounded">SpO2 89%</div>
+            <div className="text-[10px] font-medium text-slate-500">89%</div>
           </div>
         </div>
       </div>

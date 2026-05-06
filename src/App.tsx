@@ -15,7 +15,6 @@ import FallAlert from './components/FallAlert';
 import SideMenu from './components/SideMenu';
 import Footer from './components/Footer';
 import useStore from './store/useStore';
-import { usePhysiologicalData } from './hooks/usePhysiologicalData';
 import { AnimatePresence } from 'motion/react';
 
 export default function App() {

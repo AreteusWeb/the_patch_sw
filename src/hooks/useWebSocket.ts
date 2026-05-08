@@ -281,9 +281,12 @@ export const useWebSocket = () => {
   }, []);
 
   // Ref para que el render loop siempre lea el historyOffset actual
-  // sin necesidad de recrear el loop cada vez que cambia
   const historyOffsetRef = useRef(historyOffset);
-  useEffect(() => { historyOffsetRef.current = historyOffset; }, [historyOffset]);
+  const lastOffsetRef    = useRef(-1); // para detectar cambios en modo histórico
+  useEffect(() => {
+    historyOffsetRef.current = historyOffset;
+    lastOffsetRef.current = -1; // forzar re-render al cambiar offset
+  }, [historyOffset]);
 
   // ── Render loop + vitales @ 30fps ───────────────────────────────────────────
   useEffect(() => {
@@ -297,6 +300,11 @@ export const useWebSocket = () => {
       last = now;
 
       const offsetSamples = historyOffsetRef.current * 250; // segundos -> samples @ 250Hz
+
+      // En modo histórico: solo renderizar una vez al cambiar el offset,
+      // no en cada frame — los waveforms quedan estáticos
+      if (offsetSamples > 0 && offsetSamples === lastOffsetRef.current) return;
+      lastOffsetRef.current = offsetSamples;
 
       // Waveforms
       const next = rings.current.map((ring, ch) => {

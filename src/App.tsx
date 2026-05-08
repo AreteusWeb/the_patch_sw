@@ -11,7 +11,7 @@ import AlertsPanel from './components/AlertsPanel';
 import WaveformContainer from './components/WaveformContainer';
 import BottomNav from './components/BottomNav';
 import AdvancedControls from './components/AdvancedControls';
-import FallAlert from './components/FallAlert';
+import EventBanner from './components/EventBanner';
 import SideMenu from './components/SideMenu';
 import Footer from './components/Footer';
 import useStore from './store/useStore';
@@ -36,7 +36,7 @@ export default function App() {
           ) : (
             <div className="flex flex-col animate-in fade-in duration-500 flex-1">
               <VitalsDisplay compact />
-              <FallAlert />
+              <EventBanner />
               <AdvancedControls />
               <WaveformContainer />
             </div>

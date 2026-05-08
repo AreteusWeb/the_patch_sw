@@ -1,8 +1,7 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react';
 import { cn } from '../utils/cn';
 import useStore from '../store/useStore';
-import CustomDropdown from './ui/CustomDropdown';
 
 const MAX_HISTORY_SECONDS = 3600;
 
@@ -12,9 +11,7 @@ const RANGE_SECONDS: Record<string, number> = {
   '1 Day':  86400,
 };
 
-const EVENT_FILTER_OPTIONS = ['All Events', 'Fall', 'Tachycardia', 'Bradycardia', 'SpO2 Drop', 'Fever'];
 const EVENT_TYPE_MAP: Record<string, string[]> = {
-  'All Events':  [],
   'Fall':        ['fall'],
   'Tachycardia': ['tachycardia', 'elevated_hr'],
   'Bradycardia': ['bradycardia'],
@@ -23,17 +20,30 @@ const EVENT_TYPE_MAP: Record<string, string[]> = {
 };
 
 const AdvancedControls: React.FC = () => {
-  const historyOffset  = useStore(s => s.historyOffset);
+  const historyOffset    = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
-  const events         = useStore(s => s.events);
+  const events           = useStore(s => s.events);
   const getEventsInRange = useStore(s => s.getEventsInRange);
-  const jumpToEvent    = useStore(s => s.jumpToEvent);
+  const jumpToEvent      = useStore(s => s.jumpToEvent);
 
   const ranges = ['10 Min', '1 Hr', '1 Day'];
-  const [activeRange, setActiveRange] = React.useState('1 Hr');
-  const [filterIndex, setFilterIndex] = React.useState(0);
+  const [activeRange, setActiveRange] = React.useState<string | null>(null);
+  const [filterIndex, setFilterIndex] = React.useState(0); // 0 = "Select Events" placeholder
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const isLive = historyOffset === 0;
+
+  // Cerrar dropdown al click fuera
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const displayTime = React.useMemo(() => {
     const target = new Date(Date.now() - historyOffset * 1000);
@@ -45,39 +55,41 @@ const AdvancedControls: React.FC = () => {
     return { date: `${mm}/${dd}`, time: `${hh}:${min}:${ss}` };
   }, [historyOffset]);
 
-  // Eventos filtrados por rango y tipo
-  const filteredEvents = React.useMemo(() => {
-    const rangeS      = RANGE_SECONDS[activeRange] ?? 3600;
-    const inRange     = getEventsInRange(rangeS);
-    const typeFilter  = EVENT_FILTER_OPTIONS[filterIndex];
-    const allowed     = EVENT_TYPE_MAP[typeFilter] ?? [];
-    return allowed.length === 0 ? inRange : inRange.filter(e => allowed.includes(e.type));
-  }, [events, activeRange, filterIndex, getEventsInRange]);
-
-  // Opciones del dropdown con conteos
-  const dropdownOptions = React.useMemo(() => {
-    const rangeS  = RANGE_SECONDS[activeRange] ?? 3600;
-    const inRange = getEventsInRange(rangeS);
-    return EVENT_FILTER_OPTIONS.map((label) => {
-      const allowed = EVENT_TYPE_MAP[label] ?? [];
-      const count   = allowed.length === 0
-        ? inRange.length
-        : inRange.filter(e => allowed.includes(e.type)).length;
-      return count > 0 ? `${label} (${count})` : label;
-    });
+  // Eventos filtrados — si no hay rango seleccionado, usar 1hr por defecto para el listado
+  const eventsInRange = React.useMemo(() => {
+    const rangeS = activeRange ? RANGE_SECONDS[activeRange] : 3600;
+    return getEventsInRange(rangeS);
   }, [events, activeRange, getEventsInRange]);
+
+  const filteredEvents = React.useMemo(() => {
+    if (filterIndex === 0) return eventsInRange; // "Select Events" = todos
+    const typeLabel = Object.keys(EVENT_TYPE_MAP)[filterIndex - 1];
+    const allowed   = EVENT_TYPE_MAP[typeLabel] ?? [];
+    return eventsInRange.filter(e => allowed.includes(e.type));
+  }, [eventsInRange, filterIndex]);
+
+  // Opciones del dropdown — solo tipos que realmente tienen eventos en el rango
+  const dropdownOptions = React.useMemo(() => {
+    const opts: { label: string; count: number; index: number }[] = [];
+    Object.entries(EVENT_TYPE_MAP).forEach(([label, types], i) => {
+      const count = eventsInRange.filter(e => types.includes(e.type)).length;
+      if (count > 0) opts.push({ label, count, index: i + 1 });
+    });
+    return opts;
+  }, [eventsInRange]);
+
+  const selectedLabel = filterIndex === 0
+    ? 'Select Events'
+    : Object.keys(EVENT_TYPE_MAP)[filterIndex - 1];
 
   // Navegar entre eventos con «»
   const navigateEvent = (direction: 'prev' | 'next') => {
     if (filteredEvents.length === 0) return;
     const currentEpoch = Date.now() - historyOffset * 1000;
-
     if (direction === 'prev') {
-      // Evento más reciente anterior al momento visible
       const prev = filteredEvents.find(e => e.timestampEpoch < currentEpoch - 2000);
       if (prev) jumpToEvent(prev);
     } else {
-      // Evento más antiguo posterior al momento visible
       const next = [...filteredEvents].reverse().find(e => e.timestampEpoch > currentEpoch + 2000);
       if (next) jumpToEvent(next);
       else setHistoryOffset(0);
@@ -91,7 +103,7 @@ const AdvancedControls: React.FC = () => {
     setHistoryOffset(next);
   };
 
-  // Evento más cercano al momento visible (para mostrar label)
+  // Evento más cercano al momento visible
   const nearestEvent = React.useMemo(() => {
     if (isLive || filteredEvents.length === 0) return null;
     const currentEpoch = Date.now() - historyOffset * 1000;
@@ -103,7 +115,7 @@ const AdvancedControls: React.FC = () => {
       <div className="flex flex-col gap-1 mt-0.5">
         <div className="flex items-center justify-between gap-2">
 
-          {/* Izquierda */}
+          {/* Izquierda: «← + Past Status */}
           <div className="flex flex-col items-center gap-1.5 min-w-[75px]">
             <div className="flex gap-1">
               <button onClick={() => navigateEvent('prev')} title="Evento anterior"
@@ -125,44 +137,99 @@ const AdvancedControls: React.FC = () => {
             </div>
           </div>
 
-          {/* Centro */}
+          {/* Centro: rangos + dropdown eventos */}
           <div className="flex-1 flex flex-col gap-1.5 p-1.5 bg-slate-900/30 border border-slate-800/50 rounded-xl min-w-[120px]">
+
+            {/* Rangos — ninguno activo por defecto */}
             <div className="flex gap-1 justify-center">
               {ranges.map(range => (
-                <button key={range} onClick={() => setActiveRange(range)}
+                <button key={range}
+                  onClick={() => setActiveRange(prev => prev === range ? null : range)}
                   className={cn(
-                    "flex-1 px-1 py-2 rounded-full text-[10px] font-bold uppercase transition-all border border-slate-800 min-w-[30px]",
+                    "flex-1 px-1 py-2 rounded-full text-[10px] font-bold uppercase transition-all border min-w-[30px]",
                     activeRange === range
                       ? "bg-teal-500 text-white border-teal-400 shadow-lg shadow-teal-500/20"
-                      : "text-slate-500 hover:text-slate-300"
+                      : "text-slate-500 border-slate-800 hover:text-slate-300"
                   )}>
                   {range.replace(' Min', 'm').replace(' Hr', 'h').replace(' Day', 'd')}
                 </button>
               ))}
             </div>
-            <div className="flex gap-1">
+
+            {/* Dropdown de eventos — estilo igual que el de leads */}
+            <div className="relative z-50" ref={dropdownRef}>
               <button
-                onClick={() => setFilterIndex(0)}
-                className={cn(
-                  "flex-1 px-1.5 py-2 rounded-full text-[8px] font-bold uppercase tracking-tight border transition-colors",
-                  filterIndex === 0
-                    ? "bg-slate-800 text-white border-slate-700"
-                    : "text-slate-500 border-slate-800 hover:text-slate-200"
-                )}>
-                All{filteredEvents.length > 0 ? <span className="ml-1 text-teal-400">{filteredEvents.length}</span> : null}
+                type="button"
+                onClick={() => setDropdownOpen(o => !o)}
+                className="w-full flex items-center justify-between gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-300 uppercase tracking-widest hover:border-teal-500/50 hover:bg-slate-800/80 transition-all shadow-lg active:scale-95"
+              >
+                <span className="truncate">
+                  {selectedLabel}
+                  {filterIndex > 0 && filteredEvents.length > 0 && (
+                    <span className="ml-1.5 text-teal-400 normal-case">({filteredEvents.length})</span>
+                  )}
+                </span>
+                <ChevronDown size={12} className={cn("text-slate-500 transition-transform duration-200 flex-shrink-0", dropdownOpen && "rotate-180")} />
               </button>
-              <CustomDropdown
-                options={dropdownOptions}
-                current={filterIndex}
-                onSelect={setFilterIndex}
-                className="flex-1"
-                align="center"
-                position="top"
-              />
+
+              {dropdownOpen && (
+                <div className="absolute z-[100] bottom-full mb-1 left-1/2 -translate-x-1/2 min-w-[160px] bg-slate-900 border border-slate-700 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  <div className="max-h-[200px] overflow-y-auto">
+
+                    {/* Opción "todos" */}
+                    <button
+                      type="button"
+                      onClick={() => { setFilterIndex(0); setDropdownOpen(false); }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-left transition-colors border-b border-white/5",
+                        filterIndex === 0
+                          ? "bg-teal-500 text-white"
+                          : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                      )}
+                    >
+                      <span>All Events {eventsInRange.length > 0 && `(${eventsInRange.length})`}</span>
+                      {filterIndex === 0 && <Check size={12} className="text-white" />}
+                    </button>
+
+                    {/* Tipos con eventos */}
+                    {dropdownOptions.length === 0 ? (
+                      <div className="px-4 py-3 text-[9px] text-slate-600 uppercase tracking-widest">
+                        No events yet
+                      </div>
+                    ) : (
+                      dropdownOptions.map(opt => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() => {
+                            setFilterIndex(opt.index);
+                            setDropdownOpen(false);
+                            // Saltar al evento más reciente de este tipo
+                            const types = EVENT_TYPE_MAP[opt.label] ?? [];
+                            const latest = eventsInRange.find(e => types.includes(e.type));
+                            if (latest) jumpToEvent(latest);
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-left transition-colors border-b border-white/5 last:border-0",
+                            filterIndex === opt.index
+                              ? "bg-teal-500 text-white"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          )}
+                        >
+                          <span>{opt.label}</span>
+                          <span className={cn("text-[8px]", filterIndex === opt.index ? "text-white/70" : "text-slate-600")}>
+                            {opt.count}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Derecha */}
+          {/* Derecha: →» + Live */}
           <div className="flex flex-col items-center gap-1.5 min-w-[75px]">
             <div className="flex gap-1">
               <button onClick={() => handleSeek('forward', 10)} title="10s adelante"
@@ -186,28 +253,8 @@ const AdvancedControls: React.FC = () => {
           </div>
         </div>
 
-        {/* Slider con marcadores de eventos */}
-        <div className="px-2">
-          {/* Marcadores de eventos sobre el slider */}
-          <div className="relative h-3 mb-0.5">
-            {filteredEvents.map(event => {
-              const ageSeconds = (Date.now() - event.timestampEpoch) / 1000;
-              if (ageSeconds > MAX_HISTORY_SECONDS) return null;
-              const pct = Math.max(0, Math.min(100, 100 - (ageSeconds / MAX_HISTORY_SECONDS) * 100));
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => jumpToEvent(event)}
-                  title={event.label}
-                  style={{ left: `${pct}%` }}
-                  className={cn(
-                    "absolute top-1 w-2 h-2 rounded-full -translate-x-1/2 transition-transform hover:scale-150 z-10",
-                    event.severity === 'high' ? "bg-rose-500 shadow-rose-500/50 shadow-sm" : "bg-amber-400 shadow-amber-400/50 shadow-sm"
-                  )}
-                />
-              );
-            })}
-          </div>
+        {/* Slider limpio — sin marcadores encima */}
+        <div className="px-2 py-1">
           <input
             type="range"
             min={-MAX_HISTORY_SECONDS}
@@ -221,7 +268,7 @@ const AdvancedControls: React.FC = () => {
       </div>
 
       {/* Timestamp dinámico */}
-      <div className="flex justify-center mt-0.5 gap-2 items-center">
+      <div className="flex justify-center items-center gap-2 mt-0.5">
         <span className="text-base font-bold tabular-nums tracking-wider bg-black px-4 flex items-center gap-2">
           <span className={cn("transition-colors", isLive ? "text-slate-500" : "text-slate-400")}>
             {displayTime.date}

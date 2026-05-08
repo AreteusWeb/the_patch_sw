@@ -89,6 +89,14 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
       "relative flex flex-col items-center gap-1 flex-shrink-0 transition-all duration-300",
       compact ? "py-1" : "py-4"
     )}>
+      {/* Indicador de modo histórico */}
+      {isFrozen && (
+        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20">
+          <span className="w-1 h-1 rounded-full bg-teal-500" />
+          <span className="text-[7px] font-bold uppercase tracking-widest text-teal-500">Past</span>
+        </div>
+      )}
+
       {/* Top Row: SpO2 and Blood Pressure */}
       <div className={cn(
         "flex justify-between w-full mb-1 transition-all duration-300",

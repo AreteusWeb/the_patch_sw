@@ -103,12 +103,7 @@ const AdvancedControls: React.FC = () => {
     setHistoryOffset(next);
   };
 
-  // Evento más cercano al momento visible
-  const nearestEvent = React.useMemo(() => {
-    if (isLive || filteredEvents.length === 0) return null;
-    const currentEpoch = Date.now() - historyOffset * 1000;
-    return filteredEvents.find(e => Math.abs(e.timestampEpoch - currentEpoch) < 15000) ?? null;
-  }, [isLive, historyOffset, filteredEvents]);
+
 
   return (
     <div className="flex flex-col gap-1.5 px-3 py-1.5 bg-black">
@@ -321,16 +316,6 @@ const AdvancedControls: React.FC = () => {
             <span className="text-[8px] font-bold text-teal-500 uppercase tracking-widest animate-pulse">LIVE</span>
           )}
         </span>
-        {nearestEvent && (
-          <span className={cn(
-            "text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border",
-            nearestEvent.severity === 'high'
-              ? "text-rose-400 bg-rose-500/10 border-rose-500/30"
-              : "text-amber-400 bg-amber-500/10 border-amber-500/30"
-          )}>
-            {nearestEvent.label}
-          </span>
-        )}
       </div>
     </div>
   );

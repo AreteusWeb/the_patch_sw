@@ -3,26 +3,39 @@ import { AppState, AppActions, SimulationMode, Alert, Vitals } from '../types';
 
 // ─── Tipo de Evento ───────────────────────────────────────────────────────────
 // Un Event es distinto a un Alert:
-//   Alert  = notificación en el panel (texto, hora)
-//   Event  = momento clínico con timestamp en segundos desde epoch
-//             para poder saltar el slider a ese instante
+//   Alert  = notificación en el panel (texto, hora) — cosas generales
+//   Event  = momento clínico con timestamp para saltar el slider
 
-export type EventType = 'fall' | 'tachycardia' | 'bradycardia' | 'spo2drop' | 'fever' | 'elevated_hr';
+export type EventType =
+  // BPM
+  | 'tachycardia'    // HR alto  (>120 BPM)
+  | 'bradycardia'    // HR bajo  (<45 BPM)
+  // SpO2
+  | 'spo2_drop'      // SpO2 bajo (<90%)
+  // Temperatura
+  | 'hyperthermia'   // Temp alta (>39°C)
+  | 'hypothermia'    // Temp baja (<35°C)
+  // Respiratory Rate
+  | 'tachypnea'      // RR alto  (>25 rpm)
+  | 'bradypnea'      // RR bajo  (<10 rpm)
+  // Blood Pressure
+  | 'hypertension'   // PA alta  (sys >140)
+  | 'hypotension';   // PA baja  (sys <90)
 
 export interface ChestEvent {
   id: string;
   type: EventType;
-  label: string;          // "Fall Detected", "Tachycardia", etc.
+  label: string;          // "Tachycardia Detected", "SpO2 Drop", etc.
   severity: 'high' | 'medium' | 'low';
-  timestampEpoch: number; // Date.now() en ms — para calcular offset del slider
-  offsetSeconds: number;  // segundos desde ahora cuando se creó — snapshot para el slider
+  timestampEpoch: number; // Date.now() en ms
+  offsetSeconds: number;  // snapshot para el slider
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 interface EventState {
   events: ChestEvent[];
-  activeEventBanner: ChestEvent | null; // el que se muestra en el banner rojo
+  activeEventBanner: ChestEvent | null;
 }
 
 interface EventActions {
@@ -95,23 +108,24 @@ const useStore = create<AppState & AppActions & EventState & EventActions>((set,
   // ── Acciones de eventos ────────────────────────────────────────────────────
 
   addEvent: (event) => set((state) => {
-    const now = Date.now();
     const newEvent: ChestEvent = {
       ...event,
       id: Math.random().toString(36).substr(2, 9),
-      timestampEpoch: now,
-      offsetSeconds: 0, // acaba de ocurrir, offset = 0 en este momento
+      timestampEpoch: event.timestampEpoch ?? Date.now(),
+      offsetSeconds: 0,
     };
 
-    // También agregar como Alert para el panel
-    const alertMsg = newEvent.label;
-    const alertTime = new Date().toLocaleTimeString();
-
+    // Todo evento clínico también genera un alert en el panel
     return {
       events: [newEvent, ...state.events].slice(0, 200),
       activeEventBanner: newEvent,
       alerts: [
-        { id: newEvent.id + '_alert', timestamp: alertTime, message: alertMsg, severity: event.severity },
+        {
+          id: newEvent.id + '_alert',
+          timestamp: new Date(newEvent.timestampEpoch).toLocaleTimeString(),
+          message: newEvent.label,
+          severity: event.severity,
+        },
         ...state.alerts,
       ].slice(0, 100),
     };
@@ -119,17 +133,13 @@ const useStore = create<AppState & AppActions & EventState & EventActions>((set,
 
   dismissBanner: () => set({ activeEventBanner: null }),
 
-  // Salta el slider al momento exacto del evento
   jumpToEvent: (event) => {
     const nowMs = Date.now();
     let offsetSeconds = Math.round((nowMs - event.timestampEpoch) / 1000);
-    // Mínimo 5s de offset para que el buffer tenga datos del momento del evento
-    // y los waveforms muestren la señal de ese instante, no el borde del buffer
     offsetSeconds = Math.max(5, offsetSeconds);
     set({ historyOffset: offsetSeconds, isLive: false });
   },
 
-  // Filtra eventos según el rango seleccionado (10min, 1hr, 1day)
   getEventsInRange: (rangeSeconds) => {
     const nowMs = Date.now();
     const cutoff = nowMs - rangeSeconds * 1000;

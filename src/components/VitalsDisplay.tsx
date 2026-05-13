@@ -11,17 +11,17 @@ const SeverityArrows: React.FC<{ trend: 'up' | 'down' | 'stable'; severity: Seve
   return null;
 };
 
-const getAlertInfo = (label: string, status: VitalStatus): { line1: string; line2: string } | null => {
+// ── Label de alerta — una línea, lenguaje plain ───────────────────────────────
+const getAlertLabel = (label: string, status: VitalStatus): string | null => {
   if (status.severity === 'normal') return null;
+  const isHigh = status.trend === 'up';
   switch (label) {
-    case 'Temperature': return { line1: 'Fever detected', line2: 'Tap to review' };
-    case 'BPM': return Number(status.value) > 100
-      ? { line1: 'Tachycardia detected', line2: 'Tap to review' }
-      : { line1: 'Bradycardia detected', line2: 'Tap to review' };
-    case 'SpO2': return { line1: 'SpO2 Drop detected', line2: 'Tap to review' };
-    case 'Blood Pressure': return { line1: 'Abnormal BP detected', line2: 'Tap to review' };
-    case 'Respiratory Rate': return { line1: 'Abnormal Resp rate', line2: 'Tap to review' };
-    default: return { line1: 'Alert detected', line2: 'Tap to review' };
+    case 'Temperature': return isHigh ? 'High Temp' : 'Low Temp';
+    case 'BPM': return isHigh ? 'Elevated HR' : 'Low HR';
+    case 'SpO2': return 'Low SpO2';
+    case 'Blood Pressure': return isHigh ? 'High BP' : 'Low BP';
+    case 'Respiratory Rate': return isHigh ? 'High Resp Rate' : 'Low Resp Rate';
+    default: return 'Abnormal value';
   }
 };
 
@@ -31,25 +31,21 @@ const VitalCard: React.FC<{
   color?: string;
   size?: 'sm' | 'normal' | 'xl';
   showUnit?: boolean;
+  frozen?: boolean;
   onAlertTap?: () => void;
   goLiveSignal?: number;
 }> = ({ label, status, color = "text-white", size = 'normal', showUnit = true, frozen, onAlertTap, goLiveSignal }) => {
   const [dismissed, setDismissed] = React.useState(false);
   const dismissTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Severity estabilizado — ignora cambios a 'normal' que duren menos de 5s
-  // Esto evita que la alerta parpadee cuando el simulador oscila entre valores
   const stableSeverity = React.useRef<string>('normal');
   const stabilizeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     const sev = status.severity;
-
     if (sev !== 'normal') {
-      // Entró a alerta — cancelar cualquier timer de "volver a normal" y fijar severity
       if (stabilizeTimer.current) { clearTimeout(stabilizeTimer.current); stabilizeTimer.current = null; }
       if (stableSeverity.current === 'normal') {
-        // Nueva alerta — mostrar tooltip y arrancar timer de 30s
         stableSeverity.current = sev;
         setDismissed(false);
         if (dismissTimer.current) clearTimeout(dismissTimer.current);
@@ -58,21 +54,15 @@ const VitalCard: React.FC<{
         stableSeverity.current = sev;
       }
     } else {
-      // Volvió a normal — esperar 5s antes de realmente quitarlo
-      // (el simulador oscila, no queremos parpadeo)
       if (stabilizeTimer.current) clearTimeout(stabilizeTimer.current);
       stabilizeTimer.current = setTimeout(() => {
         stableSeverity.current = 'normal';
         stabilizeTimer.current = null;
       }, 5_000);
     }
-
-    return () => {
-      if (stabilizeTimer.current) clearTimeout(stabilizeTimer.current);
-    };
+    return () => { if (stabilizeTimer.current) clearTimeout(stabilizeTimer.current); };
   }, [status.severity]);
 
-  // Limpiar todo al congelarse
   React.useEffect(() => {
     if (frozen) {
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
@@ -80,71 +70,56 @@ const VitalCard: React.FC<{
     }
   }, [frozen]);
 
-  // goLiveSignal: al volver a Live NO auto-dismiss — usuario cierra con X
-
-  // Usar stableSeverity para que el tooltip no parpadee
   const stableStatus = { ...status, severity: stableSeverity.current as typeof status.severity };
-  // Solo mostrar alerta si hay handler (Advanced mode) y no está dismissed
-  const alertInfo = !frozen && !dismissed && !!onAlertTap ? getAlertInfo(label, stableStatus) : null;
+  const alertLabel = !frozen && !dismissed && !!onAlertTap ? getAlertLabel(label, stableStatus) : null;
   const isXL = size === 'xl';
 
   return (
     <div className="flex flex-col items-center">
-      {/* Número + alertas */}
       <div className="flex items-center gap-1">
         <div className={cn(
           "flex items-baseline transition-opacity duration-300 relative",
           frozen && "opacity-70"
         )}>
 
-          {/* Triángulo arriba-izquierda del número */}
-          {alertInfo && (
+          {/* Triángulo arriba-izquierda */}
+          {alertLabel && (
             <div className={cn(
               "absolute animate-pulse",
-              isXL ? "-top-5 -left-6" : "-top-3 -left-4"
+              isXL ? "-top-4 -left-4" : "-top-3 -left-3"
             )}>
-              <TriangleAlert
-                size={isXL ? 18 : 13}
-                className="text-rose-500"
-                strokeWidth={2}
-              />
+              <TriangleAlert size={isXL ? 16 : 11} className="text-rose-500" strokeWidth={2} />
             </div>
           )}
 
-          {/* Mensaje arriba-derecha del número — más compacto para no salir de pantalla */}
-          {alertInfo && (
+          {/* Tooltip compacto — una sola línea, sin "tap to review" */}
+          {alertLabel && (
             <div className={cn(
               "absolute z-20 pointer-events-auto",
-              isXL ? "-top-10 left-full ml-1" : "-top-8 left-full ml-0.5"
+              isXL ? "-top-5 left-6" : "-top-4 left-4"
             )}>
               <div className={cn(
-                "relative flex flex-col bg-rose-950/95 border border-rose-500/30 rounded shadow-xl backdrop-blur-sm",
-                isXL ? "p-1.5 w-[80px]" : "p-1 w-[60px]"
+                "relative flex items-center gap-1 bg-rose-950/95 border border-rose-500/30 rounded-full shadow-xl backdrop-blur-sm",
+                isXL ? "px-2.5 py-1" : "px-2 py-0.5"
               )}>
-                {/* Tachita */}
+                {/* Label clickeable */}
                 <button
-                  className="absolute top-0.5 right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-rose-300 hover:text-white hover:bg-rose-500/30 transition-colors active:scale-95 z-30"
-                  onClick={(e) => { e.stopPropagation(); setDismissed(true); }}
-                >
-                  <X size={9} strokeWidth={2.5} />
-                </button>
-                {/* Texto clickeable */}
-                <button
-                  className="text-left whitespace-normal pr-3"
+                  className="text-left"
                   onClick={(e) => { e.stopPropagation(); onAlertTap?.(); }}
                 >
                   <span className={cn(
-                    "block font-bold text-rose-400 uppercase tracking-tight leading-[1.1]",
-                    isXL ? "text-[8px]" : "text-[6px]"
+                    "block font-bold text-rose-400 uppercase tracking-tight whitespace-nowrap",
+                    isXL ? "text-[8px]" : "text-[7px]"
                   )}>
-                    {alertInfo.line1}
+                    {alertLabel}
                   </span>
-                  <span className={cn(
-                    "block text-rose-500/70 uppercase tracking-widest mt-0.5 leading-[1.1]",
-                    isXL ? "text-[7px]" : "text-[5px]"
-                  )}>
-                    {alertInfo.line2}
-                  </span>
+                </button>
+                {/* X */}
+                <button
+                  className="flex items-center justify-center text-rose-500/60 hover:text-white transition-colors active:scale-95"
+                  onClick={(e) => { e.stopPropagation(); setDismissed(true); }}
+                >
+                  <X size={8} strokeWidth={2.5} />
                 </button>
               </div>
             </div>
@@ -202,7 +177,6 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
   const viewMode = useStore(state => state.viewMode);
   const isAdvanced = viewMode === 'Advanced';
 
-  // Congelamos snapshot al entrar en modo histórico
   const frozenVitals = React.useRef(vitals);
   const wasFrozen = React.useRef(false);
   const isFrozen = historyOffset > 0;
@@ -217,28 +191,21 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
 
   const displayVitals = isFrozen ? frozenVitals.current : vitals;
 
-  // Al volver a Live — limpiar todos los tooltips de alerta
   const prevOffset = React.useRef(historyOffset);
+  const [goLiveSignal, setGoLiveSignal] = React.useState(0);
   React.useEffect(() => {
-    if (prevOffset.current > 0 && historyOffset === 0) {
-      // Acaba de volver a live — disparar evento custom para que cada VitalCard limpie su tooltip
-      setGoLiveSignal(s => s + 1);
-    }
+    if (prevOffset.current > 0 && historyOffset === 0) setGoLiveSignal(s => s + 1);
     prevOffset.current = historyOffset;
   }, [historyOffset]);
-  const [goLiveSignal, setGoLiveSignal] = React.useState(0);
 
-  // Al picar una alerta — salta al evento más reciente de ese tipo
-  // Si el evento aún no está en el store (race condition), usar timestamp actual
-  const handleAlertTap = (eventType: string[]) => {
-    const latest = events.find(e => eventType.includes(e.type));
+  // Salta al evento más reciente que coincida con los types dados
+  const handleAlertTap = (eventTypes: string[]) => {
+    const latest = events.find(e => eventTypes.includes(e.type));
     if (latest) {
       jumpToEvent(latest);
-    } else if (activeEvent && eventType.includes(activeEvent.type)) {
+    } else if (activeEvent && eventTypes.includes(activeEvent.type)) {
       jumpToEvent(activeEvent);
     } else {
-      // Fallback: congelar en este momento (el evento acaba de ocurrir)
-      // Ponemos 5s de offset para que el buffer tenga datos
       useStore.getState().setHistoryOffset(5);
     }
   };
@@ -249,7 +216,6 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
       compact ? "py-1" : "py-4"
     )}>
 
-      {/* Indicador Past */}
       {isFrozen && (
         <div className="absolute top-1 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20">
           <span className="w-1 h-1 rounded-full bg-teal-500" />
@@ -258,17 +224,14 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
       )}
 
       {/* Top Row: SpO2 + Blood Pressure */}
-      <div className={cn(
-        "flex justify-between w-full mb-1 transition-all duration-300",
-        compact ? "px-12" : "px-8"
-      )}>
+      <div className={cn("flex justify-between w-full mb-1 transition-all duration-300", compact ? "px-12" : "px-8")}>
         <VitalCard
           label="SpO2"
           status={displayVitals.spo2}
           color="text-white"
           size={compact ? 'sm' : 'normal'}
           frozen={isFrozen}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['spo2drop']) : undefined}
+          onAlertTap={isAdvanced ? () => handleAlertTap(['spo2_drop']) : undefined}
           goLiveSignal={goLiveSignal}
         />
         <VitalCard
@@ -276,7 +239,7 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           status={displayVitals.bloodPressure}
           size={compact ? 'sm' : 'normal'}
           frozen={isFrozen}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['elevated_hr']) : undefined}
+          onAlertTap={isAdvanced ? () => handleAlertTap(['hypertension', 'hypotension']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>
@@ -289,23 +252,20 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           size={compact ? 'normal' : 'xl'}
           showUnit={false}
           frozen={isFrozen}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['tachycardia', 'elevated_hr', 'bradycardia']) : undefined}
+          onAlertTap={isAdvanced ? () => handleAlertTap(['tachycardia', 'bradycardia']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>
 
       {/* Bottom Row: Temp + Resp */}
-      <div className={cn(
-        "flex justify-between w-full transition-all duration-300",
-        compact ? "px-12" : "px-8"
-      )}>
+      <div className={cn("flex justify-between w-full transition-all duration-300", compact ? "px-12" : "px-8")}>
         <VitalCard
           label="Temperature"
           status={displayVitals.temperature}
           color={!isFrozen && displayVitals.temperature.severity !== 'normal' ? "text-rose-400" : "text-white"}
           size={compact ? 'sm' : 'normal'}
           frozen={isFrozen}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['fever']) : undefined}
+          onAlertTap={isAdvanced ? () => handleAlertTap(['hyperthermia', 'hypothermia']) : undefined}
           goLiveSignal={goLiveSignal}
         />
         <VitalCard
@@ -313,7 +273,7 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           status={displayVitals.respirationRate}
           size={compact ? 'sm' : 'normal'}
           frozen={isFrozen}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['spo2drop']) : undefined}
+          onAlertTap={isAdvanced ? () => handleAlertTap(['tachypnea', 'bradypnea']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>

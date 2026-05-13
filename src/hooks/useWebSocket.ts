@@ -160,15 +160,15 @@ type SimMode =
 
 // ── Eventos que el simulador dispara aleatoriamente ──────────────────────────
 const SIM_EVENTS: Array<{ mode: SimMode; type: EventType; label: string; severity: 'high' | 'medium' }> = [
-  { mode: 'tachycardia', type: 'tachycardia', label: 'Tachycardia Detected', severity: 'high' },
-  { mode: 'bradycardia', type: 'bradycardia', label: 'Bradycardia Detected', severity: 'high' },
-  { mode: 'spo2_drop', type: 'spo2_drop', label: 'SpO2 Drop Detected', severity: 'high' },
-  { mode: 'hyperthermia', type: 'hyperthermia', label: 'Elevated Temperature', severity: 'medium' },
-  { mode: 'hypothermia', type: 'hypothermia', label: 'Low Temperature Detected', severity: 'high' },
-  { mode: 'tachypnea', type: 'tachypnea', label: 'High Respiratory Rate', severity: 'medium' },
-  { mode: 'bradypnea', type: 'bradypnea', label: 'Low Respiratory Rate', severity: 'high' },
-  { mode: 'hypertension', type: 'hypertension', label: 'Hypertension Detected', severity: 'high' },
-  { mode: 'hypotension', type: 'hypotension', label: 'Hypotension Detected', severity: 'high' },
+  { mode: 'tachycardia', type: 'tachycardia', label: 'Elevated HR', severity: 'high' },
+  { mode: 'bradycardia', type: 'bradycardia', label: 'Low HR', severity: 'high' },
+  { mode: 'spo2_drop', type: 'spo2_drop', label: 'Low SpO2', severity: 'high' },
+  { mode: 'hyperthermia', type: 'hyperthermia', label: 'High Temp', severity: 'medium' },
+  { mode: 'hypothermia', type: 'hypothermia', label: 'Low Temp', severity: 'high' },
+  { mode: 'tachypnea', type: 'tachypnea', label: 'High Resp Rate', severity: 'medium' },
+  { mode: 'bradypnea', type: 'bradypnea', label: 'Low Resp Rate', severity: 'high' },
+  { mode: 'hypertension', type: 'hypertension', label: 'High BP', severity: 'high' },
+  { mode: 'hypotension', type: 'hypotension', label: 'Low BP', severity: 'high' },
 ];
 
 const SIM_PARAMS: Record<SimMode, { hr: number; resp: number; temp: number; spo2: number; sys: number; dia: number }> = {

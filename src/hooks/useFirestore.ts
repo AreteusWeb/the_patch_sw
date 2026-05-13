@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 
-// Tipos válidos — deben coincidir exactamente con lo que manda la Cloud Function
+// Types válidos — deben coincidir exactamente con lo que manda la Cloud Function
 const VALID_EVENT_TYPES = new Set<EventType>([
     'tachycardia', 'bradycardia',
     'spo2_drop',
@@ -14,46 +14,25 @@ const VALID_EVENT_TYPES = new Set<EventType>([
 ]);
 
 /**
- * Escucha en tiempo real las colecciones `alerts` y `events` de Firestore.
+ * Escucha la colección `events` de Firestore en tiempo real.
+ * Cada evento clínico que llega se pasa a addEvent(), que automáticamente:
+ *   1. Lo agrega al listado de events (para el slider / AdvancedControls)
+ *   2. Lo agrega al panel de alerts (Recent Alerts en ambos modos)
+ *   3. Activa el EventBanner encima de los vitales
  *
- * Colección `alerts`:
- *   { message: string, severity: 'high'|'medium'|'low', timestamp: number (ms) }
- *
- * Colección `events`:
- *   { type: EventType, label: string, severity: 'high'|'medium'|'low', timestamp: number (ms) }
+ * Formato del documento en Firestore:
+ * {
+ *   type:      EventType   — uno de los 9 types válidos
+ *   label:     string      — e.g. "Elevated HR"
+ *   severity:  'high' | 'medium'
+ *   timestamp: number      — ms epoch
+ * }
  *
  * Monta este hook una sola vez en App.tsx.
  */
 export function useFirestore() {
-    const addAlert = useStore(s => s.addAlert);
     const addEvent = useStore(s => s.addEvent);
 
-    // ── Colección: alerts ──────────────────────────────────────────────────────
-    useEffect(() => {
-        const q = query(
-            collection(db, 'alerts'),
-            orderBy('timestamp', 'desc'),
-            limit(50)
-        );
-
-        const unsub = onSnapshot(q, (snap) => {
-            snap.docChanges().forEach((change) => {
-                if (change.type !== 'added') return;
-                const d = change.doc.data();
-                addAlert({
-                    timestamp: d.timestamp
-                        ? new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    message: d.message ?? 'Unknown alert',
-                    severity: d.severity ?? 'medium',
-                });
-            });
-        }, (err) => console.error('[useFirestore] alerts:', err));
-
-        return () => unsub();
-    }, [addAlert]);
-
-    // ── Colección: events ──────────────────────────────────────────────────────
     useEffect(() => {
         const q = query(
             collection(db, 'events'),

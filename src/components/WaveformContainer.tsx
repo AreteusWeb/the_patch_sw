@@ -21,7 +21,7 @@ const WaveformContainer: React.FC = () => {
 
 
 
-  const leads = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5'];
+  const leads = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
 
   if (viewMode === 'Normal') {
     return (

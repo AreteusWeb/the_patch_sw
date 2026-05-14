@@ -13,7 +13,7 @@ import type { EventType } from '../store/useStore';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const WS_URL = 'ws://localhost:8080/ws';
+const WS_URL = 'wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws';
 const DEVICE_MAC = 'A1:B2:C3:D4:E5:F6';
 
 // 1 hora @ 250Hz = 900,000 samples por canal

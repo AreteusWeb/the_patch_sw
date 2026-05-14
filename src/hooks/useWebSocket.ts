@@ -458,7 +458,7 @@ export const useWebSocket = () => {
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
-        startSim(); // SIMULADOR — borrar esta linea cuando conectes el dispositivo real
+        //startSim(); // SIMULADOR — borrar esta linea cuando conectes el dispositivo real
         reconnect = setTimeout(connect, 5000);
       };
 

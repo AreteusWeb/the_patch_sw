@@ -1,9 +1,9 @@
 /**
- * ChestPad WebSocket Server — producción
- * Recibe datos reales del ESP32 según Data_format.docx
+ * ChestPad WebSocket Server — production
+ * Receives real data from ESP32 according to Data_format.docx
  *
- * Instalar: npm install ws
- * Correr:   node server.cjs
+ * Install: npm install ws
+ * Run:   node server.cjs
  */
 
 const { WebSocketServer } = require('ws');

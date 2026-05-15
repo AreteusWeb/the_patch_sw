@@ -281,10 +281,10 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
       {/* Brackets decorativos */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full pointer-events-none z-0 transition-all duration-300">
         <svg className="w-full h-full" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
-          <path d={compact ? "M 170 85 L 200 115 L 230 85" : "M 160 55 L 200 95 L 240 55"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
-          <path d={compact ? "M 170 215 L 200 185 L 230 215" : "M 160 245 L 200 205 L 240 245"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
-          <path d={compact ? "M 115 120 L 145 150 L 115 180" : "M 75 110 L 115 150 L 75 190"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
-          <path d={compact ? "M 285 120 L 255 150 L 285 180" : "M 325 110 L 285 150 L 325 190"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
+          <path d={compact ? "M 170 45 L 200 75 L 230 45" : "M 160 40 L 200 80 L 240 40"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
+          <path d={compact ? "M 170 255 L 200 225 L 230 255" : "M 160 260 L 200 220 L 240 260"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
+          <path d={compact ? "M 95 120 L 125 150 L 95 180" : "M 75 110 L 115 150 L 75 190"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
+          <path d={compact ? "M 305 120 L 275 150 L 305 180" : "M 325 110 L 285 150 L 325 190"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />
         </svg>
       </div>
     </div>

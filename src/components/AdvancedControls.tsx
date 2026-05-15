@@ -41,20 +41,8 @@ const AdvancedControls: React.FC = () => {
   const ranges = ['1 Min', '1 Hr', '1 Day'];
   const [activeRange, setActiveRange] = React.useState<string | null>(null);
   const [filterIndex, setFilterIndex] = React.useState(0);
-  const [dropdownOpen, setDropdownOpen] = React.useState(false);
-  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const isLive = historyOffset === 0;
-
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   const displayTime = React.useMemo(() => {
     const target = new Date(Date.now() - historyOffset * 1000);
@@ -169,73 +157,45 @@ const AdvancedControls: React.FC = () => {
                 All Events
               </button>
 
-              <div className="relative z-50 flex-1" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setDropdownOpen(o => !o)}
-                  className={cn(
-                    "w-full flex items-center justify-between gap-0.5 px-1.5 py-1.5 rounded-full text-[8px] font-bold uppercase transition-all border whitespace-nowrap",
-                    filterIndex !== 0
-                      ? "bg-teal-500 text-white border-teal-400 shadow-lg shadow-teal-500/20"
-                      : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white"
-                  )}
+              <div className="relative group flex-1 flex justify-center items-center ml-1">
+                <select
+                  value={filterIndex}
+                  onChange={(e) => {
+                    const idx = Number(e.target.value);
+                    setFilterIndex(idx);
+                    if (idx > 0) {
+                      const label = Object.keys(EVENT_TYPE_MAP)[idx - 1];
+                      const types = EVENT_TYPE_MAP[label] ?? [];
+                      const latest = eventsInRange.find(ev => types.includes(ev.type));
+                      if (latest) jumpToEvent(latest);
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 >
-                  <span className="truncate">
+                  <option value={0} className="bg-slate-900 text-white">
+                    Select Events {eventsInRange.length > 0 && `(${eventsInRange.length})`}
+                  </option>
+                  {dropdownOptions.length === 0 ? (
+                    <option disabled className="bg-slate-900 text-slate-500">
+                      No events yet
+                    </option>
+                  ) : (
+                    dropdownOptions.map(opt => (
+                      <option key={opt.label} value={opt.index} className="bg-slate-900 text-white">
+                        {opt.label} ({opt.count})
+                      </option>
+                    ))
+                  )}
+                </select>
+                <span className={cn(
+                  "text-[8px] font-bold transition-colors flex items-center gap-0.5 uppercase whitespace-nowrap",
+                  filterIndex !== 0 ? "text-teal-400 group-hover:text-teal-300" : "text-slate-400 group-hover:text-white"
+                )}>
+                  <span className="truncate max-w-[65px]">
                     {filterIndex === 0 ? 'Select Events' : selectedLabel}
                   </span>
-                  <ChevronDown size={12} className={cn("transition-transform duration-200 flex-shrink-0 opacity-70", dropdownOpen && "rotate-180")} />
-                </button>
-
-                {dropdownOpen && (
-                  <div className="absolute z-[100] bottom-full mb-1 left-1/2 -translate-x-1/2 min-w-[160px] bg-slate-900 border border-slate-700 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                    <div className="max-h-[200px] overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => { setFilterIndex(0); setDropdownOpen(false); }}
-                        className={cn(
-                          "w-full flex items-center justify-between px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-left transition-colors border-b border-white/5",
-                          filterIndex === 0
-                            ? "bg-teal-500 text-white"
-                            : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                        )}
-                      >
-                        <span>All Events {eventsInRange.length > 0 && `(${eventsInRange.length})`}</span>
-                        {filterIndex === 0 && <Check size={12} className="text-white" />}
-                      </button>
-
-                      {dropdownOptions.length === 0 ? (
-                        <div className="px-4 py-3 text-[9px] text-slate-600 uppercase tracking-widest">
-                          No events yet
-                        </div>
-                      ) : (
-                        dropdownOptions.map(opt => (
-                          <button
-                            key={opt.label}
-                            type="button"
-                            onClick={() => {
-                              setFilterIndex(opt.index);
-                              setDropdownOpen(false);
-                              const types = EVENT_TYPE_MAP[opt.label] ?? [];
-                              const latest = eventsInRange.find(e => types.includes(e.type));
-                              if (latest) jumpToEvent(latest);
-                            }}
-                            className={cn(
-                              "w-full flex items-center justify-between px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-left transition-colors border-b border-white/5 last:border-0",
-                              filterIndex === opt.index
-                                ? "bg-teal-500 text-white"
-                                : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                            )}
-                          >
-                            <span>{opt.label}</span>
-                            <span className={cn("text-[8px]", filterIndex === opt.index ? "text-white/70" : "text-slate-600")}>
-                              {opt.count}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
+                  <ChevronDown size={10} className="opacity-50 flex-shrink-0" />
+                </span>
               </div>
             </div>
           </div>

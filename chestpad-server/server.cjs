@@ -43,7 +43,7 @@ wss.on('connection', (ws, req) => {
     let msg;
     try {
       msg = JSON.parse(data.toString());
-      console.log('[MSG]', msg);
+      console.log('[MSG]', JSON.stringify(msg).slice(0, 500));
     } catch (e) {
       console.warn('[WARN] Non-JSON message ignored');
       console.log('[RAW]', data.toString());

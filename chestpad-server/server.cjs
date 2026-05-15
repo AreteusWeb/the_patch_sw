@@ -60,12 +60,20 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    //   8x25 multichannel telemetry
+    //   8x25 multichannel telemetry remove the 8 channels validation
+    //if (!Array.isArray(channels) || channels.length !== 8) {
+    // console.warn(`[WARN] channels inválido device=${ws.deviceId}`);
+    //return;
+    //}
+
     if (msg.channels && ws.authenticated) {
       const { timestamp, channels } = msg;
-      if (!Array.isArray(channels) || channels.length !== 8) {
+      if (!Array.isArray(channels) || channels.length === 0) {
         console.warn(`[WARN] Invalid channels device=${ws.deviceId}`);
         return;
+      }
+      if (channels.length !== 8) {
+        console.log(`[DEBUG] device=${ws.deviceId} sent ${channels.length} channels (expected 8)`);
       }
       const sess = sessions.get(ws.deviceId);
       sess.packetCount++;

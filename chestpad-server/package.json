@@ -2,7 +2,13 @@
   "name": "chestpad-ws-server",
   "version": "1.0.0",
   "main": "server.cjs",
-  "scripts": { "start": "node server.cjs" },
-  "dependencies": { "ws": "^8.18.0" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "ws": "^8.20.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

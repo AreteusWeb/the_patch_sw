@@ -462,7 +462,9 @@ export const useWebSocket = () => {
         reconnect = setTimeout(connect, 5000);
       };
 
-      ws.onerror = () => ws.close();
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+      };
     };
 
     connect();

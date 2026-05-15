@@ -13,25 +13,25 @@ const wss = new WebSocketServer({ port: PORT });
 
 const sessions = new Map();
 
-console.log(`\nChestPad WS Server corriendo en puerto ${PORT}\n`);
+console.log(`\nChestPad WS Server running on port ${PORT}\n`);
 
 wss.on('connection', (ws, req) => {
-  ws.deviceId      = null;
+  ws.deviceId = null;
   ws.authenticated = false;
-  ws.binaryType    = 'arraybuffer';
+  ws.binaryType = 'arraybuffer';
 
-  console.log(`[+] Conexión nueva desde ${req.socket.remoteAddress}`);
+  console.log(`[+] New connection from ${req.socket.remoteAddress}`);
 
   const authTimeout = setTimeout(() => {
     if (!ws.authenticated) {
-      console.log('[TIMEOUT] Sin auth, cerrando conexión');
+      console.log('[TIMEOUT] No auth, closing connection');
       ws.close();
     }
   }, 15_000);
 
   ws.on('message', (data, isBinary) => {
 
-    // Paquete BINARIO — audio auscultación (1600 bytes / 800 muestras int16)
+    // BINARY packet — auscultation audio (1600 bytes / 800 int16 samples)
     if (isBinary) {
       if (!ws.authenticated) return;
       const samples = data.byteLength / 2;
@@ -39,20 +39,20 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // Paquete JSON
+    // JSON packet
     let msg;
     try {
       msg = JSON.parse(data.toString());
     } catch {
-      console.warn('[WARN] Mensaje no-JSON ignorado');
+      console.warn('[WARN] Non-JSON message ignored');
       return;
     }
 
     // Auth handshake
     if (msg.type === 'auth' && msg.mac) {
       clearTimeout(authTimeout);
-      const deviceId   = msg.mac.replace(/:/g, '');
-      ws.deviceId      = deviceId;
+      const deviceId = msg.mac.replace(/:/g, '');
+      ws.deviceId = deviceId;
       ws.authenticated = true;
       sessions.set(deviceId, { ws, lastSeen: Date.now(), packetCount: 0 });
       console.log(`[AUTH OK] deviceId=${deviceId} | mac=${msg.mac}`);
@@ -60,11 +60,11 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // Telemetría multicanal 8x25
+    //   8x25 multichannel telemetry
     if (msg.channels && ws.authenticated) {
       const { timestamp, channels } = msg;
       if (!Array.isArray(channels) || channels.length !== 8) {
-        console.warn(`[WARN] channels inválido device=${ws.deviceId}`);
+        console.warn(`[WARN] Invalid channels device=${ws.deviceId}`);
         return;
       }
       const sess = sessions.get(ws.deviceId);
@@ -82,20 +82,20 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (ws.deviceId) {
       sessions.delete(ws.deviceId);
-      console.log(`[-] Desconectado: device=${ws.deviceId} | activos=${sessions.size}`);
+      console.log(`[-] Disconnected: device=${ws.deviceId} | active=${sessions.size}`);
     }
   });
 
   ws.on('error', (err) => {
-    console.error(`[ERR] device=${ws.deviceId ?? 'sin-auth'} | ${err.message}`);
+    console.error(`[ERR] device=${ws.deviceId ?? 'no auth'} | ${err.message}`);
   });
 });
 
 setInterval(() => {
   if (sessions.size === 0) return;
-  console.log(`[STATUS] Dispositivos activos: ${sessions.size}`);
+  console.log(`[STATUS] Active devices: ${sessions.size}`);
   for (const [id, s] of sessions) {
     const secsAgo = Math.round((Date.now() - s.lastSeen) / 1000);
-    console.log(`  · ${id} — último dato hace ${secsAgo}s | paquetes=${s.packetCount}`);
+    console.log(`  · ${id} — last data ${secsAgo}s ago | packets=${s.packetCount}`);
   }
 }, 30_000);

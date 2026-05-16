@@ -24,6 +24,7 @@ const webClients = new Set();
 const WEBCLIENT_MAC = 'WEB:CL:IE:NT:00:01';
 
 console.log(`\nChestPad WS Server running on port ${PORT}\n`);
+console.log(`[CONFIG] WEBCLIENT_MAC=${WEBCLIENT_MAC}`); // ← agrega esta
 
 wss.on('connection', (ws, req) => {
   ws.role = null;   // 'device' | 'webclient'

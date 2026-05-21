@@ -128,10 +128,11 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
-      const sess = devices.get(ws.deviceId);
+      let sess = devices.get(ws.deviceId);
       if (!sess) {
-        console.warn(`[WARN] Session not found for device=${ws.deviceId}`);
-        return;
+        console.warn(`[WARN] Session not found for device=${ws.deviceId}, re-registering`);
+        sess = { ws, lastSeen: Date.now(), packetCount: 0 };
+        devices.set(ws.deviceId, sess);
       }
 
       sess.packetCount++;

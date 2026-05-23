@@ -48,11 +48,13 @@ interface EventActions {
 interface AuthState {
   currentUser: FirebaseUser | null;
   deviceMac:   string | null;
+  authLoading: boolean;
 }
 
 interface AuthActions {
   setCurrentUser: (user: FirebaseUser | null) => void;
   setDeviceMac:   (mac: string | null) => void;
+  setAuthLoading: (loading: boolean) => void;
 }
 
 const useStore = create<AppState & AppActions & EventState & EventActions & AuthState & AuthActions>((set, get) => ({
@@ -87,6 +89,7 @@ const useStore = create<AppState & AppActions & EventState & EventActions & Auth
   isAdvancedMenuOpen: false,
   currentUser: null,
   deviceMac:   null,
+  authLoading: true,
 
   // ── Acciones base ──────────────────────────────────────────────────────────
   setConnected: (connected) => set({ isConnected: connected }),
@@ -102,6 +105,7 @@ const useStore = create<AppState & AppActions & EventState & EventActions & Auth
   setIsAdvancedMenuOpen: (isOpen) => set({ isAdvancedMenuOpen: isOpen }),
   setCurrentUser: (user) => set({ currentUser: user }),
   setDeviceMac:   (mac)  => set({ deviceMac: mac }),
+  setAuthLoading: (loading) => set({ authLoading: loading }),
   setActivityType: (type) => set((state) => ({ activity: { ...state.activity, activityType: type } })),
 
   updateVitals: (newVitals) => set((state) => {

@@ -24,8 +24,29 @@ import LoginScreen from './components/LoginScreen';
 export default function App() {
   const viewMode = useStore(state => state.viewMode);
   useAuth();   // monta el listener de Firebase Auth (una sola vez)
-  const currentUser = useStore(s => s.currentUser);
+  const currentUser  = useStore(s => s.currentUser);
+  const authLoading  = useStore(s => s.authLoading);
   useFirestore();
+
+  // ── Mientras Firebase verifica la sesión ────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-2">
+          <h1 className="text-3xl font-black text-white tracking-[0.2em] uppercase">Areteus</h1>
+          <div className="flex items-center gap-3">
+            <div className="h-[1px] w-8 bg-teal-500/40" />
+            <span className="text-sm font-bold text-teal-400 tracking-[0.4em] uppercase">ChestPad</span>
+            <div className="h-[1px] w-8 bg-teal-500/40" />
+          </div>
+        </div>
+        {/* Spinner */}
+        <div className="w-7 h-7 border-2 border-teal-500/20 border-t-teal-400 rounded-full animate-spin" />
+        <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">Loading…</p>
+      </div>
+    );
+  }
 
   if (currentUser === null) {
     return <LoginScreen />;

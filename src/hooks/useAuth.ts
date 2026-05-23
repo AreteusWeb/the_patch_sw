@@ -20,6 +20,7 @@ import useStore from '../store/useStore';
 export function useAuth() {
   const setCurrentUser = useStore(s => s.setCurrentUser);
   const setDeviceMac   = useStore(s => s.setDeviceMac);
+  const setAuthLoading = useStore(s => s.setAuthLoading);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -50,6 +51,8 @@ export function useAuth() {
         setCurrentUser(null);
         setDeviceMac(null);
       }
+      // Firebase ya resolvió — quitar pantalla de carga
+      setAuthLoading(false);
     });
 
     return () => unsub();

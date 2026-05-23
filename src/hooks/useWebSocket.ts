@@ -15,7 +15,7 @@ import { auth } from '../lib/firebase';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const wsUrl = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
+const WS_URL = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
 // Hardcoded para pruebas. Después cambiar a mandar role: 'webclient' en el auth
 //const DEVICE_MAC = 'WEB:CL:IE:NT:00:01';
 

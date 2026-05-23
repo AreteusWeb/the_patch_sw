@@ -58,14 +58,12 @@ const Header: React.FC = () => {
             Normal
           </button>
         </div>
-        {!isAdvancedMenuOpen && (
-          <button
-            onClick={() => setIsAdvancedMenuOpen(true)}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white transition-all shadow-lg border border-white/5"
-          >
-            <MoreVertical size={14} />
-          </button>
-        )}
+        <button
+          onClick={() => setIsAdvancedMenuOpen(true)}
+          className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white transition-all shadow-lg border border-white/5"
+        >
+          <MoreVertical size={14} />
+        </button>
       </div>
     </header>
   );

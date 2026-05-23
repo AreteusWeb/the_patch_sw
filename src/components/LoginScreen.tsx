@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Mail,
@@ -7,6 +7,8 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { login } from '../hooks/useAuth';
 import RegisterScreen from './RegisterScreen';
 
@@ -19,6 +21,21 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError('Enter your email above first.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+      setError(null);
+    } catch {
+      setError('Could not send reset email. Check the address and try again.');
+    }
+  };
 
   if (showRegister) {
     return <RegisterScreen onBackToLogin={() => setShowRegister(false)} />;
@@ -233,8 +250,25 @@ export default function LoginScreen() {
             </button>
           </form>
 
-          {/* Create account link */}
-          <div className="mt-6 text-center">
+          {/* Forgot password */}
+          <div className="mt-4 text-center">
+            {resetSent ? (
+              <p className="text-[10px] text-teal-400 font-bold uppercase tracking-widest">
+                Reset email sent ✓
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-[10px] font-bold text-slate-600 uppercase tracking-widest hover:text-slate-400 transition-colors"
+              >
+                Forgot password?
+              </button>
+            )}
+          </div>
+
+          {/* Create account link — igual que antes */}
+          <div className="mt-3 text-center">
             <button
               onClick={() => setShowRegister(true)}
               className="text-[10px] font-bold text-slate-500 uppercase tracking-widest hover:text-teal-400 transition-colors"

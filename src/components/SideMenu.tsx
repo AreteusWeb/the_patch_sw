@@ -1,76 +1,137 @@
-import React from 'react';
-import { Home, Activity, Bell, UserCircle, LogOut } from 'lucide-react';
+import React, { useState } from 'react';
+import { Home, Bell, User, LogOut, X, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
-import { cn } from '../utils/cn';
-import { motion } from 'motion/react';
 import { logout } from '../hooks/useAuth';
+import AlertsDrawer from './AlertsDrawer';
+import ProfileDrawer from './ProfileDrawer';
 
 const SideMenu: React.FC = () => {
-  const { isAdvancedMenuOpen, setIsAdvancedMenuOpen } = useStore();
+  const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser } = useStore();
+  const [activeDrawer, setActiveDrawer] = useState<'alerts' | 'profile' | null>(null);
 
-  const menuItems = [
-    { icon: Home,        label: 'Home' },
-    { icon: Activity,    label: 'ECG' },
-    { icon: Bell,        label: 'Alerts' },
-    { icon: UserCircle,  label: 'Mode' },
-  ];
+  const displayName =
+    currentUser?.displayName?.split(' ')[0] ?? currentUser?.email?.split('@')[0] ?? 'User';
 
   const handleLogout = async () => {
     setIsAdvancedMenuOpen(false);
     await logout();
-    // onAuthStateChanged en useAuth limpia el store → App.tsx vuelve al LoginScreen
   };
 
-  if (!isAdvancedMenuOpen) return null;
+  const openDrawer = (drawer: 'alerts' | 'profile') => {
+    setActiveDrawer(drawer);
+    setIsAdvancedMenuOpen(false);
+  };
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[60]"
-        onClick={() => setIsAdvancedMenuOpen(false)}
-      />
-
-      {/* Vertical Menu Pillar */}
-      <motion.div
-        initial={{ opacity: 0, y: -20, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -20, scale: 0.95 }}
-        className="absolute right-4 top-3 z-[70] w-14"
-      >
-        <div className="flex flex-col items-center gap-6 py-6 px-1 bg-slate-800 backdrop-blur-xl rounded-full border border-white/10 shadow-2xl">
-          {/* Nav items */}
-          {menuItems.map((item, idx) => (
-            <button
-              key={item.label}
+      {/* ── Side Panel ─────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isAdvancedMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
               onClick={() => setIsAdvancedMenuOpen(false)}
-              className={cn(
-                'flex flex-col items-center gap-1 group transition-all',
-                idx === 0 ? 'text-white' : 'text-slate-400 hover:text-white'
-              )}
+            />
+
+            {/* Panel */}
+            <motion.div
+              key="panel"
+              initial={{ x: '100%', opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="fixed right-0 top-0 h-full w-64 z-[70] flex flex-col"
             >
-              <item.icon size={24} strokeWidth={2} className="group-hover:scale-110 transition-transform" />
-              <span className="text-[8px] font-bold uppercase tracking-tight opacity-60 group-hover:opacity-100">
-                {item.label}
-              </span>
-            </button>
-          ))}
+              <div className="flex flex-col h-full bg-neutral-900/95 backdrop-blur-2xl shadow-2xl">
 
-          {/* Separador */}
-          <div className="w-6 h-[1px] bg-white/10" />
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-white/5">
+                  <div>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">
+                      Signed in as
+                    </p>
+                    <p className="text-sm font-semibold text-white mt-0.5 truncate max-w-[140px]">
+                      {displayName}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsAdvancedMenuOpen(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
 
-          {/* Logout */}
-          <button
-            onClick={handleLogout}
-            className="flex flex-col items-center gap-1 group transition-all text-slate-500 hover:text-rose-400"
-          >
-            <LogOut size={24} strokeWidth={2} className="group-hover:scale-110 transition-transform" />
-            <span className="text-[8px] font-bold uppercase tracking-tight opacity-60 group-hover:opacity-100">
-              Exit
-            </span>
-          </button>
-        </div>
-      </motion.div>
+                {/* Nav items */}
+                <nav className="flex flex-col gap-1 px-3 pt-4 flex-1">
+                  <button
+                    onClick={() => setIsAdvancedMenuOpen(false)}
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-white bg-white/5 hover:bg-white/8 transition-all group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-500/15 text-teal-400">
+                      <Home size={16} />
+                    </div>
+                    <span className="text-sm font-medium">Dashboard</span>
+                    <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
+                  </button>
+
+                  <button
+                    onClick={() => openDrawer('alerts')}
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-all group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 group-hover:bg-teal-500/15 group-hover:text-teal-400 transition-all">
+                      <Bell size={16} />
+                    </div>
+                    <span className="text-sm font-medium">Alerts</span>
+                    <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
+                  </button>
+
+                  <button
+                    onClick={() => openDrawer('profile')}
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-all group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 group-hover:bg-teal-500/15 group-hover:text-teal-400 transition-all">
+                      <User size={16} />
+                    </div>
+                    <span className="text-sm font-medium">Profile</span>
+                    <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
+                  </button>
+                </nav>
+
+                {/* Logout */}
+                <div className="px-3 pb-6 pt-2 border-t border-white/5">
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 w-full px-3 py-3 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/8 transition-all group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 group-hover:bg-rose-500/15 transition-all">
+                      <LogOut size={16} />
+                    </div>
+                    <span className="text-sm font-medium">Sign out</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Drawers ─────────────────────────────────────────────────────────── */}
+      <AlertsDrawer
+        open={activeDrawer === 'alerts'}
+        onClose={() => setActiveDrawer(null)}
+      />
+      <ProfileDrawer
+        open={activeDrawer === 'profile'}
+        onClose={() => setActiveDrawer(null)}
+      />
     </>
   );
 };

@@ -6,5 +6,4 @@ npm run dev
 simulator: node server.cjs
 
 # Deploy 
-https://chestpad-website.vercel.app/
-
+[chestpad-website-areteus.vercel.app](https://chestpad-website-areteus.vercel.app/)

@@ -1,17 +1,33 @@
 import React, { useRef, useEffect } from 'react';
 
+/**
+ * Properties for the WaveformCanvas component.
+ */
 interface WaveformCanvasProps {
+  /** Array of numerical samples to plot. */
   data: number[];
+  /** Color theme for drawing the waveform trace. */
   color?: string;
+  /** Width of the drawn trace line. */
   lineWidth?: number;
+  /** Fixed height of the canvas viewport. */
   height?: number;
+  /** Minimum value boundary if autoScale is disabled. */
   min?: number;
+  /** Maximum value boundary if autoScale is disabled. */
   max?: number;
+  /** Label tag printed on the top-left of the viewport. */
   label?: string;
+  /** If true, draws grid mesh lines on the background. */
   gridLines?: boolean;
-  autoScale?: boolean; // nuevo prop — default true
+  /** If true, dynamically calculates vertical bounds based on input sample values. */
+  autoScale?: boolean; // new prop — default true
 }
 
+/**
+ * WaveformCanvas Component.
+ * Custom high-performance HTML5 Canvas-based renderer for real-time biological signals.
+ */
 const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   data,
   color = '#00f2ff',
@@ -21,7 +37,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   max = 1,
   label,
   gridLines = true,
-  autoScale = true, // autoscale activado por default
+  autoScale = true, // autoscale active by default
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -65,7 +81,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
       if (data.length < 2) return;
 
-      // ── Autoscale: calcula min/max de los datos actuales ──────────────────
+      // ── Autoscale: calculate min/max of the current data ──────────────────
       let effectiveMin = min;
       let effectiveMax = max;
 
@@ -77,10 +93,10 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
           if (data[i] > dataMax) dataMax = data[i];
         }
 
-        // Si todos los valores son iguales (señal saturada), no dibujar
+        // If all values are equal (flat signal), do not draw
         if (dataMin === dataMax) return;
 
-        // Agregar 5% de padding arriba y abajo para que no se corte la onda
+        // Add 5% padding to top and bottom to avoid clipping the waveform
         const padding = (dataMax - dataMin) * 0.05;
         effectiveMin = dataMin - padding;
         effectiveMax = dataMax + padding;

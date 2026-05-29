@@ -11,6 +11,9 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+/** Initialize the Firebase application instance. */
 const app = initializeApp(firebaseConfig);
+/** Firestore database instance. */
 export const db = getFirestore(app);
-export const auth = getAuth(app);               
+/** Firebase Auth service instance. */
+export const auth = getAuth(app);

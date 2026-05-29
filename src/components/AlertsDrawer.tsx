@@ -8,8 +8,13 @@ import type { ChestEvent } from '../store/useStore';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/**
+ * Properties for the AlertsDrawer component.
+ */
 interface AlertsDrawerProps {
+  /** Indicates whether the drawer is open. */
   open: boolean;
+  /** Callback function to close the drawer. */
   onClose: () => void;
 }
 
@@ -45,6 +50,9 @@ const eventTypeIcon: Record<string, React.ReactNode> = {
   hypotension:  <Heart size={13} />,
 };
 
+/**
+ * Formats a millisecond timestamp to a localized time string.
+ */
 function formatTime(epochMs: number): string {
   return new Date(epochMs).toLocaleTimeString([], {
     hour: '2-digit',
@@ -53,6 +61,9 @@ function formatTime(epochMs: number): string {
   });
 }
 
+/**
+ * Generates a day label (e.g. 'Today', 'Yesterday', or full weekday name) for a given timestamp.
+ */
 function getDayLabel(epochMs: number): string {
   const d = new Date(epochMs);
   const today = new Date();
@@ -63,6 +74,9 @@ function getDayLabel(epochMs: number): string {
   return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
+/**
+ * Groups physiological events by calendar day, filtering only the last 7 days of history.
+ */
 function groupByDay(events: ChestEvent[]): { label: string; events: ChestEvent[] }[] {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recent = events.filter(e => e.timestampEpoch >= cutoff);
@@ -163,8 +177,12 @@ const DayHeader: React.FC<{ label: string; count: number }> = ({ label, count })
   </div>
 );
 
-// ─── Clear all — borra solo los docs del usuario en Firestore ─────────────────
+// ─── Clear all — deletes user events from Firestore ──────────────────────────
 
+/**
+ * Deletes all physiological events associated with the given user ID from Firestore,
+ * then clears the local Zustand store.
+ */
 async function clearUserEvents(userId: string, clearStore: () => void) {
   try {
     const q = query(
@@ -181,6 +199,12 @@ async function clearUserEvents(userId: string, clearStore: () => void) {
 
 // ─── AlertsDrawer ─────────────────────────────────────────────────────────────
 
+/**
+ * AlertsDrawer Component.
+ * Displays a sliding drawer containing the chronological physiological events history
+ * from the last 7 days. It allows users to jump back in time to specific event occurrences
+ * and clear their history.
+ */
 const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
   const events                = useStore(s => s.events);
   const jumpToEvent           = useStore(s => s.jumpToEvent);
@@ -255,7 +279,7 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Botón clear — dos taps: primero pide confirmación, segundo borra */}
+                {/* Clear button — two taps: first requests confirmation, second performs deletion */}
                 {totalShown > 0 && (
                   <button
                     onClick={handleClear}

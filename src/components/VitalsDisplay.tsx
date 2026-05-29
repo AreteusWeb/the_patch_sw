@@ -4,6 +4,9 @@ import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
 import { SeverityLevel, VitalStatus } from '../types';
 
+/**
+ * Renders directional arrows indicating changes in vital severity trends.
+ */
 const SeverityArrows: React.FC<{ trend: 'up' | 'down' | 'stable'; severity: SeverityLevel; color: string; size: number }> = ({ trend, severity, color, size }) => {
   if (severity === 'normal') return null;
   if (trend === 'up') return <ArrowUp size={size} className={color} strokeWidth={2} />;
@@ -11,6 +14,10 @@ const SeverityArrows: React.FC<{ trend: 'up' | 'down' | 'stable'; severity: Seve
   return null;
 };
 
+/**
+ * Resolves user-friendly alert labels depending on the type of vital sign
+ * and its current deviation trend (high/low).
+ */
 const getAlertLabel = (label: string, status: VitalStatus): string | null => {
   if (status.severity === 'normal') return null;
   const isHigh = status.trend === 'up';
@@ -24,6 +31,11 @@ const getAlertLabel = (label: string, status: VitalStatus): string | null => {
   }
 };
 
+/**
+ * VitalCard Component.
+ * Displays an individual vital parameter (value, unit, trend, severity levels)
+ * and shows alert tooltips if anomalies are detected.
+ */
 const VitalCard: React.FC<{
   label: string;
   status: VitalStatus;
@@ -32,7 +44,7 @@ const VitalCard: React.FC<{
   showUnit?: boolean;
   frozen?: boolean;
   disconnected?: boolean;
-  hasData?: boolean;         // ← nuevo: false = mostrar '--'
+  hasData?: boolean;         // ← new: false = show '--'
   onAlertTap?: () => void;
   goLiveSignal?: number;
 }> = ({ label, status, color = "text-white", size = 'normal', showUnit = true, frozen, disconnected, hasData = true, onAlertTap, goLiveSignal }) => {
@@ -73,7 +85,7 @@ const VitalCard: React.FC<{
 
   const stableStatus = { ...status, severity: stableSeverity.current as typeof status.severity };
 
-  // Mostrar '--' si no hay datos reales aún, si está desconectado, o si frozen sin datos
+  // Show '--' if there is no real data yet, if disconnected, or if frozen without data
   const showDash = !hasData || disconnected;
 
   const alertLabel = !frozen && !dismissed && !!onAlertTap && !showDash
@@ -131,7 +143,7 @@ const VitalCard: React.FC<{
             </div>
           )}
 
-          {/* Número — '--' hasta que lleguen datos reales */}
+          {/* Number — '--' until real data arrives */}
           <span className={cn(
             "font-light tracking-tight transition-colors duration-300",
             isXL ? 'text-7xl' : size === 'normal' ? 'text-4xl' : 'text-2xl',
@@ -140,7 +152,7 @@ const VitalCard: React.FC<{
             {showDash ? '--' : status.value}
           </span>
 
-          {/* Unidad — solo visible cuando hay datos */}
+          {/* Unit — only visible when there is data */}
           {showUnit && status.unit && !showDash && (
             <span className={cn(
               "font-light transition-all duration-300 ml-1",
@@ -150,7 +162,7 @@ const VitalCard: React.FC<{
           )}
         </div>
 
-        {/* Flechas de severidad — solo con datos reales */}
+        {/* Severity arrows — only with real data */}
         {!frozen && !showDash && (
           <SeverityArrows
             trend={status.trend}
@@ -172,10 +184,19 @@ const VitalCard: React.FC<{
 
 // ─── VitalsDisplay ────────────────────────────────────────────────────────────
 
+/**
+ * Properties for the VitalsDisplay component.
+ */
 interface VitalsDisplayProps {
+  /** If true, renders a more compact representation of vitals grids. */
   compact?: boolean;
 }
 
+/**
+ * VitalsDisplay Component.
+ * Displays grid layouts of all vital parameter cards (SpO2, BP, HR, Temp, RR)
+ * and handles history freezing overlays.
+ */
 const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
   const vitals        = useStore(state => state.vitals);
   const historyOffset = useStore(state => state.historyOffset);
@@ -184,7 +205,7 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
   const events        = useStore(state => state.events);
   const viewMode      = useStore(state => state.viewMode);
   const isConnected   = useStore(state => state.isConnected);
-  const hasRealData   = useStore(state => state.hasRealData);  // ← flag nuevo
+  const hasRealData   = useStore(state => state.hasRealData);  // ← new flag
   const isAdvanced    = viewMode === 'Advanced';
 
   const frozenVitals = React.useRef(vitals);
@@ -297,7 +318,7 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
         />
       </div>
 
-      {/* Brackets decorativos */}
+      {/* Decorative brackets */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full pointer-events-none z-0 transition-all duration-300">
         <svg className="w-full h-full" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
           <path d={compact ? "M 170 45 L 200 75 L 230 45" : "M 160 40 L 200 80 L 240 40"} fill="none" stroke="#334155" strokeWidth="1" opacity="0.6" strokeLinecap="square" />

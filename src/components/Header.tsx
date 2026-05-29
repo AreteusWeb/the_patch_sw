@@ -3,6 +3,11 @@ import { MoreVertical } from 'lucide-react';
 import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
 
+/**
+ * Header Component.
+ * Displays user identity, device connection status, view mode selectors,
+ * and handles opening the advanced settings menu drawer.
+ */
 const Header: React.FC = () => {
   const {
     currentUser,
@@ -14,10 +19,10 @@ const Header: React.FC = () => {
     setIsAdvancedMenuOpen,
   } = useStore();
 
-  // Prioridad: displayName del perfil Firebase → parte antes del @ en el email → "User"
+  // Priority: Firebase profile displayName → substring before @ in email → "User"
   const displayName =
-    currentUser?.displayName?.split(' ')[0]   // primer nombre
-    ?? currentUser?.email?.split('@')[0]       // fallback: parte del email
+    currentUser?.displayName?.split(' ')[0]   // first name
+    ?? currentUser?.email?.split('@')[0]       // fallback: email local part
     ?? 'User';
 
   return (

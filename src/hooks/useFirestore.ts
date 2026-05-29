@@ -12,11 +12,23 @@ const VALID_EVENT_TYPES = new Set<EventType>([
     'hypertension', 'hypotension',
 ]);
 
-// ─── Singleton para IDs ya procesados ────────────────────────────────────────
+// ─── Singleton for already processed IDs ──────────────────────────────────────
+/**
+ * Set containing event IDs that have already been processed or written,
+ * preventing duplicate event ingestion.
+ */
 export const processedFirestoreIds = new Set<string>();
 
-// ─── Guardar evento con snapshot de vitales ───────────────────────────────────
+// ─── Save event with vitals snapshot ──────────────────────────────────────────
 
+/**
+ * Saves a physiological event with a snapshot of the current vitals in Firestore.
+ *
+ * @param event - Object containing event details (type, label, severity, timestamp).
+ * @param vitals - Object containing current vitals values (hr, spo2, temp, rr, bp).
+ * @param userId - Firebase user UID of the current user.
+ * @returns The generated Firestore document ID or null if saving failed.
+ */
 export async function saveEventWithVitals(
     event: {
         type: EventType;
@@ -55,22 +67,32 @@ export async function saveEventWithVitals(
     }
 }
 
-// ─── Helper: convierte timestamp de Firestore a epoch number ─────────────────
-// El campo puede llegar como: número epoch, Firestore Timestamp object, o nulo
+// ─── Helper: Converts Firestore timestamp to epoch number ─────────────────────
 
+/**
+ * Converts a Firestore timestamp representation to a standard millisecond epoch number.
+ * Handles epoch numbers, Firestore Timestamp objects, or null/undefined.
+ *
+ * @param raw - The raw timestamp value from Firestore.
+ * @returns The converted millisecond timestamp.
+ */
 function toEpoch(raw: unknown): number {
     if (!raw) return Date.now();
     // Firestore Timestamp object { seconds, nanoseconds }
     if (typeof raw === 'object' && 'seconds' in (raw as object)) {
         return (raw as { seconds: number }).seconds * 1000;
     }
-    // Ya es número
+    // Already a number
     if (typeof raw === 'number') return raw;
     return Date.now();
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Hook to synchronize physiological events history from Firestore in real-time.
+ * It listens to changes in the "events" collection filtered by the logged-in user.
+ */
 export function useFirestore() {
     const addEvent    = useStore(s => s.addEvent);
     const currentUser = useStore(s => s.currentUser);
@@ -91,7 +113,7 @@ export function useFirestore() {
 
                 const docId = change.doc.id;
 
-                // Si el ID ya está en el Set, lo escribimos nosotros — skip
+                // If the ID is already in the Set, it was written by us — skip
                 if (processedFirestoreIds.has(docId)) return;
                 processedFirestoreIds.add(docId);
 
@@ -107,7 +129,7 @@ export function useFirestore() {
                     label: d.label ?? d.type,
                     severity: d.severity ?? 'high',
                     timestampEpoch: toEpoch(d.timestamp),
-                    skipAlert: true,  // ← eventos de historial no generan alerta en el panel
+                    skipAlert: true,  // ← history events do not trigger a panel alert
                 });
             });
         }, (err) => console.error('[useFirestore] events:', err));

@@ -2,15 +2,28 @@ import React from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
+/**
+ * Properties for the CustomDropdown component.
+ */
 interface CustomDropdownProps {
+  /** Array of labels representing options in the dropdown. */
   options: string[];
+  /** Index of the currently selected option. */
   current: number;
+  /** Callback fired when an option is selected. */
   onSelect: (index: number) => void;
+  /** Optional custom CSS classes. */
   className?: string;
+  /** Alignment of the dropdown list relative to the button. */
   align?: 'left' | 'right' | 'center';
+  /** Placement direction of the list window. */
   position?: 'top' | 'bottom';
 }
 
+/**
+ * CustomDropdown Component.
+ * A custom styled select menu overlay supporting custom alignment, position offsets, and item selections.
+ */
 const CustomDropdown: React.FC<CustomDropdownProps> = ({ 
   options, 
   current, 

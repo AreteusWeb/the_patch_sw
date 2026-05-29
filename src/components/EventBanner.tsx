@@ -3,6 +3,11 @@ import { X } from 'lucide-react';
 import { cn } from '../utils/cn';
 import useStore from '../store/useStore';
 
+/**
+ * EventBanner Component.
+ * Displays a top banner alerting the user of abnormal physiological events in real-time.
+ * Clicking the banner allows jumping to the historical event occurrence.
+ */
 const EventBanner: React.FC = () => {
   const activeEventBanner = useStore(s => s.activeEventBanner);
   const dismissBanner = useStore(s => s.dismissBanner);
@@ -31,7 +36,7 @@ const EventBanner: React.FC = () => {
           : "bg-amber-950/20 border-amber-900/30"
       )}
     >
-      {/* dot parpadeante */}
+      {/* blinking dot */}
       <span className={cn(
         "w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0",
         isHigh ? "bg-rose-500" : "bg-amber-400"

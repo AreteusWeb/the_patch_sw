@@ -9,14 +9,16 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import useStore from '../store/useStore';
 
-// ─── useAuth ─────────────────────────────────────────────────────────────────
-// Monta una sola vez en App.tsx.
-// Responsabilidades:
-//   1. Escuchar onAuthStateChanged y sincronizar con useStore
-//   2. Crear el documento users/{uid} en Firestore si es la primera vez
-//   3. Cargar el deviceMac vinculado al usuario (si tiene uno)
-//   4. Exponer helpers: login / logout
-
+/**
+ * Hook to manage Firebase authentication state.
+ * This hook is mounted once in App.tsx.
+ *
+ * Responsibilities:
+ * 1. Listen to `onAuthStateChanged` and synchronize with the global store.
+ * 2. Create the `users/{uid}` document in Firestore if the user is logging in for the first time.
+ * 3. Load the user's linked device MAC address, if any.
+ * 4. Expose login and logout helpers.
+ */
 export function useAuth() {
   const setCurrentUser = useStore(s => s.setCurrentUser);
   const setDeviceMac   = useStore(s => s.setDeviceMac);
@@ -25,15 +27,15 @@ export function useAuth() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // ── Usuario autenticado ──────────────────────────────────────────────
+        // ── Authenticated User ──────────────────────────────────────────────
         setCurrentUser(firebaseUser);
 
-        // Leer/crear documento del usuario en Firestore
+        // Read or create the user document in Firestore
         const userRef = doc(db, 'users', firebaseUser.uid);
         const snap    = await getDoc(userRef);
 
         if (!snap.exists()) {
-          // Primera vez — crear perfil
+          // First time — create user profile document
           await setDoc(userRef, {
             email:       firebaseUser.email,
             displayName: firebaseUser.displayName ?? firebaseUser.email,
@@ -42,16 +44,16 @@ export function useAuth() {
           });
           setDeviceMac(null);
         } else {
-          // Usuario existente — cargar MAC vinculada
+          // Existing user — load linked device MAC address
           const data = snap.data();
           setDeviceMac(data.deviceMac ?? null);
         }
       } else {
-        // ── Sin sesión ───────────────────────────────────────────────────────
+        // ── No Session ───────────────────────────────────────────────────────
         setCurrentUser(null);
         setDeviceMac(null);
       }
-      // Firebase ya resolvió — quitar pantalla de carga
+      // Firebase auth state has resolved — hide loading screen
       setAuthLoading(false);
     });
 
@@ -59,13 +61,19 @@ export function useAuth() {
   }, [setCurrentUser, setDeviceMac]);
 }
 
-// ─── Helpers de auth ─────────────────────────────────────────────────────────
+// ─── Auth Helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Logs in a user using email and password.
+ * The `onAuthStateChanged` listener will automatically handle updating the application state.
+ */
 export async function login(email: string, password: string): Promise<void> {
   await signInWithEmailAndPassword(auth, email, password);
-  // onAuthStateChanged se encarga del resto automáticamente
 }
 
+/**
+ * Logs out the current user.
+ */
 export async function logout(): Promise<void> {
   await signOut(auth);
 }

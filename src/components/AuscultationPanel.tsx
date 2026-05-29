@@ -2,10 +2,18 @@ import React from 'react';
 import { Play } from 'lucide-react';
 import WaveformCanvas from './WaveformCanvas';
 
+/**
+ * Properties for the AuscultationPanel component.
+ */
 interface AuscultationPanelProps {
+  /** Array of auscultation audio waveform samples. */
   waveform: number[];
 }
 
+/**
+ * AuscultationPanel Component.
+ * Visualizes the real-time auscultation audio waveform signal.
+ */
 const AuscultationPanel: React.FC<AuscultationPanelProps> = ({ waveform }) => {
   return (
     <div className="flex flex-col w-full p-6 bg-slate-950/40 border-t border-slate-900 pb-28">
@@ -16,12 +24,12 @@ const AuscultationPanel: React.FC<AuscultationPanelProps> = ({ waveform }) => {
           Start listening
         </button>
       </div>
-      
+
       <div className="rounded-xl overflow-hidden border border-slate-900 bg-black/40">
-        <WaveformCanvas 
-          data={waveform} 
-          height={60} 
-          color="#38bdf8" 
+        <WaveformCanvas
+          data={waveform}
+          height={60}
+          color="#38bdf8"
           lineWidth={1}
           min={-0.2}
           max={0.2}

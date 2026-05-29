@@ -5,17 +5,29 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 
+/**
+ * Properties for the RegisterScreen component.
+ */
 interface RegisterScreenProps {
+  /** Callback function to go back to the login screen. */
   onBackToLogin: () => void;
 }
 
-// Normaliza MAC: acepta con o sin separadores → XX:XX:XX:XX:XX:XX
+/**
+ * Normalizes a raw MAC address string into the standard XX:XX:XX:XX:XX:XX format.
+ * Returns null if the address is invalid.
+ */
 function normalizeMac(raw: string): string | null {
   const clean = raw.replace(/[^A-Fa-f0-9]/g, '');
   if (clean.length !== 12) return null;
   return clean.match(/.{2}/g)!.join(':').toUpperCase();
 }
 
+/**
+ * RegisterScreen Component.
+ * Renders the user sign-up form, validating inputs and creating account credentials
+ * in Firebase Auth and profile records in Firestore.
+ */
 export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
   const [name,     setName]     = useState('');
   const [email,    setEmail]    = useState('');
@@ -40,14 +52,14 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
 
     setLoading(true);
     try {
-      // 1. Crear cuenta en Firebase Auth
+      // 1. Create account in Firebase Auth
       const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-      // 2. Guardar displayName en el perfil Auth
+      // 2. Save displayName in the Auth profile
       await updateProfile(user, { displayName: name.trim() });
 
-      // 3. Crear documento users/{uid} en Firestore
-      // La MAC se guarda una sola vez — useAuth la carga automáticamente en cada login
+      // 3. Create users/{uid} document in Firestore
+      // The MAC is saved once — useAuth loads it automatically on each login
       await setDoc(doc(db, 'users', user.uid), {
         email:       email.trim(),
         displayName: name.trim(),
@@ -55,7 +67,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
         deviceMac:   normalizedMac,
       });
 
-      // onAuthStateChanged en useAuth detecta el nuevo usuario → dashboard
+      // onAuthStateChanged in useAuth detects the new user → dashboard
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('email-already-in-use')) {
@@ -76,7 +88,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 relative overflow-hidden font-sans">
-      {/* Ambient glows — mismos que LoginScreen */}
+      {/* Ambient glows — same as LoginScreen */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
 
@@ -95,7 +107,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
         transition={{ duration: 0.35 }}
         className="w-full max-w-md z-10"
       >
-        {/* Brand — idéntico al LoginScreen */}
+        {/* Brand — identical to LoginScreen */}
         <div className="flex flex-col items-center mb-10 text-center">
           <div className="mb-4 flex flex-col items-center">
             <h1 className="text-4xl font-black text-white tracking-[0.2em] uppercase leading-none mr-[-0.2em]">
@@ -244,7 +256,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
                 )}
               </div>
 
-              {/* Shine effect — igual que LoginScreen */}
+              {/* Shine effect — same as LoginScreen */}
               {!loading && (
                 <motion.div
                   animate={{ left: ['-100%', '200%'] }}

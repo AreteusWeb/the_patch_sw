@@ -8,8 +8,9 @@ import {
   processedFirestoreIds,
 } from '../hooks/useFirestore';
 
-// ─── Tipo de Evento ───────────────────────────────────────────────────────────
-
+/**
+ * Represents the type of physiological event detected.
+ */
 export type EventType =
   | 'tachycardia'
   | 'bradycardia'
@@ -21,6 +22,9 @@ export type EventType =
   | 'hypertension'
   | 'hypotension';
 
+/**
+ * Represents a physiological event captured by the device.
+ */
 export interface ChestEvent {
   id: string;
   type: EventType;
@@ -45,10 +49,17 @@ interface EventState {
 }
 
 interface EventActions {
-  // skipAlert: true → agrega el evento al historial pero NO crea una alerta en el panel
+  /**
+   * Adds an event to the state history.
+   * @param event - The event data to add (excluding auto-generated fields).
+   * @param event.skipAlert - If true, adds the event to history but does NOT trigger a panel alert/banner.
+   */
   addEvent: (event: Omit<ChestEvent, 'id' | 'offsetSeconds'> & { skipAlert?: boolean }) => void;
+  /** Dismisses the active event banner notification. */
   dismissBanner: () => void;
+  /** Sets the history offset to jump back to the timestamp of the given event. */
   jumpToEvent: (event: ChestEvent) => void;
+  /** Retrieves events that occurred within a given range of seconds from now. */
   getEventsInRange: (rangeSeconds: number) => ChestEvent[];
 }
 
@@ -73,7 +84,7 @@ const useStore = create<
   AuthActions
 >((set, get) => ({
 
-  // ── Estado base ────────────────────────────────────────────────────────────
+  // ── Base State ─────────────────────────────────────────────────────────────
 
   isConnected: false,
   isLive: true,
@@ -81,8 +92,10 @@ const useStore = create<
   viewMode: 'Normal',
   simulationMode: 'normal',
 
-  // Flag que indica si ya llegaron datos reales del dispositivo.
-  // Mientras sea false, VitalsDisplay muestra '--' en lugar de los valores por defecto.
+  /**
+   * Flag indicating whether real data has arrived from the device.
+   * While false, VitalsDisplay shows '--' instead of default values.
+   */
   hasRealData: false,
 
   vitals: {
@@ -142,7 +155,7 @@ const useStore = create<
   deviceMac: null,
   authLoading: true,
 
-  // ── Acciones base ──────────────────────────────────────────────────────────
+  // ── Base Actions ───────────────────────────────────────────────────────────
 
   setHasRealData: (v: boolean) => set({ hasRealData: v }),
 
@@ -227,7 +240,7 @@ const useStore = create<
       ].slice(0, 100),
     })),
 
-  // ── Acciones de eventos ────────────────────────────────────────────────────
+  // ── Event Actions ──────────────────────────────────────────────────────────
 
   addEvent: ({ skipAlert, ...event }) =>
     set((state) => {
@@ -242,7 +255,7 @@ const useStore = create<
       const v = state.vitals;
       const userId = state.currentUser?.uid;
 
-      // Solo persistir en Firestore si NO viene de Firestore (evita loop)
+      // Only persist in Firestore if it does NOT come from Firestore (prevents loop)
       if (!skipAlert && userId) {
         saveEventWithVitals(
           {
@@ -266,7 +279,7 @@ const useStore = create<
         });
       }
 
-      // Alerta en el panel solo para eventos en tiempo real
+      // Panel alert only for real-time events
       const newAlerts = skipAlert
         ? state.alerts
         : [

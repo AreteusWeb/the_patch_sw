@@ -2,6 +2,11 @@ import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import useStore from '../store/useStore';
 
+/**
+ * ActivityStats Component.
+ * Displays real-time physical activity statistics including steps, calories burned,
+ * and allows the user to select their current activity type.
+ */
 const ActivityStats: React.FC = () => {
   const { activity } = useStore();
 

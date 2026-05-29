@@ -6,6 +6,11 @@ import { logout } from '../hooks/useAuth';
 import AlertsDrawer from './AlertsDrawer';
 import ProfileDrawer from './ProfileDrawer';
 
+/**
+ * SideMenu Component.
+ * Displays a side navigation menu panel allowing users to navigate between the main
+ * dashboard, the alerts logs drawer, profile settings drawer, and sign out of the system.
+ */
 const SideMenu: React.FC = () => {
   const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser } = useStore();
   const [activeDrawer, setActiveDrawer] = useState<'alerts' | 'profile' | null>(null);

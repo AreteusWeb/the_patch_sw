@@ -7,6 +7,11 @@ import { useWebSocket, CH_RANGES } from '../hooks/useWebSocket';
 
 import CustomDropdown from './ui/CustomDropdown';
 
+/**
+ * WaveformContainer Component.
+ * Contains and coordinates multiple biological waveform display panels (ECG leads, Respiration, SpO2).
+ * Operates in either Normal (single lead overlay) or Advanced (multi-lead array + Resp + SpO2 tracking grids) view modes.
+ */
 const WaveformContainer: React.FC = () => {
   const viewMode = useStore(state => state.viewMode);
   const selectedLeadIndex = useStore(state => state.selectedLeadIndex);

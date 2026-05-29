@@ -2,6 +2,10 @@ import React from 'react';
 import { Home, Activity, Bell, User } from 'lucide-react';
 import { cn } from '../utils/cn';
 
+/**
+ * BottomNav Component.
+ * Renders the primary navigation menu at the bottom of the screen.
+ */
 const BottomNav: React.FC = () => {
   const [activeTab, setActiveTab] = React.useState('Home');
 

@@ -1,10 +1,10 @@
 /**
  * useWebSocket.ts
  *
- * Cuando el dispositivo real esté listo:
- *   1. Borra la sección marcada "SIMULADOR"
- *   2. Cambia WS_URL al IP real del dispositivo
- *   3. Listo — el resto no cambia
+ * When the real device is ready:
+ *   1. Delete the section marked "SIMULATOR"
+ *   2. Change WS_URL to the real IP of the device
+ *   3. Done — the rest remains the same
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -16,14 +16,14 @@ import { auth } from '../lib/firebase';
 
 const WS_URL = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
 
-// 1 hora @ 250Hz = 900,000 samples por canal
+// 1 hour @ 250Hz = 900,000 samples per channel
 const BUFFER_SIZE = 900_000;
 
-// Samples visibles por canal
+// Visible samples per channel
 const VIEW_SIZES = [750, 750, 750, 750, 150, 150, 50, 300];
 const DECIMATE = [1, 1, 1, 1, 5, 5, 1, 1];
 
-// Rangos min/max por canal para WaveformCanvas
+// Min/max ranges per channel for WaveformCanvas
 export const CH_RANGES: [number, number][] = [
   [-2_500_000, 2_500_000],  // ch0-3 ECG (int32)
   [-2_500_000, 2_500_000],
@@ -35,8 +35,12 @@ export const CH_RANGES: [number, number][] = [
   [-32_767, 32_767],        // ch7 Audio int16
 ];
 
-// ─── Ring buffer con Float32Array ─────────────────────────────────────────────
+// ─── Ring Buffer using Float32Array ───────────────────────────────────────────
 
+/**
+ * A simple ring buffer implementation using Float32Array
+ * for high-performance sample storage.
+ */
 class RingBuffer {
   private buf: Float32Array;
   private ptr = 0;
@@ -46,12 +50,18 @@ class RingBuffer {
     this.buf = new Float32Array(capacity);
   }
 
+  /**
+   * Pushes a new value into the ring buffer.
+   */
   push(value: number) {
     this.buf[this.ptr] = value;
     this.ptr = (this.ptr + 1) % this.capacity;
     if (this._size < this.capacity) this._size++;
   }
 
+  /**
+   * Returns a slice of the most recent `n` samples.
+   */
   slice(n: number): Float32Array {
     const count = Math.min(n, this._size);
     const out = new Float32Array(count);
@@ -62,6 +72,9 @@ class RingBuffer {
     return out;
   }
 
+  /**
+   * Returns a slice of `n` samples starting at a historical offset.
+   */
   sliceAt(n: number, offsetSamples: number): Float32Array {
     if (this._size === 0) return new Float32Array(n);
     const maxOffset = Math.max(0, this._size - n);
@@ -79,8 +92,11 @@ class RingBuffer {
   get size() { return this._size; }
 }
 
-// ─── Helpers vitales ──────────────────────────────────────────────────────────
+// ─── Vitals Estimation Helpers ────────────────────────────────────────────────
 
+/**
+ * Estimates Heart Rate (HR) in BPM from ECG samples.
+ */
 function estimateHR(buf: Float32Array): number {
   if (buf.length < 100) return 0;
   let max = -Infinity;
@@ -99,6 +115,9 @@ function estimateHR(buf: Float32Array): number {
   return Math.round(15000 / (totalDist / (peaks.length - 1)));
 }
 
+/**
+ * Estimates SpO2 oxygen saturation percentage from PPG samples.
+ */
 function estimateSpO2(buf: Float32Array): number {
   if (buf.length < 10) return 98;
   let max = -Infinity, min = Infinity;
@@ -110,6 +129,9 @@ function estimateSpO2(buf: Float32Array): number {
   return Math.min(100, Math.round((88 + ((max - min) / 8_388_607) * 25) * 10) / 10);
 }
 
+/**
+ * Extracts temperature in Celsius from samples.
+ */
 function extractTemp(buf: Float32Array): number {
   if (buf.length === 0) return 36.6;
   let sum = 0;
@@ -117,6 +139,9 @@ function extractTemp(buf: Float32Array): number {
   return Math.round((sum / buf.length / 100_000) * 10) / 10;
 }
 
+/**
+ * Estimates Respiration Rate (RR) from pneumography samples.
+ */
 function estimateResp(buf: Float32Array): number {
   if (buf.length < 200) return 16;
   const crossings: number[] = [];
@@ -129,6 +154,9 @@ function estimateResp(buf: Float32Array): number {
   return Math.round(15000 / (totalDist / (crossings.length - 1)));
 }
 
+/**
+ * Extracts Blood Pressure (BP) systolic/diastolic values from samples.
+ */
 function extractBp(buf: Float32Array): { sys: number, dia: number } | null {
   if (buf.length === 0) return null;
   let sum = 0;
@@ -138,8 +166,8 @@ function extractBp(buf: Float32Array): { sys: number, dia: number } | null {
   return { sys: Math.floor(avg / 1000), dia: avg % 1000 };
 }
 
-// ─── SIMULADOR ────────────────────────────────────────────────────────────────
-// Borrar esta sección cuando conectes el dispositivo real
+// ─── SIMULATOR ────────────────────────────────────────────────────────────────
+// Delete this section when you connect the real device
 
 type SimMode =
   | 'normal'
@@ -223,10 +251,14 @@ function buildSimPacket(t: number, mode: SimMode) {
   return { timestamp: Math.round(t * 1000), channels };
 }
 
-// ─── FIN SIMULADOR ────────────────────────────────────────────────────────────
+// ─── END SIMULATOR ────────────────────────────────────────────────────────────
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+// ─── WebSocket Hook ───────────────────────────────────────────────────────────
 
+/**
+ * Hook to manage real-time WebSocket connection to the device server (or simulator fallback),
+ * processing incoming waveforms, estimating vitals, and updating the global store.
+ */
 export const useWebSocket = () => {
   const setConnected       = useStore(s => s.setConnected);
   const setConnectionStatus = useStore(s => s.setConnectionStatus);
@@ -246,7 +278,7 @@ export const useWebSocket = () => {
   const simRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const simTime  = useRef(0);
 
-  // ── Procesar paquete ────────────────────────────────────────────────────────
+  // ── Process Incoming Packet ─────────────────────────────────────────────────
   const handlePacket = useCallback((packet: { timestamp: number; channels: number[][] }) => {
     packet.channels.forEach((ch, i) => {
       if (i >= 8) return;
@@ -268,7 +300,7 @@ export const useWebSocket = () => {
     return 'stable';
   }, []);
 
-  // ── Render loop + vitales @ 30fps ───────────────────────────────────────────
+  // ── Render Loop + Vitals Estimation @ 30fps ─────────────────────────────────
   useEffect(() => {
     let last = 0;
     let vitalTick = 0;
@@ -304,7 +336,7 @@ export const useWebSocket = () => {
 
       setWaveforms(next);
 
-      // Vitales cada ~1s
+      // Vitals calculation every ~1s
       vitalTick++;
       if (vitalTick < 30) return;
       vitalTick = 0;
@@ -338,7 +370,7 @@ export const useWebSocket = () => {
           }
         });
 
-        // Primera vez que llegan datos reales — activa el display
+        // First time real data arrives — activate the display
         if (!useStore.getState().hasRealData) {
           useStore.getState().setHasRealData(true);
         }
@@ -374,7 +406,7 @@ export const useWebSocket = () => {
 
       updateVitals(updates);
 
-      // Solo alertas en modo Live
+      // Alerts only in Live mode
       if (historyOffsetRef.current === 0) {
         if (hr > 120)       addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
         if (hr > 0 && hr < 45) addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Low HR: ${hr} BPM`, severity: 'high' });
@@ -387,7 +419,7 @@ export const useWebSocket = () => {
     return () => cancelAnimationFrame(frameId);
   }, [updateVitals, addAlert]);
 
-  // ── WebSocket + fallback simulador ─────────────────────────────────────────
+  // ── WebSocket + Simulator Fallback ─────────────────────────────────────────
   useEffect(() => {
     let reconnect: ReturnType<typeof setTimeout>;
 
@@ -395,7 +427,7 @@ export const useWebSocket = () => {
       if (simRef.current) { clearInterval(simRef.current); simRef.current = null; }
     };
 
-    // SIMULADOR — borrar startSim() y su llamada en onclose cuando conectes el dispositivo real
+    // SIMULATOR — delete startSim() and its call in onclose when connecting the real device
     const startSim = () => {
       if (simRef.current) return;
       setConnected(true);
@@ -433,7 +465,7 @@ export const useWebSocket = () => {
         handlePacket(buildSimPacket(simTime.current, currentMode));
       }, 100);
     };
-    // FIN SIMULADOR
+    // END SIMULATOR
 
     const connect = () => {
       setConnectionStatus('Connecting');
@@ -484,14 +516,14 @@ export const useWebSocket = () => {
               setConnected(false);
               setConnectionStatus('Disconnected');
             }
-          } catch { /* ignorar mensajes no-JSON */ }
+          } catch { /* ignore non-JSON messages */ }
         }
       };
 
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
-        //startSim(); // SIMULADOR — borrar esta linea cuando conectes el dispositivo real
+        //startSim(); // SIMULATOR — delete this line when connecting the real device
         reconnect = setTimeout(connect, 5000);
       };
 
@@ -511,7 +543,7 @@ export const useWebSocket = () => {
     };
   }, [handlePacket, setConnected, setConnectionStatus, simulationMode]);
 
-  // ── Sync modo al servidor ──────────────────────────────────────────────────
+  // ── Sync simulation mode with the server ───────────────────────────────────
   useEffect(() => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {

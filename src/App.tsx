@@ -21,14 +21,20 @@ import { useAuth } from './hooks/useAuth';
 import LoginScreen from './components/LoginScreen';
 
 
+/**
+ * App Component.
+ * The entry point of the ChestPad monitoring interface.
+ * Handles loading states, user session checking (Firebase Auth),
+ * and routes views between the Login/Register screens and the main Dashboard layouts.
+ */
 export default function App() {
   const viewMode = useStore(state => state.viewMode);
-  useAuth();   // monta el listener de Firebase Auth (una sola vez)
+  useAuth();   // mounts the Firebase Auth listener (once)
   const currentUser  = useStore(s => s.currentUser);
   const authLoading  = useStore(s => s.authLoading);
   useFirestore();
 
-  // ── Mientras Firebase verifica la sesión ────────────────────────────────────
+  // ── While Firebase verifies the session ────────────────────────────────────
   if (authLoading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">

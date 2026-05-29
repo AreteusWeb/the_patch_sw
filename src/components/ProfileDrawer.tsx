@@ -12,19 +12,32 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import useStore from '../store/useStore';
 
+/**
+ * Properties for the ProfileDrawer component.
+ */
 interface ProfileDrawerProps {
+  /** Indicates whether the profile drawer is open. */
   open: boolean;
+  /** Callback function to close the profile drawer. */
   onClose: () => void;
 }
 
 type Section = 'name' | 'email' | 'password' | 'mac' | null;
 
+/**
+ * Normalizes a raw MAC address string into the standard XX:XX:XX:XX:XX:XX format.
+ * Returns null if the address is invalid.
+ */
 function normalizeMac(raw: string): string | null {
   const clean = raw.replace(/[^A-Fa-f0-9]/g, '');
   if (clean.length !== 12) return null;
   return clean.match(/.{2}/g)!.join(':').toUpperCase();
 }
 
+/**
+ * ProfileDrawer Component.
+ * Displays a drawer to edit the user's name, email, password, and linked device MAC address.
+ */
 const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
   const { currentUser, deviceMac, setDeviceMac } = useStore();
   const [activeSection, setActiveSection] = useState<Section>(null);

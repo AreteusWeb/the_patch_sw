@@ -3,6 +3,10 @@ import useStore from '../store/useStore';
 import { Battery, Wifi } from 'lucide-react';
 import { cn } from '../utils/cn';
 
+/**
+ * Footer Component.
+ * Displays battery levels and device connection status at the bottom of the layout.
+ */
 const Footer: React.FC = () => {
   const batteryLevel = useStore(state => state.batteryLevel);
   const isConnected  = useStore(state => state.isConnected);

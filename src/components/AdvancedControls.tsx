@@ -11,7 +11,7 @@ const RANGE_SECONDS: Record<string, number> = {
   '1 Day': 86400,
 };
 
-// ── Tipos de evento clínicos definidos ───────────────────────────────────────
+// ── Clinical event types defined ─────────────────────────────────────────────
 const EVENT_TYPE_MAP: Record<string, string[]> = {
   'Tachycardia': ['tachycardia'],
   'Bradycardia': ['bradycardia'],
@@ -30,6 +30,11 @@ const severityColor: Record<string, string> = {
   low: 'border-white/5 bg-slate-900/40',
 };
 
+/**
+ * AdvancedControls Component.
+ * Provides controls for searching, filtering, and traversing historical data,
+ * as well as viewing recent clinical alerts.
+ */
 const AdvancedControls: React.FC = () => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);

@@ -15,6 +15,11 @@ import RegisterScreen from './RegisterScreen';
 // ─── LoginScreen ─────────────────────────────────────────────────────────────
 
 
+/**
+ * LoginScreen Component.
+ * Provides the user interface for email/password authentication, including password reset
+ * request links and a navigation path to create a new user profile.
+ */
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,14 +55,14 @@ export default function LoginScreen() {
     try {
       await login(email.trim(), password);
 
-      // onAuthStateChanged en useAuth actualiza el store → App.tsx cambia de vista
+      // onAuthStateChanged in useAuth updates the store → App.tsx changes view
     } catch (err: unknown) {
       const msg =
         err instanceof Error
           ? err.message
           : 'Authentication failed';
 
-      // Simplificar mensajes Firebase
+      // Simplify Firebase error messages
       if (
         msg.includes('invalid-credential') ||
         msg.includes('wrong-password') ||
@@ -267,7 +272,7 @@ export default function LoginScreen() {
             )}
           </div>
 
-          {/* Create account link — igual que antes */}
+          {/* Create account link — same as before */}
           <div className="mt-3 text-center">
             <button
               onClick={() => setShowRegister(true)}

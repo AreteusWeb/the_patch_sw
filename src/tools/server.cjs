@@ -1,7 +1,7 @@
 /**
  * ChestPad WebSocket Simulator
- * Corre con: node server.js
- * Requiere: npm install ws
+ * Run with: node server.js
+ * Requires: npm install ws
  */
 
 const { WebSocketServer } = require('ws');
@@ -9,7 +9,7 @@ const { WebSocketServer } = require('ws');
 const PORT = 8080;
 const wss = new WebSocketServer({ port: PORT });
 
-// ─── Config de señales ───────────────────────────────────────────────────────
+// ─── Signal config ────────────────────────────────────────────────────────
 let simMode = 'normal';
 
 const MODES = {
@@ -20,7 +20,7 @@ const MODES = {
   fever:       { hr: 95,  spo2: 97,  temp: 39.2, resp: 20 },
 };
 
-// ─── Generadores de señal ────────────────────────────────────────────────────
+// ─── Signal generators ───────────────────────────────────────────────────
 
 function ecgSample(t, hr) {
   const period = 60 / hr;
@@ -48,7 +48,7 @@ function respSample(t, resp) {
 
 
 
-// JSON 11x25 matrix para todos los canales @ 250 Hz
+// JSON 11x25 matrix for all channels @ 250 Hz
 function buildJSONPacket(timestamp, t0, cfg) {
   const SAMPLES = 25;
   const dt = 1 / 250;
@@ -71,10 +71,10 @@ function buildJSONPacket(timestamp, t0, cfg) {
   return JSON.stringify({ timestamp, channels });
 }
 
-// ─── Servidor ────────────────────────────────────────────────────────────────
+// ─── Server ────────────────────────────────────────────────────────────────
 
-console.log(`\n🫀  ChestPad WS Simulator`);
-console.log(`   Escuchando en ws://localhost:${PORT}/ws\n`);
+console.log(`\nChestPad WS Simulator`);
+console.log(`   Listening on ws://localhost:${PORT}/ws\n`);
 
 wss.on('connection', (ws, req) => {
   let authenticated = false;
@@ -94,7 +94,7 @@ wss.on('connection', (ws, req) => {
         console.log(`[AUTH] MAC: ${msg.mac} — OK`);
         ws.send(JSON.stringify({ type: 'auth_ok', mac: msg.mac }));
 
-        // Arrancar ciclo de 100ms
+        // Start the 100 ms cycle
         cycleInterval = setInterval(() => {
           if (ws.readyState !== ws.OPEN) return;
 
@@ -114,7 +114,7 @@ wss.on('connection', (ws, req) => {
         }, 100);
       }
 
-      // Cambiar modo desde el cliente (opcional)
+      // Change mode from the client (optional)
       if (msg.type === 'set_mode' && MODES[msg.mode]) {
         simMode = msg.mode;
         console.log(`[MODE] Cambiado a: ${simMode}`);
@@ -137,7 +137,7 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// ─── Control por consola (cambia modo escribiendo en terminal) ───────────────
+// ─── Console control (change mode by typing in the terminal) ─────────────
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (input) => {
   const cmd = input.trim().toLowerCase();

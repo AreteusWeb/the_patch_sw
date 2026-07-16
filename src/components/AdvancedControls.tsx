@@ -236,7 +236,7 @@ const AdvancedControls: React.FC = () => {
           </div>
         </div>
 
-        {/* Alerts Section — lee del store en tiempo real */}
+        {/* Alerts Section — reads from the store in real time */}
         <div className="flex flex-col mt-2 px-1">
           <span className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.2em] mb-1">Recent Alerts</span>
           <div className="flex flex-col gap-1 max-h-[100px] overflow-y-auto scrollbar-hide">

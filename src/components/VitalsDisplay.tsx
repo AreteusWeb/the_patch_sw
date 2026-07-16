@@ -102,7 +102,7 @@ const VitalCard: React.FC<{
           frozen && "opacity-70"
         )}>
 
-          {/* Triángulo arriba-izquierda */}
+          {/* Upper-left triangle */}
           {alertLabel && (
             <div className={cn(
               "absolute animate-pulse",

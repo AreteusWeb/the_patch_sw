@@ -1,7 +1,7 @@
-# Areteus Chestpad Device Web Interface
+# Areteus The Patch Device Web Interface
 
 ## Overview
-The Areteus Chestpad device uses this web interface to display user activity data and provide a modern user experience.
+Areteus The Patch device uses this web interface to display user activity data and provide a modern user experience.
 
 ## Installation & Running
 ```bash

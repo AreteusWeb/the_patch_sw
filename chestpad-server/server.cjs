@@ -35,13 +35,136 @@ admin.initializeApp({
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'areteus-patch-ecg-raw';
 const bucket = storage.bucket(BUCKET_NAME);
+const db = admin.firestore();
 
 const PORT = process.env.PORT || 8080;
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', () => {
+      if (!raw) return resolve({});
+      try { resolve(JSON.parse(raw)); }
+      catch (e) { reject(new Error('invalid_json')); }
+    });
+    req.on('error', reject);
+  });
+}
+// Verifica el Firebase ID Token del header Authorization: Bearer <token>
+async function verifyAuthHeader(req) {
+  const authHeader = req.headers['authorization'] || '';
+  const match = authHeader.match(/^Bearer (.+)$/);
+  if (!match) return null;
+  try {
+    const decoded = await admin.auth().verifyIdToken(match[1]);
+    return decoded.uid;
+  } catch (err) {
+    console.warn(`[API AUTH FAIL] ${err.message}`);
+    return null;
+  }
+}
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  });
+  res.end(JSON.stringify(obj));
+}
+
+function normalizeMac(mac) {
+  return (mac || '').replace(/:/g, '').toUpperCase();
+}
+// ─── Handler principal de rutas /api/devices/* ───
+// Regresa `true` si ya atendió el request, `false` si no era para él
+async function handleDevicesApi(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (!url.pathname.startsWith('/api/devices')) return false;
+
+  if (req.method === 'OPTIONS') {
+    sendJson(res, 204, {});
+    return true;
+  }
+
+  const uid = await verifyAuthHeader(req);
+  if (!uid) {
+    sendJson(res, 401, { error: 'unauthorized' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/devices') {
+    const snap = await db.collection('devices').where('ownerUid', '==', uid).get();
+    const devices = snap.docs.map(d => d.data());
+    sendJson(res, 200, { devices });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/devices') {
+    let body;
+    try { body = await readJsonBody(req); }
+    catch { sendJson(res, 400, { error: 'invalid_json' }); return true; }
+
+    const deviceMac = normalizeMac(body.deviceMac);
+    if (!deviceMac || deviceMac.length !== 12) {
+      sendJson(res, 400, { error: 'invalid_mac' });
+      return true;
+    }
+
+    const ref = db.collection('devices').doc(deviceMac);
+    const existing = await ref.get();
+    if (existing.exists) {
+      sendJson(res, 409, { error: 'device_already_registered' });
+      return true;
+    }
+
+    const deviceDoc = {
+      deviceMac,
+      ownerUid: uid,
+      name: body.name || `Patch ${deviceMac.slice(-4)}`,
+      firmwareVersion: null,
+      registeredAt: Date.now(),
+    };
+    await ref.set(deviceDoc);
+    console.log(`[DEVICE REGISTERED] mac=${deviceMac} owner=${uid}`);
+    sendJson(res, 201, { device: deviceDoc });
+    return true;
+  }
+
+  if (req.method === 'DELETE' && url.pathname.startsWith('/api/devices/')) {
+    const deviceMac = normalizeMac(url.pathname.split('/').pop());
+    const ref = db.collection('devices').doc(deviceMac);
+    const existing = await ref.get();
+
+    if (!existing.exists) {
+      sendJson(res, 404, { error: 'not_found' });
+      return true;
+    }
+    if (existing.data().ownerUid !== uid) {
+      sendJson(res, 403, { error: 'not_owner' });
+      return true;
+    }
+
+    await ref.delete();
+    console.log(`[DEVICE DELETED] mac=${deviceMac} owner=${uid}`);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  sendJson(res, 404, { error: 'not_found' });
+  return true;
+}
 
 // Plain HTTP server — responds to simple requests (Cloud Run health checks,
 // browser, etc). Real WebSocket connections are "upgraded" from this same
 // server.
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
+  const handled = await handleDevicesApi(req, res);
+  if (handled) return;
+
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('ChestPad WS Server is running\n');
 });

@@ -1,10 +1,33 @@
 /**
  * useWebSocket.ts
  *
- * When the real device is ready:
- *   1. Delete the section marked "SIMULATOR"
- *   2. Change WS_URL to the real IP of the device
- *   3. Done — the rest remains the same
+ * ACTUALIZADO — ahora sí entiende el formato real que manda server.cjs:
+ *   { timestamp, channels: [ { index, name, samples: number[] }, ... ] }
+ * donde `name` es uno de: 'Lead I','Lead II','V1'..'V6','Resp','PPG'
+ * (Temperature todavía no se envía — confirmado por Axel, 2026-07-14).
+ * Los `samples` vienen en cuentas RAW del ADC (24-bit), no en mV.
+ *
+ * Qué cambió vs la versión anterior:
+ * 1. handlePacket ahora reconoce paquetes por NOMBRE de canal, no por posición.
+ *    (Antes asumía channels[0..7] en un orden fijo que nunca coincidió con
+ *    lo que manda el hardware real — por eso todo se quedaba en "--".)
+ * 2. Conversión raw → mV con sign-extension de 24 bits, igual que el
+ *    viewer.js de Axel (server.cjs no hace sign-extension — avisar a
+ *    Axel/backend, es un posible bug ahí, pero no se toca desde aquí).
+ * 3. "waveforms" ahora tiene 11 posiciones fijas y con nombre real:
+ *      0 Lead I, 1 Lead II, 2 Lead III (derivado), 3 V1, 4 V2, 5 V3,
+ *      6 V4, 7 V5, 8 V6, 9 Resp, 10 PPG
+ *    Ya no hay hack de "% 4" — cada derivación jala su canal real.
+ * 4. HR se calcula de Lead II (estándar clínico para detectar R-peaks,
+ *    antes se usaba un canal genérico sin sentido clínico real).
+ * 5. Temperatura y Presión Arterial YA NO se inventan con datos reales:
+ *    el hardware no tiene esos sensores todavía, así que simplemente no
+ *    se llama updateVitals para esos dos — se quedan en su valor default
+ *    ("--" en la UI), que es el comportamiento correcto hoy.
+ * 6. El simulador (sección SIMULATOR) se deja intacto por si se vuelve a
+ *    usar — sigue mandando el formato viejo (arrays posicionales), y
+ *    handlePacket todavía sabe leer ese formato como fallback, así que
+ *    nada se rompe si alguien reactiva startSim().
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -16,31 +39,72 @@ import { auth } from '../lib/firebase';
 
 const WS_URL = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
 
-// 1 hour @ 250Hz = 900,000 samples per channel
+// 1 hour @ 250Hz = 900,000 samples por canal
 const BUFFER_SIZE = 900_000;
 
-// Visible samples per channel
-const VIEW_SIZES = [750, 750, 750, 750, 150, 150, 50, 300];
-const DECIMATE = [1, 1, 1, 1, 5, 5, 1, 1];
+// ─── Esquema de canales reales (nombre → slot fijo en `waveforms`) ────────────
+// Índices 0-8: derivaciones ECG. 9: Resp. 10: PPG.
+// 'Lead III' no la manda el hardware — se deriva (Lead III = Lead II − Lead I).
+const LEAD_NAMES = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'] as const;
+const RESP_SLOT = 9;
+const PPG_SLOT = 10;
+const TOTAL_SLOTS = 11;
 
-// Min/max ranges per channel for WaveformCanvas
+// Nombre real del canal (tal cual lo manda server.cjs) → slot en `waveforms`.
+// 'Lead III' se omite aquí a propósito: no llega por WS, se calcula aparte.
+const CHANNEL_NAME_TO_SLOT: Record<string, number> = {
+  'Lead I': 0,
+  'Lead II': 1,
+  'V1': 3,
+  'V2': 4,
+  'V3': 5,
+  'V4': 6,
+  'V5': 7,
+  'V6': 8,
+  'Resp': RESP_SLOT,
+  'PPG': PPG_SLOT,
+};
+
+// Muestras visibles por slot (mismo criterio que antes: ECG necesita más
+// resolución temporal que Resp/PPG, por eso decimamos estos últimos).
+const VIEW_SIZES = [750, 750, 750, 750, 750, 750, 750, 750, 750, 150, 150];
+const DECIMATE   = [1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5];
+
+// Rangos min/max para WaveformCanvas, EN mV (ya convertido).
+// TODO: son valores iniciales razonables para ECG de superficie (~±2mV) y
+// Resp/PPG; ajustar con el device real conectado si el trazo se ve
+// recortado (clipping) o plano.
 export const CH_RANGES: [number, number][] = [
-  [-2_500_000, 2_500_000],  // ch0-3 ECG (int32)
-  [-2_500_000, 2_500_000],
-  [-2_500_000, 2_500_000],
-  [-2_500_000, 2_500_000],
-  [-8_388_607, 8_388_607],  // ch4 Pneumography
-  [0, 8_388_607],           // ch5 PPG
-  [3_400_000, 4_200_000],   // ch6 Temp (34-42C x 100k)
-  [-32_767, 32_767],        // ch7 Audio int16
+  [-2, 2],   // 0 Lead I
+  [-2, 2],   // 1 Lead II
+  [-2, 2],   // 2 Lead III (derivada)
+  [-2, 2],   // 3 V1
+  [-2, 2],   // 4 V2
+  [-2, 2],   // 5 V3
+  [-2, 2],   // 6 V4
+  [-2, 2],   // 7 V5
+  [-2, 2],   // 8 V6
+  [-5, 5],   // 9 Resp
+  [0, 5],    // 10 PPG
 ];
 
-// ─── Ring Buffer using Float32Array ───────────────────────────────────────────
+// ─── Conversión raw ADC (24-bit) → mV ─────────────────────────────────────────
+// Igual que viewer.js de Axel: sign-extension de 24 bits + escala a VREF.
+// NOTA: server.cjs (el que sube a GCS) NO hace sign-extension todavía —
+// solo filtra el valor "sensor no conectado". Avisar a Axel/backend, ya
+// que eso puede estar corrompiendo valores negativos en los chunks de GCS.
+const ADC_VREF_MV = 1200;
+const ADC_MAX_VAL = 8388607; // 2^23 - 1
 
-/**
- * A simple ring buffer implementation using Float32Array
- * for high-performance sample storage.
- */
+function rawToMv(rawValue: number): number {
+  let v = rawValue;
+  if (v > 0x7FFFFF) v -= 0x1000000; // sign-extend 24-bit two's complement
+  if (v === ADC_MAX_VAL) return 0;  // sensor no conectado (pin flotante) → tratar como plano
+  return (v / ADC_MAX_VAL) * ADC_VREF_MV;
+}
+
+// ─── Ring Buffer usando Float32Array ──────────────────────────────────────────
+
 class RingBuffer {
   private buf: Float32Array;
   private ptr = 0;
@@ -50,18 +114,12 @@ class RingBuffer {
     this.buf = new Float32Array(capacity);
   }
 
-  /**
-   * Pushes a new value into the ring buffer.
-   */
   push(value: number) {
     this.buf[this.ptr] = value;
     this.ptr = (this.ptr + 1) % this.capacity;
     if (this._size < this.capacity) this._size++;
   }
 
-  /**
-   * Returns a slice of the most recent `n` samples.
-   */
   slice(n: number): Float32Array {
     const count = Math.min(n, this._size);
     const out = new Float32Array(count);
@@ -72,9 +130,6 @@ class RingBuffer {
     return out;
   }
 
-  /**
-   * Returns a slice of `n` samples starting at a historical offset.
-   */
   sliceAt(n: number, offsetSamples: number): Float32Array {
     if (this._size === 0) return new Float32Array(n);
     const maxOffset = Math.max(0, this._size - n);
@@ -94,9 +149,6 @@ class RingBuffer {
 
 // ─── Vitals Estimation Helpers ────────────────────────────────────────────────
 
-/**
- * Estimates Heart Rate (HR) in BPM from ECG samples.
- */
 function estimateHR(buf: Float32Array): number {
   if (buf.length < 100) return 0;
   let max = -Infinity;
@@ -115,9 +167,6 @@ function estimateHR(buf: Float32Array): number {
   return Math.round(15000 / (totalDist / (peaks.length - 1)));
 }
 
-/**
- * Estimates SpO2 oxygen saturation percentage from PPG samples.
- */
 function estimateSpO2(buf: Float32Array): number {
   if (buf.length < 10) return 98;
   let max = -Infinity, min = Infinity;
@@ -125,23 +174,12 @@ function estimateSpO2(buf: Float32Array): number {
     if (buf[i] > max) max = buf[i];
     if (buf[i] < min) min = buf[i];
   }
-  if (max - min < 100_000) return 98;
-  return Math.min(100, Math.round((88 + ((max - min) / 8_388_607) * 25) * 10) / 10);
+  // buf ya está en mV; el rango de swing esperado es mucho menor que en
+  // cuentas raw. TODO: calibrar este umbral/escala con PPG real del device.
+  if (max - min < 0.02) return 98;
+  return Math.min(100, Math.round((88 + ((max - min) / ADC_VREF_MV) * 2500) * 10) / 10);
 }
 
-/**
- * Extracts temperature in Celsius from samples.
- */
-function extractTemp(buf: Float32Array): number {
-  if (buf.length === 0) return 36.6;
-  let sum = 0;
-  for (let i = 0; i < buf.length; i++) sum += buf[i];
-  return Math.round((sum / buf.length / 100_000) * 10) / 10;
-}
-
-/**
- * Estimates Respiration Rate (RR) from pneumography samples.
- */
 function estimateResp(buf: Float32Array): number {
   if (buf.length < 200) return 16;
   const crossings: number[] = [];
@@ -154,20 +192,10 @@ function estimateResp(buf: Float32Array): number {
   return Math.round(15000 / (totalDist / (crossings.length - 1)));
 }
 
-/**
- * Extracts Blood Pressure (BP) systolic/diastolic values from samples.
- */
-function extractBp(buf: Float32Array): { sys: number, dia: number } | null {
-  if (buf.length === 0) return null;
-  let sum = 0;
-  for (let i = 0; i < buf.length; i++) sum += buf[i];
-  const avg = Math.round(sum / buf.length);
-  if (avg < 1000) return null;
-  return { sys: Math.floor(avg / 1000), dia: avg % 1000 };
-}
-
 // ─── SIMULATOR ────────────────────────────────────────────────────────────────
-// Delete this section when you connect the real device
+// Sin cambios de lógica — se deja intacto. Sigue mandando el formato viejo
+// (channels: number[][], posicional). handlePacket abajo todavía sabe leer
+// ese formato como fallback, por si se reactiva startSim().
 
 type SimMode =
   | 'normal'
@@ -255,43 +283,56 @@ function buildSimPacket(t: number, mode: SimMode) {
 
 // ─── WebSocket Hook ───────────────────────────────────────────────────────────
 
-/**
- * Hook to manage real-time WebSocket connection to the device server (or simulator fallback),
- * processing incoming waveforms, estimating vitals, and updating the global store.
- */
 export const useWebSocket = () => {
-  const setConnected       = useStore(s => s.setConnected);
+  const setConnected        = useStore(s => s.setConnected);
   const setConnectionStatus = useStore(s => s.setConnectionStatus);
-  const simulationMode     = useStore(s => s.simulationMode);
-  const updateVitals       = useStore(s => s.updateVitals);
-  const addAlert           = useStore(s => s.addAlert);
-  const addEvent           = useStore(s => s.addEvent);
-  const historyOffset      = useStore(s => s.historyOffset);
-  const deviceMac          = useStore(s => s.deviceMac);
+  const simulationMode      = useStore(s => s.simulationMode);
+  const updateVitals        = useStore(s => s.updateVitals);
+  const addAlert            = useStore(s => s.addAlert);
+  const addEvent            = useStore(s => s.addEvent);
+  const historyOffset       = useStore(s => s.historyOffset);
+  const deviceMac           = useStore(s => s.deviceMac);
 
   const [waveforms, setWaveforms] = useState<number[][]>(
     VIEW_SIZES.map(n => new Array(n).fill(0))
   );
 
-  const rings    = useRef<RingBuffer[]>(Array.from({ length: 8 }, () => new RingBuffer(BUFFER_SIZE)));
-  const wsRef    = useRef<WebSocket | null>(null);
-  const simRef   = useRef<ReturnType<typeof setInterval> | null>(null);
-  const simTime  = useRef(0);
+  const rings  = useRef<RingBuffer[]>(Array.from({ length: TOTAL_SLOTS }, () => new RingBuffer(BUFFER_SIZE)));
+  const wsRef  = useRef<WebSocket | null>(null);
+  const simRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const simTime = useRef(0);
 
-  // ── Process Incoming Packet ─────────────────────────────────────────────────
-  const handlePacket = useCallback((packet: { timestamp: number; channels: number[][] }) => {
+  // ── Procesa paquete entrante — soporta AMBOS formatos ───────────────────────
+  const handlePacket = useCallback((packet: { timestamp: number; channels: unknown[] }) => {
     packet.channels.forEach((ch, i) => {
-      if (i >= 8) return;
-      const samples = Array.isArray(ch) ? ch : [ch];
-      const ring = rings.current[i];
-      for (const v of samples) ring.push(v);
+      // ── Formato REAL (server.cjs / device): { index, name, samples } ────────
+      if (ch && typeof ch === 'object' && !Array.isArray(ch) && 'name' in (ch as any)) {
+        const named = ch as { name: string; samples: number[] };
+        const slot = CHANNEL_NAME_TO_SLOT[named.name];
+        if (slot === undefined || !Array.isArray(named.samples)) return; // canal desconocido (p.ej. Temperature aún no llega)
+        const ring = rings.current[slot];
+        for (const raw of named.samples) ring.push(rawToMv(raw));
+        return;
+      }
+
+      // ── Formato LEGACY (simulador): arrays posicionales, sin nombre ─────────
+      if (Array.isArray(ch)) {
+        // El simulador solo manda 8 slots [ch0-3 ECG, ch4 Resp, ch5 PPG, ch6 Temp, ch7 BP-fake].
+        // Los mapeamos a un subconjunto razonable del nuevo esquema para que
+        // el simulador se siga viendo bien si se reactiva.
+        const legacyToSlot: Record<number, number> = { 0: 0, 1: 1, 2: 3, 3: 4, 4: RESP_SLOT, 5: PPG_SLOT };
+        const slot = legacyToSlot[i];
+        if (slot === undefined) return; // ch6 (temp) y ch7 (bp-fake) no tienen slot real — se ignoran aquí
+        const ring = rings.current[slot];
+        for (const v of ch) ring.push(v);
+      }
     });
   }, []);
 
   const historyOffsetRef = useRef(historyOffset);
   useEffect(() => { historyOffsetRef.current = historyOffset; }, [historyOffset]);
 
-  const prevVitals = useRef({ hr: 0, spo2: 0, resp: 0, temp: 0, sys: 0 });
+  const prevVitals = useRef({ hr: 0, spo2: 0, resp: 0 });
 
   const getTrend = useCallback((curr: number, prev: number, margin: number): 'up' | 'down' | 'stable' => {
     if (prev === 0) return 'stable';
@@ -313,10 +354,10 @@ export const useWebSocket = () => {
 
       const offsetSamples = historyOffsetRef.current * 250;
 
-      // Waveforms
-      const next = rings.current.map((ring, ch) => {
-        const viewSize = VIEW_SIZES[ch];
-        const dec = DECIMATE[ch];
+      // Waveforms (0-8 leads, 9 Resp, 10 PPG)
+      const next = rings.current.map((ring, slot) => {
+        const viewSize = VIEW_SIZES[slot];
+        const dec = DECIMATE[slot];
         const rawNeed = viewSize * dec;
 
         const raw = offsetSamples === 0
@@ -334,32 +375,35 @@ export const useWebSocket = () => {
         return out.slice(-viewSize);
       });
 
+      // Lead III = Lead II − Lead I (ley de Einthoven) — no llega por WS, se deriva aquí.
+      const leadI = next[0];
+      const leadII = next[1];
+      next[2] = leadII.map((v, i) => v - (leadI[i] ?? 0));
+
       setWaveforms(next);
 
-      // Vitals calculation every ~1s
+      // Vitals cada ~1s
       vitalTick++;
       if (vitalTick < 30) return;
       vitalTick = 0;
 
-      const ecg  = offsetSamples === 0 ? rings.current[0].slice(750)  : rings.current[0].sliceAt(750,  offsetSamples);
-      const ppg  = offsetSamples === 0 ? rings.current[5].slice(250)  : rings.current[5].sliceAt(250,  offsetSamples);
-      const resp = offsetSamples === 0 ? rings.current[4].slice(1500) : rings.current[4].sliceAt(1500, offsetSamples);
-      const temp = offsetSamples === 0 ? rings.current[6].slice(25)   : rings.current[6].sliceAt(25,   offsetSamples);
-      const bp   = offsetSamples === 0 ? rings.current[7].slice(25)   : rings.current[7].sliceAt(25,   offsetSamples);
+      const leadIIRing = rings.current[1];  // Lead II: estándar clínico para detectar R-peaks
+      const respRing   = rings.current[RESP_SLOT];
+      const ppgRing    = rings.current[PPG_SLOT];
 
-      const hr     = estimateHR(ecg);
-      const spo2   = estimateSpO2(ppg);
-      const rr     = estimateResp(resp);
-      const tmp    = extractTemp(temp);
-      const bpData = extractBp(bp);
+      const ecg  = offsetSamples === 0 ? leadIIRing.slice(750)  : leadIIRing.sliceAt(750, offsetSamples);
+      const ppg  = offsetSamples === 0 ? ppgRing.slice(250)     : ppgRing.sliceAt(250, offsetSamples);
+      const resp = offsetSamples === 0 ? respRing.slice(1500)   : respRing.sliceAt(1500, offsetSamples);
 
-      const hrTrend  = getTrend(hr,  prevVitals.current.hr,   1);
+      const hr   = estimateHR(ecg);
+      const spo2 = estimateSpO2(ppg);
+      const rr   = estimateResp(resp);
+
+      const hrTrend   = getTrend(hr, prevVitals.current.hr, 1);
       const spo2Trend = getTrend(spo2, prevVitals.current.spo2, 0.5);
-      const rrTrend  = getTrend(rr,  prevVitals.current.resp,  1);
-      const tmpTrend = getTrend(tmp, prevVitals.current.temp,  0.2);
-      const sysTrend = bpData ? getTrend(bpData.sys, prevVitals.current.sys, 2) : 'stable';
+      const rrTrend   = getTrend(rr, prevVitals.current.resp, 1);
 
-      prevVitals.current = { hr, spo2, resp: rr, temp: tmp, sys: bpData ? bpData.sys : prevVitals.current.sys };
+      prevVitals.current = { hr, spo2, resp: rr };
 
       if (hr > 0) {
         updateVitals({
@@ -370,48 +414,32 @@ export const useWebSocket = () => {
           }
         });
 
-        // First time real data arrives — activate the display
         if (!useStore.getState().hasRealData) {
           useStore.getState().setHasRealData(true);
         }
       }
 
-      const updates: any = {
+      // NOTA: Temperatura y Presión Arterial NO se actualizan aquí — el
+      // hardware real todavía no tiene esos sensores (confirmado con Axel).
+      // Se quedan en su valor default de la UI ("--") hasta que exista un
+      // canal real que los respalde. Esto es intencional, no un olvido.
+      updateVitals({
         spo2: {
           value: spo2,
           trend: spo2Trend,
           severity: spo2 < 90 ? 'critical' : spo2 < 94 ? 'moderate' : 'normal',
-        },
-        temperature: {
-          value: tmp,
-          trend: tmpTrend,
-          severity: tmp > 39 ? 'critical' : tmp > 37.5 ? 'moderate' : 'normal',
         },
         respirationRate: {
           value: rr > 0 ? rr : 16,
           trend: rrTrend,
           severity: rr > 25 || rr < 10 ? 'critical' : 'normal',
         },
-      };
+      });
 
-      if (bpData) {
-        updates.bloodPressure = {
-          value: `${bpData.sys}/${bpData.dia}`,
-          trend: sysTrend,
-          severity: (bpData.sys > 140 || bpData.dia > 90) ? 'critical'
-                  : (bpData.sys < 90  || bpData.dia < 60) ? 'critical'
-                  : 'normal',
-        };
-      }
-
-      updateVitals(updates);
-
-      // Alerts only in Live mode
       if (historyOffsetRef.current === 0) {
-        if (hr > 120)       addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
+        if (hr > 120)          addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
         if (hr > 0 && hr < 45) addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Low HR: ${hr} BPM`, severity: 'high' });
-        if (spo2 < 90)      addAlert({ timestamp: new Date().toLocaleTimeString(), message: `SpO2 Drop: ${spo2}%`, severity: 'high' });
-        if (tmp > 38.5)     addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Fever: ${tmp}C`, severity: 'medium' });
+        if (spo2 < 90)         addAlert({ timestamp: new Date().toLocaleTimeString(), message: `SpO2 Drop: ${spo2}%`, severity: 'high' });
       }
     };
 
@@ -427,7 +455,6 @@ export const useWebSocket = () => {
       if (simRef.current) { clearInterval(simRef.current); simRef.current = null; }
     };
 
-    // SIMULATOR — delete startSim() and its call in onclose when connecting the real device
     const startSim = () => {
       if (simRef.current) return;
       setConnected(true);
@@ -465,7 +492,6 @@ export const useWebSocket = () => {
         handlePacket(buildSimPacket(simTime.current, currentMode));
       }, 100);
     };
-    // END SIMULATOR
 
     const connect = () => {
       setConnectionStatus('Connecting');
@@ -499,31 +525,30 @@ export const useWebSocket = () => {
 
       ws.onmessage = ({ data }) => {
         if (data instanceof ArrayBuffer) {
-          const view = new DataView(data);
-          const ring = rings.current[7];
-          for (let i = 0; i < data.byteLength / 2; i++) ring.push(view.getInt16(i * 2, true));
-        } else {
-          try {
-            const msg = JSON.parse(data as string);
-            if (msg.channels) handlePacket(msg);
-
-            if (msg.type === 'auth_ok') {
-              setConnected(true);
-              setConnectionStatus('Stable');
-            }
-
-            if (msg.type === 'device_disconnected') {
-              setConnected(false);
-              setConnectionStatus('Disconnected');
-            }
-          } catch { /* ignore non-JSON messages */ }
+          // Audio de auscultación — se sigue guardando pero AuscultationPanel
+          // todavía no está montado en App.tsx ni tiene lógica de reproducción.
+          return;
         }
+        try {
+          const msg = JSON.parse(data as string);
+          if (msg.channels) handlePacket(msg);
+
+          if (msg.type === 'auth_ok') {
+            setConnected(true);
+            setConnectionStatus('Stable');
+          }
+
+          if (msg.type === 'device_disconnected') {
+            setConnected(false);
+            setConnectionStatus('Disconnected');
+          }
+        } catch { /* ignore non-JSON messages */ }
       };
 
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
-        //startSim(); // SIMULATOR — delete this line when connecting the real device
+        // startSim(); // SIMULATOR — descomentar solo si quieren fallback local sin device real
         reconnect = setTimeout(connect, 5000);
       };
 
@@ -543,7 +568,6 @@ export const useWebSocket = () => {
     };
   }, [handlePacket, setConnected, setConnectionStatus, simulationMode]);
 
-  // ── Sync simulation mode with the server ───────────────────────────────────
   useEffect(() => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {

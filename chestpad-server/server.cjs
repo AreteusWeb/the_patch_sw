@@ -35,6 +35,8 @@ admin.initializeApp({
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'areteus-patch-ecg-raw';
 const bucket = storage.bucket(BUCKET_NAME);
+const FIRMWARE_BUCKET_NAME = process.env.FIRMWARE_BUCKET_NAME || BUCKET_NAME;
+const firmwareBucket = storage.bucket(FIRMWARE_BUCKET_NAME);
 const db = admin.firestore();
 
 const PORT = process.env.PORT || 8080;
@@ -158,12 +160,91 @@ async function handleDevicesApi(req, res) {
   return true;
 }
 
+// ─── FASE 2 — OTA (trigger firmware update) ───────────────────────────────
+// This keeps the owner check aligned with the current frontend model, where
+// the user's profile stores a single device MAC in users/{uid}.deviceMac.
+const OTA_URL_EXPIRY_MS = 60 * 60 * 1000;
+
+async function handleOtaApi(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  if (!url.pathname.startsWith('/api/ota')) return false;
+
+  if (req.method === 'OPTIONS') {
+    sendJson(res, 204, {});
+    return true;
+  }
+
+  const uid = await verifyAuthHeader(req);
+  if (!uid) {
+    sendJson(res, 401, { error: 'unauthorized' });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/ota/trigger') {
+    let body;
+    try { body = await readJsonBody(req); }
+    catch { sendJson(res, 400, { error: 'invalid_json' }); return true; }
+
+    const mac = normalizeMac(body.mac);
+    const version = (body.version || '').trim();
+
+    if (!mac || mac.length !== 12) {
+      sendJson(res, 400, { error: 'invalid_mac' });
+      return true;
+    }
+    if (!version) {
+      sendJson(res, 400, { error: 'missing_version' });
+      return true;
+    }
+
+    const userDoc = await db.collection('users').doc(uid).get();
+    const ownedMac = normalizeMac(userDoc.data()?.deviceMac);
+    if (!ownedMac || ownedMac !== mac) {
+      sendJson(res, 403, { error: 'not_owner' });
+      return true;
+    }
+
+    const deviceSession = devices.get(mac);
+    if (!deviceSession || deviceSession.ws.readyState !== deviceSession.ws.OPEN) {
+      sendJson(res, 409, { error: 'device_offline' });
+      return true;
+    }
+
+    const firmwarePath = `firmware/${version}/update.bin`;
+    const file = firmwareBucket.file(firmwarePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      sendJson(res, 404, { error: 'firmware_not_found', path: firmwarePath });
+      return true;
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + OTA_URL_EXPIRY_MS,
+    });
+
+    deviceSession.ws.send(JSON.stringify({ type: 'ota', url: signedUrl, version }));
+    console.log(`[OTA] Triggered device=${mac} version=${version} by uid=${uid}`);
+
+    await db.collection('users').doc(uid).set(
+      { lastOtaTriggeredVersion: version, lastOtaTriggeredAt: Date.now() },
+      { merge: true }
+    );
+
+    sendJson(res, 200, { ok: true, version, expiresInMs: OTA_URL_EXPIRY_MS });
+    return true;
+  }
+
+  sendJson(res, 404, { error: 'not_found' });
+  return true;
+}
+
 // Plain HTTP server — responds to simple requests (Cloud Run health checks,
 // browser, etc). Real WebSocket connections are "upgraded" from this same
 // server.
 const server = http.createServer(async (req, res) => {
-  const handled = await handleDevicesApi(req, res);
-  if (handled) return;
+  if (await handleDevicesApi(req, res)) return;
+  if (await handleOtaApi(req, res)) return;
 
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('ChestPad WS Server is running\n');

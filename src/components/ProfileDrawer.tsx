@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Lock, Cpu, Check, ChevronRight } from 'lucide-react';
+import { X, User, Mail, Lock, Cpu, Check, ChevronRight, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   updateProfile,
@@ -8,7 +8,7 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import useStore from '../store/useStore';
 
@@ -22,7 +22,11 @@ interface ProfileDrawerProps {
   onClose: () => void;
 }
 
-type Section = 'name' | 'email' | 'password' | 'mac' | null;
+// NOTE: el mismo host que ya usa useWebSocket.ts para el WS — el server.cjs
+// atiende WS y REST (/api/...) desde el mismo servidor HTTP en Cloud Run.
+const API_BASE = 'https://chestpad-ws-server-1048900719191.us-central1.run.app';
+
+type Section = 'name' | 'email' | 'password' | 'mac' | 'ota' | null;
 
 /**
  * Normalizes a raw MAC address string into the standard XX:XX:XX:XX:XX:XX format.
@@ -36,7 +40,8 @@ function normalizeMac(raw: string): string | null {
 
 /**
  * ProfileDrawer Component.
- * Displays a drawer to edit the user's name, email, password, and linked device MAC address.
+ * Displays a drawer to edit the user's name, email, password, linked device MAC address,
+ * and to trigger a firmware (OTA) update for the linked device.
  */
 const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
   const { currentUser, deviceMac, setDeviceMac } = useStore();
@@ -54,6 +59,15 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
   const [success,  setSuccess]  = useState<string | null>(null);
   const [error,    setError]    = useState<string | null>(null);
 
+  // ── OTA state ────────────────────────────────────────────────────────────
+  // "latestVersion" se lee de un documento de Firestore que la compañía
+  // mantiene (config/firmware). Así, cuando saquen una versión nueva, no
+  // hace falta un redeploy del frontend — solo actualizan ese documento.
+  const [currentFwVersion, setCurrentFwVersion] = useState<string | null>(null);
+  const [latestFwVersion,  setLatestFwVersion]  = useState<string | null>(null);
+  const [otaStatus, setOtaStatus] = useState<'idle' | 'checking' | 'triggering' | 'sent' | 'error'>('idle');
+  const [otaError,  setOtaError]  = useState<string | null>(null);
+
   // Pre-fill on open
   useEffect(() => {
     if (open && currentUser) {
@@ -63,6 +77,21 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
       setActiveSection(null);
       setSuccess(null);
       setError(null);
+      setOtaStatus('idle');
+      setOtaError(null);
+
+      // Trae versión actual del usuario + última versión publicada por la compañía
+      (async () => {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+          setCurrentFwVersion(userSnap.data()?.lastOtaTriggeredVersion ?? null);
+
+          const configSnap = await getDoc(doc(db, 'config', 'firmware'));
+          setLatestFwVersion(configSnap.data()?.latestVersion ?? null);
+        } catch {
+          // Si config/firmware no existe todavía, simplemente no mostramos "latest"
+        }
+      })();
     }
   }, [open, currentUser, deviceMac]);
 
@@ -71,6 +100,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
     setSuccess(null);
     setCurrentPass('');
     setNewPassword('');
+    setOtaError(null);
   };
 
   const toggle = (section: Section) => {
@@ -151,15 +181,54 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
     } finally { setLoading(false); }
   };
 
+  // ── OTA trigger ──────────────────────────────────────────────────────────
+  const triggerOta = async () => {
+    if (!currentUser || !deviceMac || !latestFwVersion) return;
+    setOtaStatus('triggering');
+    setOtaError(null);
+    try {
+      const token = await currentUser.getIdToken();
+      const res = await fetch(`${API_BASE}/api/ota/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ mac: deviceMac, version: latestFwVersion }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        const messages: Record<string, string> = {
+          device_offline: 'Your device is not connected right now. Try again once it\u2019s online.',
+          not_owner: 'This device is not linked to your account.',
+          firmware_not_found: 'This firmware version is not available yet.',
+        };
+        setOtaError(messages[data.error] ?? 'Could not start the update.');
+        setOtaStatus('error');
+        return;
+      }
+
+      setCurrentFwVersion(data.version);
+      setOtaStatus('sent');
+    } catch {
+      setOtaError('Network error — could not reach the server.');
+      setOtaStatus('error');
+    }
+  };
+
   // ── Input shared styles ─────────────────────────────────────────────────────
   const inputCls = "w-full bg-slate-950/60 border border-slate-800 text-slate-200 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition-all placeholder:text-slate-700 disabled:opacity-50 font-mono";
   const saveBtnCls = "w-full mt-3 bg-teal-400 hover:bg-teal-300 text-black text-xs font-bold py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest";
 
+  const upToDate = currentFwVersion && latestFwVersion && currentFwVersion === latestFwVersion;
+
   const rows: { key: Section; label: string; icon: React.ElementType; value: string }[] = [
-    { key: 'name',     label: 'Display name', icon: User,  value: currentUser?.displayName ?? '—' },
-    { key: 'email',    label: 'Email',         icon: Mail,  value: currentUser?.email ?? '—' },
-    { key: 'password', label: 'Password',      icon: Lock,  value: '••••••••' },
-    { key: 'mac',      label: 'Device MAC',    icon: Cpu,   value: deviceMac ?? 'Not set' },
+    { key: 'name',     label: 'Display name', icon: User,      value: currentUser?.displayName ?? '—' },
+    { key: 'email',    label: 'Email',         icon: Mail,      value: currentUser?.email ?? '—' },
+    { key: 'password', label: 'Password',      icon: Lock,      value: '••••••••' },
+    { key: 'mac',      label: 'Device MAC',    icon: Cpu,       value: deviceMac ?? 'Not set' },
+    { key: 'ota',      label: 'Firmware',      icon: RefreshCw, value: currentFwVersion ?? 'Unknown' },
   ];
 
   return (
@@ -313,6 +382,47 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
                               <button onClick={saveMac} disabled={loading || !mac} className={saveBtnCls}>
                                 {loading ? 'Saving…' : 'Save MAC'}
                               </button>
+                            </>
+                          )}
+
+                          {/* OTA / Firmware */}
+                          {key === 'ota' && (
+                            <>
+                              {!deviceMac && (
+                                <p className="text-[10px] text-slate-500 px-1">Link a device MAC first to update its firmware.</p>
+                              )}
+
+                              {deviceMac && (
+                                <>
+                                  <div className="flex items-center justify-between px-1 text-[10px]">
+                                    <span className="text-slate-500">Current version</span>
+                                    <span className="text-slate-300 font-mono">{currentFwVersion ?? 'Unknown'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between px-1 text-[10px]">
+                                    <span className="text-slate-500">Latest available</span>
+                                    <span className="text-slate-300 font-mono">{latestFwVersion ?? '—'}</span>
+                                  </div>
+
+                                  {otaError && (
+                                    <p className="text-[10px] text-rose-400 px-1">{otaError}</p>
+                                  )}
+                                  {otaStatus === 'sent' && (
+                                    <p className="text-[10px] text-teal-400 px-1">Update sent to your device. It will install shortly.</p>
+                                  )}
+
+                                  <button
+                                    onClick={triggerOta}
+                                    disabled={otaStatus === 'triggering' || !latestFwVersion || !!upToDate}
+                                    className={saveBtnCls}
+                                  >
+                                    {otaStatus === 'triggering'
+                                      ? 'Sending update…'
+                                      : upToDate
+                                        ? 'Already up to date'
+                                        : 'Update firmware'}
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>

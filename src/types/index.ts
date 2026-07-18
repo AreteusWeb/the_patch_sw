@@ -40,7 +40,7 @@ export interface Alert {
   severity: 'low' | 'medium' | 'high';
 }
 
-/** Raw binary message packet from the device containing multi-channel waveforms. */
+/** Raw JSON message packet from the device containing multi-channel waveforms. */
 export interface PhysiologicalPacket {
   /** Packet timestamp from source. */
   timestamp: number;
@@ -66,6 +66,7 @@ export interface AppState {
   isEcgExpanded: boolean;
   advancedEcgMode: 'Single' | 'All';
   isAdvancedMenuOpen: boolean;
+  notchFilterEnabled: boolean;
 }
 
 /** Action mutators for the Zustand store. */
@@ -83,5 +84,6 @@ export interface AppActions {
   setIsEcgExpanded: (isExpanded: boolean) => void;
   setAdvancedEcgMode: (mode: 'Single' | 'All') => void;
   setIsAdvancedMenuOpen: (isOpen: boolean) => void;
+  setNotchFilterEnabled: (enabled: boolean) => void;
   setActivityType: (type: string) => void;
 }

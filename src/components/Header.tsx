@@ -1,12 +1,13 @@
 import React from 'react';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, Zap } from 'lucide-react';
 import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
 
 /**
  * Header Component.
- * Displays user identity, device connection status, view mode selectors,
- * and handles opening the advanced settings menu drawer.
+ * Displays user identity, device connection status, the 60Hz notch filter
+ * toggle, view mode selectors, and handles opening the advanced settings
+ * menu drawer.
  */
 const Header: React.FC = () => {
   const {
@@ -17,6 +18,8 @@ const Header: React.FC = () => {
     setViewMode,
     isAdvancedMenuOpen,
     setIsAdvancedMenuOpen,
+    notchFilterEnabled,
+    setNotchFilterEnabled,
   } = useStore();
 
   // Priority: Firebase profile displayName → substring before @ in email → "User"
@@ -43,6 +46,20 @@ const Header: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Filtro Notch 60Hz — quita el zumbido de línea eléctrica del ECG */}
+        <button
+          onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
+          title={notchFilterEnabled ? '60Hz notch filter: ON' : '60Hz notch filter: OFF'}
+          className={cn(
+            "w-6 h-6 flex items-center justify-center rounded-full transition-all shadow-lg border",
+            notchFilterEnabled
+              ? "bg-teal-500 text-white border-teal-400 shadow-teal-500/20"
+              : "bg-slate-800/60 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <Zap size={12} />
+        </button>
+
         <div className="flex bg-slate-900/60 backdrop-blur-md p-0.5 rounded-full border border-slate-800/50">
           <button
             onClick={() => setViewMode('Advanced')}

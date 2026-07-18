@@ -150,6 +150,7 @@ const useStore = create<
   isEcgExpanded: false,
   advancedEcgMode: 'All',
   isAdvancedMenuOpen: false,
+  notchFilterEnabled: false, //Apagado por default, igual que en viewer.js de Axel
 
   currentUser: null,
   deviceMac: null,
@@ -197,6 +198,9 @@ const useStore = create<
 
   setIsAdvancedMenuOpen: (isOpen) =>
     set({ isAdvancedMenuOpen: isOpen }),
+
+  setNotchFilterEnabled: (enabled) =>
+    set({ notchFilterEnabled: enabled }),
 
   setCurrentUser: (user) =>
     set({ currentUser: user }),

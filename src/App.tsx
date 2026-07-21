@@ -11,6 +11,7 @@ import { useIsDesktop } from './hooks/useIsDesktop';
 import LoginScreen from './components/LoginScreen';
 import MobileApp from './components/mobile/MobileApp';
 import DesktopApp from './components/desktop/DesktopApp';
+import DeviceSelectionScreen from './components/DeviceSelectionScreen';
 
 /**
  * App Component.
@@ -24,6 +25,7 @@ export default function App() {
   useAuth();   // mounts the Firebase Auth listener (once)
   const currentUser = useStore(s => s.currentUser);
   const authLoading = useStore(s => s.authLoading);
+  const isDeviceSelected = useStore(s => s.isDeviceSelected);
   useFirestore();
 
   const isDesktop = useIsDesktop();
@@ -48,6 +50,10 @@ export default function App() {
 
   if (currentUser === null) {
     return <LoginScreen />;
+  }
+
+  if (!isDeviceSelected) {
+    return <DeviceSelectionScreen />;
   }
 
   // ── A partir de aquí, la capa visual se bifurca ─────────────────────────────

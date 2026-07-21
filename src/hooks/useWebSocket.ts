@@ -1,36 +1,48 @@
 /**
  * useWebSocket.ts
  *
- * UPDATED — it now understands the real format sent by server.cjs:
+ * Understands the real format sent by server.cjs:
  *   { timestamp, channels: [ { index, name, samples: number[] }, ... ] }
  * where `name` is one of: 'Lead I', 'Lead II', 'V1'..'V6', 'Resp', 'PPG'
- * (Temperature is still not sent — confirmed by Axel, 2026-07-14).
- * The `samples` arrive as raw ADC counts (24-bit), not mV.
+ * (Temperature is not sent yet — confirmed by Axel, 2026-07-14. A slot is
+ * reserved for it below so nothing needs to be reshuffled once it arrives.)
+ * `samples` arrive as raw ADC counts (24-bit), not mV.
  *
- * What changed compared to the previous version:
- * 1. handlePacket now recognizes packets by CHANNEL NAME instead of position.
- *    (Before, it assumed a fixed channels[0..7] order that never matched the
- *    format coming from the real hardware — which is why everything stayed at "--".)
- * 2. Raw → mV conversion uses 24-bit sign extension, matching Axel's viewer.js.
- *    (server.cjs does not do sign-extension yet — this should be reported to
- *    Axel/backend, since it may be corrupting negative values in GCS chunks.)
- * 3. "waveforms" now has 11 fixed positions with real names:
- *      0 Lead I, 1 Lead II, 2 Lead III (derived), 3 V1, 4 V2, 5 V3,
- *      6 V4, 7 V5, 8 V6, 9 Resp, 10 PPG
- *    The old "% 4" hack is gone — each derivation uses its real channel.
- * 4. HR is now calculated from Lead II (standard clinical choice for R-peak detection,
- *    whereas before it used a generic channel with no real clinical meaning).
- * 5. Temperature and Blood Pressure are NO LONGER invented from real data:
- *    the hardware does not have those sensors yet, so updateVitals is simply not
- *    called for them — they remain at their default UI value ("--"), which is the
- *    correct behavior today.
- * 6. The simulator (SIMULATOR section) is left intact in case it is used again —
- *    it still sends the legacy positional format, and handlePacket can still read
- *    that format as a fallback, so nothing breaks if startSim() is re-enabled.
- * 7. NEW: a 60Hz notch filter ported from Axel's viewer.js (biquad IIR, Q=20).
- *    It is toggled from the store (`notchFilterEnabled`, via the toggle in
- *    AdvancedControls.tsx) and applied uniformly across all 11 slots, matching
- *    the original implementation.
+ * CHANGE (2026-07-20): 'Lead III' removed entirely, per decision — the
+ * hardware never sends it, and it was previously being derived on the
+ * client (Lead III = Lead II − Lead I) even though nobody asked for a
+ * derived/synthetic lead. Removing it means every downstream slot index
+ * shifts down by one compared to the previous version of this file.
+ *
+ * ─── Slot layout (10 real + 1 reserved) ─────────────────────────────────
+ *   0 Lead I    1 Lead II   2 V1   3 V2   4 V3   5 V4   6 V5   7 V6
+ *   8 Resp      9 PPG       10 Temp (RESERVED — device does not send this
+ *                                    yet; slot stays at 0 until it does)
+ *
+ * What else this version does, same as before:
+ * - handlePacket recognizes packets by CHANNEL NAME instead of position.
+ * - Raw → mV conversion uses 24-bit sign extension, matching Axel's viewer.js.
+ *   (server.cjs does not sign-extend yet — worth reporting to Axel/backend,
+ *   since it may be corrupting negative values in GCS chunks.)
+ * - HR is calculated from Lead II (standard clinical choice for R-peak detection).
+ * - Temperature and Blood Pressure are NOT invented from real data: the
+ *   hardware doesn't have those sensors (BP never will; Temp is pending).
+ *   updateVitals is simply never called for them here.
+ *   NOTE: the zustand store's default vitals (temperature: 36.5, bloodPressure:
+ *   '118/75') still need to be changed to '--' separately in useStore.ts —
+ *   this file not calling updateVitals for them does NOT make the UI show
+ *   '--', it just means the store's hardcoded default stays displayed forever.
+ *   Flag this to whoever owns useStore.ts.
+ * - The simulator (SIMULATOR section) is left intact. It still sends the
+ *   legacy positional format; handlePacket reads it as a fallback so nothing
+ *   breaks if startSim() is re-enabled. Its fake Temp channel (old index 6)
+ *   is now routed into the reserved Temp slot, purely so you can visually
+ *   test that slot's wiring before the real sensor exists — it is NOT real
+ *   data and should not be mistaken for it.
+ * - 60Hz notch filter (biquad IIR, Q=20), toggled via store's
+ *   `notchFilterEnabled`. NOTE: this field was not present in the useStore.ts
+ *   you shared earlier — confirm it's been added, otherwise the toggle is a
+ *   no-op (filter simply never activates, doesn't crash).
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -42,60 +54,72 @@ import { auth } from '../lib/firebase';
 
 const WS_URL = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
 
-// 1 hour @ 250Hz = 900,000 samples por canal
+// 1 hour @ 250Hz = 900,000 samples per channel
 const BUFFER_SIZE = 900_000;
 
 // ─── Real channel mapping (name → fixed slot in `waveforms`) ───────────────
-// Indices 0-8: ECG derivations. 9: Resp. 10: PPG.
-// 'Lead III' is not sent by the hardware — it is derived (Lead III = Lead II − Lead I).
-const LEAD_NAMES = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'] as const;
-const RESP_SLOT = 9;
-const PPG_SLOT = 10;
+
+// CHANGE: exported so WaveformContainer.tsx (and anything else that needs
+// the lead list / dropdown) reads from a single source of truth instead of
+// hardcoding its own array that can drift out of sync with this file.
+export const LEADS = ['Lead I', 'Lead II', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'] as const;
+
+const RESP_SLOT = 8;
+const PPG_SLOT = 9;
+const TEMP_SLOT = 10; // RESERVED — no real data yet, see file header
 const TOTAL_SLOTS = 11;
 
-// Real channel name (as sent by server.cjs) → slot in `waveforms`.
-// 'Lead III' is intentionally omitted here: it is not received over WS, so it is calculated separately.
-const CHANNEL_NAME_TO_SLOT: Record<string, number> = {
+// CHANGE: exported name → slot map for the 8 ECG leads specifically (what
+// the dropdown needs). Kept separate from CHANNEL_NAME_TO_SLOT below
+// (which also includes Resp/PPG/Temp) so consumers that only care about
+// leads don't have to filter out non-ECG entries themselves.
+export const LEAD_CHANNEL_INDEX: Record<string, number> = {
   'Lead I': 0,
   'Lead II': 1,
-  'V1': 3,
-  'V2': 4,
-  'V3': 5,
-  'V4': 6,
-  'V5': 7,
-  'V6': 8,
-  'Resp': RESP_SLOT,
-  'PPG': PPG_SLOT,
+  'V1': 2,
+  'V2': 3,
+  'V3': 4,
+  'V4': 5,
+  'V5': 6,
+  'V6': 7,
 };
 
-// Visible samples per slot (same criterion as before: ECG needs more temporal
-// resolution than Resp/PPG, so the latter are decimated).
-const VIEW_SIZES = [750, 750, 750, 750, 750, 750, 750, 750, 750, 150, 150];
-const DECIMATE   = [1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 5];
+// Real channel name (as sent by server.cjs) → slot in `waveforms`.
+const CHANNEL_NAME_TO_SLOT: Record<string, number> = {
+  ...LEAD_CHANNEL_INDEX,
+  'Resp': RESP_SLOT,
+  'PPG': PPG_SLOT,
+  'Temp': TEMP_SLOT, // reserved — see file header. Safe to keep here even
+                      // though the device never sends it yet: handlePacket
+                      // only pushes samples when a channel with this name
+                      // actually arrives, so this slot just stays at 0
+                      // until Axel wires up the real sensor.
+};
+
+// Visible samples per slot (indices 0-10, matching the layout above)
+const VIEW_SIZES = [750, 750, 750, 750, 750, 750, 750, 750, 150, 150, 150];
+const DECIMATE   = [1, 1, 1, 1, 1, 1, 1, 1, 5, 5, 1];
 
 // Min/max ranges for WaveformCanvas, in mV (already converted).
 // TODO: these are reasonable initial values for surface ECG (~±2mV) and
-// Resp/PPG; adjust them based on the real connected device if the trace looks
-// clipped or flat.
+// Resp/PPG; adjust based on the real connected device if a trace looks
+// clipped or flat. Temp range is a placeholder (°C) — revisit once the
+// real channel's units/scale are confirmed with Axel.
 export const CH_RANGES: [number, number][] = [
   [-2, 2],   // 0 Lead I
   [-2, 2],   // 1 Lead II
-  [-2, 2],   // 2 Lead III (derivada)
-  [-2, 2],   // 3 V1
-  [-2, 2],   // 4 V2
-  [-2, 2],   // 5 V3
-  [-2, 2],   // 6 V4
-  [-2, 2],   // 7 V5
-  [-2, 2],   // 8 V6
-  [-5, 5],   // 9 Resp
-  [0, 5],    // 10 PPG
+  [-2, 2],   // 2 V1
+  [-2, 2],   // 3 V2
+  [-2, 2],   // 4 V3
+  [-2, 2],   // 5 V4
+  [-2, 2],   // 6 V5
+  [-2, 2],   // 7 V6
+  [-5, 5],   // 8 Resp
+  [0, 5],    // 9 PPG
+  [30, 42],  // 10 Temp (RESERVED — placeholder range, unused until real data arrives)
 ];
 
 // ─── Raw ADC (24-bit) → mV conversion ─────────────────────────────────────
-// Same as Axel's viewer.js: 24-bit sign extension + scaling to VREF.
-// NOTE: server.cjs (the one that uploads to GCS) does NOT do sign-extension yet —
-// it only filters the "sensor not connected" value. This should be reported to
-// Axel/backend, since it may be corrupting negative values in GCS chunks.
 const ADC_VREF_MV = 1200;
 const ADC_MAX_VAL = 8388607; // 2^23 - 1
 
@@ -107,12 +131,9 @@ function rawToMv(rawValue: number): number {
 }
 
 // ─── 60Hz Notch Filter (ported from Axel's viewer.js) ─────────────────────
-// A classic IIR biquad used to remove the electrical line hum (60Hz in Mexico/US).
-// It uses the same math as the original version — only translated to TS and
-// exposed with reset() so it can be cleared when toggled.
 const NOTCH_FREQ_HZ = 60;
 const NOTCH_Q = 20;
-const SAMPLING_RATE = 250; // Hz — coincide con el ADC del device (25 muestras/100ms)
+const SAMPLING_RATE = 250; // Hz — matches the device's ADC (25 samples/100ms)
 
 class NotchFilter {
   private b0 = 0; private b1 = 0; private b2 = 0;
@@ -245,9 +266,9 @@ function estimateResp(buf: Float32Array): number {
 }
 
 // ─── SIMULATOR ────────────────────────────────────────────────────────────────
-// No logic changes — it remains intact. It still sends the legacy format
-// (channels: number[][], positional). handlePacket below can still read that
-// format as a fallback in case startSim() is re-enabled.
+// Left intact — still sends the legacy positional format (channels: number[][]).
+// handlePacket below still reads that format as a fallback in case startSim()
+// is re-enabled.
 
 type SimMode =
   | 'normal'
@@ -316,6 +337,8 @@ function buildSimPacket(t: number, mode: SimMode) {
   simState.spo2  = Math.min(100, Math.max(0, simState.spo2));
 
   const dt = 1 / 250;
+  // OLD 8-channel positional format (unchanged): 0-3 ecg variants,
+  // 4 resp, 5 ppg, 6 temp (fake), 7 bp (fake).
   const channels: number[][] = Array.from({ length: 8 }, () => []);
   for (let s = 0; s < 25; s++) {
     const ts = t + s * dt;
@@ -355,25 +378,16 @@ export const useWebSocket = () => {
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const simTime = useRef(0);
 
-  // One filter per slot (11 total) — same approach as Axel: it is applied
-  // uniformly to all channels, not only ECG ones.
   const notchFilters = useRef<NotchFilter[]>(
     Array.from({ length: TOTAL_SLOTS }, () => new NotchFilter(SAMPLING_RATE, NOTCH_FREQ_HZ, NOTCH_Q))
   );
 
-  // When the filter is turned on/off, the internal biquad state is reset
-  // (same idea as Axel's resetNotchFilters()) so it does not carry over memory
-  // from before the toggle. A small jump in the trace may be visible at the
-  // instant of switching — that is normal for IIR filters and settles in <1s.
   useEffect(() => {
     notchFilters.current.forEach(f => f.reset());
   }, [notchFilterEnabled]);
 
   // ── Process incoming packets — supports BOTH formats ─────────────────────
   const handlePacket = useCallback((packet: { timestamp: number; channels: unknown[] }) => {
-    // Read on each call (instead of making it a dependency of useCallback) so
-    // handlePacket does not need to be recreated, and therefore the WS listener
-    // does not need to be rebuilt whenever the filter is toggled.
     const notchOn = useStore.getState().notchFilterEnabled;
 
     packet.channels.forEach((ch, i) => {
@@ -381,7 +395,7 @@ export const useWebSocket = () => {
       if (ch && typeof ch === 'object' && !Array.isArray(ch) && 'name' in (ch as any)) {
         const named = ch as { name: string; samples: number[] };
         const slot = CHANNEL_NAME_TO_SLOT[named.name];
-        if (slot === undefined || !Array.isArray(named.samples)) return; // unknown channel (e.g. Temperature is not received yet)
+        if (slot === undefined || !Array.isArray(named.samples)) return; // unknown/unsent channel
         const ring = rings.current[slot];
         const filter = notchFilters.current[slot];
         for (const raw of named.samples) {
@@ -393,13 +407,21 @@ export const useWebSocket = () => {
 
       // ── Legacy format (simulator): positional arrays, no names ─────────────
       if (Array.isArray(ch)) {
-        // The simulator only sends 8 slots [ch0-3 ECG, ch4 Resp, ch5 PPG, ch6 Temp, ch7 BP-fake].
-        // We map them to a reasonable subset of the new scheme so the simulator
-        // still looks good if it is re-enabled.
-        const legacyToSlot: Record<number, number> = { 0: 0, 1: 1, 2: 3, 3: 4, 4: RESP_SLOT, 5: PPG_SLOT };
+        // CHANGE: renumbered to match the new 11-slot layout (no Lead III).
+        // ch6 (the simulator's fake temp channel) is routed into the
+        // reserved Temp slot purely so you can visually confirm that slot's
+        // wiring works before the real sensor exists — it is NOT real data.
+        const legacyToSlot: Record<number, number> = {
+          0: 0,           // Lead I
+          1: 1,           // Lead II
+          2: 2,           // V1
+          3: 3,           // V2
+          4: RESP_SLOT,
+          5: PPG_SLOT,
+          6: TEMP_SLOT,   // simulator's fake temp → reserved Temp slot (test-only)
+        };
         const slot = legacyToSlot[i];
-        //console.log('[DEBUG simulador] canal índice', i, '→ slot', slot); // ← temporal
-        if (slot === undefined) return; // ch6 (temp) and ch7 (bp-fake) have no real slot — they are ignored here
+        if (slot === undefined) return; // ch7 (fake bp) has no real slot — ignored
         const ring = rings.current[slot];
         const filter = notchFilters.current[slot];
         for (const v of ch) ring.push(notchOn ? filter.process(v) : v);
@@ -432,7 +454,7 @@ export const useWebSocket = () => {
 
       const offsetSamples = historyOffsetRef.current * 250;
 
-      // Waveforms (0-8 leads, 9 Resp, 10 PPG)
+      // Waveforms (0-7 leads, 8 Resp, 9 PPG, 10 Temp-reserved)
       const next = rings.current.map((ring, slot) => {
         const viewSize = VIEW_SIZES[slot];
         const dec = DECIMATE[slot];
@@ -453,19 +475,17 @@ export const useWebSocket = () => {
         return out.slice(-viewSize);
       });
 
-      // Lead III = Lead II − Lead I (Einthoven's law) — it does not arrive over WS, so it is derived here.
-      const leadI = next[0];
-      const leadII = next[1];
-      next[2] = leadII.map((v, i) => v - (leadI[i] ?? 0));
+      // CHANGE: Lead III derivation removed entirely — per decision, we no
+      // longer synthesize a lead the device doesn't send.
 
       setWaveforms(next);
 
-      // Vitals cada ~1s
+      // Vitals every ~1s
       vitalTick++;
       if (vitalTick < 30) return;
       vitalTick = 0;
 
-      const leadIIRing = rings.current[1];  // Lead II: standard clinical choice for detecting R-peaks
+      const leadIIRing = rings.current[LEAD_CHANNEL_INDEX['Lead II']]; // clinical standard for R-peaks
       const respRing   = rings.current[RESP_SLOT];
       const ppgRing    = rings.current[PPG_SLOT];
 
@@ -498,9 +518,9 @@ export const useWebSocket = () => {
       }
 
       // NOTE: Temperature and Blood Pressure are NOT updated here — the real
-      // hardware does not have those sensors yet (confirmed by Axel).
-      // They remain at their default UI value ("--") until a real channel exists
-      // to support them. This is intentional, not an oversight.
+      // hardware doesn't have those sensors yet (Temp pending, BP never
+      // will). They stay at whatever useStore.ts's default is — which
+      // currently is NOT '--' (see file header). Fix that in useStore.ts.
       updateVitals({
         spo2: {
           value: spo2,
@@ -603,8 +623,7 @@ export const useWebSocket = () => {
 
       ws.onmessage = ({ data }) => {
         if (data instanceof ArrayBuffer) {
-          // Auscultation audio — it is still stored, but the AuscultationPanel
-          // is not mounted in App.tsx yet and has no playback logic.
+          // Auscultation audio — stored elsewhere if/when a panel needs it.
           return;
         }
         try {
@@ -626,7 +645,7 @@ export const useWebSocket = () => {
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
-        // startSim(); // SIMULATOR — uncomment only if you want a local fallback without a real device
+        // startSim(); // SIMULATOR — uncomment only for a local fallback without a real device
         reconnect = setTimeout(connect, 5000);
       };
 
@@ -635,8 +654,7 @@ export const useWebSocket = () => {
       };
     };
 
-    connect(); // ← comenta para probar con simulador sin device real
-    //startSim();   // ← TEMPORAL: fuerza el simulador
+    connect();
 
     return () => {
       clearTimeout(reconnect);
@@ -645,7 +663,7 @@ export const useWebSocket = () => {
       }
       stopSim();
     };
-  }, [handlePacket, setConnected, setConnectionStatus, simulationMode]);
+  }, [handlePacket, setConnected, setConnectionStatus, simulationMode, deviceMac]);
 
   useEffect(() => {
     const ws = wsRef.current;

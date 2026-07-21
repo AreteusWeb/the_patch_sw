@@ -3,9 +3,16 @@ import useStore from '../store/useStore';
 import WaveformCanvas from './WaveformCanvas';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-react';
-import { useWebSocket, CH_RANGES } from '../hooks/useWebSocket';
+import { useWebSocket, CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../hooks/useWebSocket';
 
 import CustomDropdown from './ui/CustomDropdown';
+
+// CHANGE: fixed indices for Resp/PPG, matching useWebSocket.ts's 11-slot
+// layout (0-7 ECG leads, 8 Resp, 9 PPG, 10 Temp-reserved). Named constants
+// instead of magic numbers so this file doesn't silently drift out of sync
+// with the hook again.
+const RESP_WAVEFORM_INDEX = 8;
+const PPG_WAVEFORM_INDEX = 9;
 
 /**
  * WaveformContainer Component.
@@ -24,11 +31,21 @@ const WaveformContainer: React.FC = () => {
   const { waveforms } = useWebSocket();
   const vitals = useStore(state => state.vitals);
 
+  // CHANGE: `leads` now comes from the shared LEADS export (no 'Lead III',
+  // matches useWebSocket.ts exactly) instead of a locally hardcoded array.
+  const leads = LEADS;
 
-
-  const leads = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
+  // CHANGE: resolves a lead's display name to its real waveform slot via
+  // LEAD_CHANNEL_INDEX, instead of indexing `waveforms` positionally by
+  // dropdown index (which breaks the moment the two arrays' orders diverge —
+  // exactly what happened here).
+  const waveformIndexForLead = (leadIndex: number): number => {
+    const name = leads[leadIndex];
+    return LEAD_CHANNEL_INDEX[name] ?? 0;
+  };
 
   if (viewMode === 'Normal') {
+    const wIdx = waveformIndexForLead(selectedLeadIndex);
     return (
       <div className="flex flex-col p-4 pt-0 bg-transparent flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
@@ -65,10 +82,10 @@ const WaveformContainer: React.FC = () => {
             style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}
           />
           <WaveformCanvas
-            data={waveforms[selectedLeadIndex]}
+            data={waveforms[wIdx]}
             height={isEcgExpanded ? 500 : 96}
             color="#2dd4bf"
-            min={CH_RANGES[selectedLeadIndex][0]} max={CH_RANGES[selectedLeadIndex][1]}
+            min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
             lineWidth={isEcgExpanded ? 2.5 : 1.5}
             gridLines={isEcgExpanded}
           />
@@ -76,6 +93,8 @@ const WaveformContainer: React.FC = () => {
       </div>
     );
   }
+
+  const singleLeadWIdx = waveformIndexForLead(selectedLeadIndex);
 
   return (
     <div className="flex flex-col p-2 pt-0.5 gap-1 bg-black flex-1 justify-between">
@@ -116,19 +135,22 @@ const WaveformContainer: React.FC = () => {
       {/* Multi-lead or Single-lead ECG */}
       <div className="flex flex-col gap-0.5 min-h-0">
         {advancedEcgMode === 'All' ? (
-          leads.map((label, i) => (
-            <div key={label} className="relative bg-slate-900/10 rounded-sm border-b border-slate-900/10">
-              <div className="absolute left-1 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">{label}</div>
-              <WaveformCanvas
-                data={waveforms[i]}
-                height={28}
-                color="#2dd4bf"
-                min={CH_RANGES[selectedLeadIndex][0]} max={CH_RANGES[selectedLeadIndex][1]}
-                gridLines={false}
-                lineWidth={1}
-              />
-            </div>
-          ))
+          leads.map((label, i) => {
+            const wIdx = waveformIndexForLead(i);
+            return (
+              <div key={label} className="relative bg-slate-900/10 rounded-sm border-b border-slate-900/10">
+                <div className="absolute left-1 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">{label}</div>
+                <WaveformCanvas
+                  data={waveforms[wIdx]}
+                  height={28}
+                  color="#2dd4bf"
+                  min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
+                  gridLines={false}
+                  lineWidth={1}
+                />
+              </div>
+            );
+          })
         ) : (
           <div className={cn(
             "relative bg-slate-950/60 rounded-lg border border-slate-800 transition-all duration-300",
@@ -144,10 +166,10 @@ const WaveformContainer: React.FC = () => {
               {isEcgExpanded ? '< COLLAPSE' : 'EXPAND >'}
             </button>
             <WaveformCanvas
-              data={waveforms[selectedLeadIndex]}
+              data={waveforms[singleLeadWIdx]}
               height={isEcgExpanded ? 300 : 144}
               color="#2dd4bf"
-              min={CH_RANGES[selectedLeadIndex][0]} max={CH_RANGES[selectedLeadIndex][1]}
+              min={CH_RANGES[singleLeadWIdx][0]} max={CH_RANGES[singleLeadWIdx][1]}
               gridLines={true}
               lineWidth={2}
             />
@@ -162,10 +184,10 @@ const WaveformContainer: React.FC = () => {
         </div>
         <div className="bg-slate-950/40 rounded border border-white/5 h-8">
           <WaveformCanvas
-            data={waveforms[9]}
+            data={waveforms[RESP_WAVEFORM_INDEX]}
             height={32}
             color="#5eead4"
-            min={CH_RANGES[4][0]} max={CH_RANGES[9][1]}
+            min={CH_RANGES[RESP_WAVEFORM_INDEX][0]} max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
             gridLines={false}
             lineWidth={1}
           />
@@ -178,11 +200,11 @@ const WaveformContainer: React.FC = () => {
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">SpO2 Tracking</h4>
         </div>
         <div className="flex items-end gap-[0.5px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/40 rounded border border-white/5">
-          {waveforms[10].slice(-180).map((val, i) => (
+          {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
             <div
               key={i}
               className="bg-teal-500/20 w-[2px] rounded-t-[1px] flex-shrink-0"
-              style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[10][1]) * 100))}%` }}
+              style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
             />
           ))}
         </div>

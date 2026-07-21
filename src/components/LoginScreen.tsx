@@ -112,7 +112,7 @@ export default function LoginScreen() {
               <div className="h-[1px] flex-1 bg-teal-500/30 max-w-[40px]" />
 
               <h2 className="text-lg font-bold text-teal-400 tracking-[0.4em] uppercase whitespace-nowrap mr-[-0.4em]">
-                ChestPad
+                The Patch
               </h2>
 
               <div className="h-[1px] flex-1 bg-teal-500/30 max-w-[40px]" />
@@ -282,7 +282,7 @@ export default function LoginScreen() {
             </button>
           </div>
 
-          
+
         </div>
       </motion.div>
     </div>

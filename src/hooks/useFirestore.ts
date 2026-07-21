@@ -39,9 +39,16 @@ export async function saveEventWithVitals(
     vitals: {
         hr: number;
         spo2: number;
-        temp: number;
+        // CHANGE (2026-07-20): widened to accept null. The real device has
+        // no Temperature sensor yet (Axel: "in development") and never had
+        // a BP sensor — useStore.ts now passes `null` for these instead of
+        // the literal string '--' when no real reading exists, so
+        // Firestore stores a clean absence of data instead of an
+        // unparseable placeholder string that downstream consumers (charts,
+        // exports, anything doing math on `temp`) would have to special-case.
+        temp: number | null;
         rr: number;
-        bp: string;
+        bp: string | null;
     },
     userId: string
 ): Promise<string | null> {

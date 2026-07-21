@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Bell, User, LogOut, X, ChevronRight } from 'lucide-react';
+import { Home, Bell, User, LogOut, X, ChevronRight, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
@@ -12,7 +12,7 @@ import ProfileDrawer from './ProfileDrawer';
  * dashboard, the alerts logs drawer, profile settings drawer, and sign out of the system.
  */
 const SideMenu: React.FC = () => {
-  const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser } = useStore();
+  const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser, setIsDeviceSelected } = useStore();
   const [activeDrawer, setActiveDrawer] = useState<'alerts' | 'profile' | null>(null);
 
   const displayName =
@@ -106,6 +106,20 @@ const SideMenu: React.FC = () => {
                       <User size={16} />
                     </div>
                     <span className="text-sm font-medium">Profile</span>
+                    <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsDeviceSelected(false);
+                      setIsAdvancedMenuOpen(false);
+                    }}
+                    className="flex items-center gap-3 px-3 py-3 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-all group"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 group-hover:bg-teal-500/15 group-hover:text-teal-400 transition-all">
+                      <Cpu size={16} />
+                    </div>
+                    <span className="text-sm font-medium">Switch Device</span>
                     <ChevronRight size={14} className="ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
                   </button>
                 </nav>

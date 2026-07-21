@@ -67,12 +67,14 @@ interface AuthState {
   currentUser: FirebaseUser | null;
   deviceMac: string | null;
   authLoading: boolean;
+  isDeviceSelected: boolean;
 }
 
 interface AuthActions {
   setCurrentUser: (user: FirebaseUser | null) => void;
   setDeviceMac: (mac: string | null) => void;
   setAuthLoading: (loading: boolean) => void;
+  setIsDeviceSelected: (selected: boolean) => void;
 }
 
 const useStore = create<
@@ -111,8 +113,17 @@ const useStore = create<
       trend: 'stable',
       severity: 'normal',
     },
+    // CHANGE (2026-07-20): default changed from a fake 36.5 to '--'. The
+    // real device has no Temperature sensor yet (confirmed by Axel,
+    // "in development"), and useWebSocket.ts intentionally never calls
+    // updateVitals for temperature until that sensor exists. Leaving the
+    // old numeric default here would have shown a fabricated 36.5°C
+    // forever, indistinguishable from a real reading.
+    // NOTE: if `Vitals['temperature']['value']` is typed as `number` in
+    // ../types, this line needs that type widened to `number | string`
+    // (same as bloodPressure below) or TS will flag it.
     temperature: {
-      value: 36.5,
+      value: '--',
       unit: '°C',
       trend: 'stable',
       severity: 'normal',
@@ -122,8 +133,13 @@ const useStore = create<
       trend: 'stable',
       severity: 'normal',
     },
+    // CHANGE (2026-07-20): default changed from a fake '118/75' to '--'.
+    // The ESP32 never had a BP sensor — this was always simulator-only data.
+    // useWebSocket.ts never calls updateVitals for bloodPressure in
+    // real-device mode, so without this change the UI would show a
+    // fabricated reading forever.
     bloodPressure: {
-      value: '118/75',
+      value: '--',
       trend: 'stable',
       severity: 'normal',
     },
@@ -150,11 +166,11 @@ const useStore = create<
   isEcgExpanded: false,
   advancedEcgMode: 'All',
   isAdvancedMenuOpen: false,
-  notchFilterEnabled: false, //Apagado por default, igual que en viewer.js de Axel
 
   currentUser: null,
   deviceMac: null,
   authLoading: true,
+  isDeviceSelected: false,
 
   // ── Base Actions ───────────────────────────────────────────────────────────
 
@@ -199,17 +215,17 @@ const useStore = create<
   setIsAdvancedMenuOpen: (isOpen) =>
     set({ isAdvancedMenuOpen: isOpen }),
 
-  setNotchFilterEnabled: (enabled) =>
-    set({ notchFilterEnabled: enabled }),
-
   setCurrentUser: (user) =>
-    set({ currentUser: user }),
+    set({ currentUser: user, ...(user === null ? { isDeviceSelected: false, deviceMac: null } : {}) }),
 
   setDeviceMac: (mac) =>
     set({ deviceMac: mac }),
 
   setAuthLoading: (loading) =>
     set({ authLoading: loading }),
+
+  setIsDeviceSelected: (selected) =>
+    set({ isDeviceSelected: selected }),
 
   setActivityType: (type) =>
     set((state) => ({
@@ -271,9 +287,17 @@ const useStore = create<
           {
             hr: v.heartRate.value as number,
             spo2: v.spo2.value as number,
-            temp: v.temperature.value as number,
+            // CHANGE (2026-07-20): temp/bp can legitimately be the string
+            // '--' at the moment an event fires (real device connected but
+            // Temp sensor doesn't exist yet; BP sensor never will). Instead
+            // of silently writing the literal string '--' into a Firestore
+            // field meant to hold a number, we now write `null` so
+            // downstream consumers (charts, exports, anything doing math
+            // on `temp`) can tell "no sensor" apart from "sensor read a
+            // weird value" instead of trying to parse '--' as a number.
+            temp: typeof v.temperature.value === 'number' ? v.temperature.value : null,
             rr: v.respirationRate.value as number,
-            bp: v.bloodPressure.value as string,
+            bp: v.bloodPressure.value === '--' ? null : (v.bloodPressure.value as string),
           },
           userId
         ).then((firestoreId) => {

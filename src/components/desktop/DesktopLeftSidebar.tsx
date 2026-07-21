@@ -133,7 +133,7 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
           label="SpO2"
           status={vitals.spo2}
           unit="%"
-          sparkData={waveforms[10]}
+          sparkData={waveforms[9]}
           sparkColor="#5eead4"
           barPercent={spo2Percent}
         />
@@ -149,7 +149,7 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
           label="Respiration"
           status={vitals.respirationRate}
           unit="bpm"
-          sparkData={waveforms[9]}
+          sparkData={waveforms[8]}
           sparkColor="#5eead4"
         />
 

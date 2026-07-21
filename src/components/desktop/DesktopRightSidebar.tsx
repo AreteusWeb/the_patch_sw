@@ -159,7 +159,7 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
             />
             <MiniTrendGraph
               label="SpO2"
-              data={waveforms[10]}
+              data={waveforms[9]}
               color="#5eead4"
             />
           </div>

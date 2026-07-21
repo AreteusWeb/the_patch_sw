@@ -2,11 +2,18 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
 import WaveformCanvas from '../WaveformCanvas';
-import { CH_RANGES } from '../../hooks/useWebSocket';
+import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../../hooks/useWebSocket';
 import { cn } from '../../utils/cn';
 
 const MAX_HISTORY_SECONDS = 3600;
-const LEADS = ['Lead I', 'Lead II', 'Lead III', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6'];
+// Matches useWebSocket.ts: 0-7 ECG, 8 Resp, 9 PPG (no Lead III).
+const RESP_WAVEFORM_INDEX = 8;
+const PPG_WAVEFORM_INDEX = 9;
+// Featured panels: Lead II + V2 (clinical + precordial).
+const FEATURED_LEAD_INDICES = [
+  LEAD_CHANNEL_INDEX['Lead II'],
+  LEAD_CHANNEL_INDEX['V2'],
+] as const;
 
 const PlaceholderTrend: React.FC<{ label: string; value?: string; color?: string }> = ({
   label,
@@ -88,7 +95,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
           <div className="bg-slate-950/50 rounded-xl border border-white/5 overflow-hidden">
             {/* Featured leads — larger */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-slate-800/30">
-              {[1, 3].map((leadIdx) => (
+              {FEATURED_LEAD_INDICES.map((leadIdx) => (
                 <div key={LEADS[leadIdx]} className="relative bg-slate-950/80 h-36">
                   <span className="absolute left-2 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
                     {LEADS[leadIdx]}
@@ -109,7 +116,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
             {/* Remaining leads — compact stack */}
             <div className="flex flex-col gap-px bg-slate-800/20">
               {LEADS.map((label, i) => {
-                if (i === 1 || i === 3) return null;
+                if (FEATURED_LEAD_INDICES.includes(i as (typeof FEATURED_LEAD_INDICES)[number])) return null;
                 return (
                   <div key={label} className="relative bg-slate-950/60 h-7">
                     <span className="absolute left-2 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">
@@ -143,11 +150,11 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               </span>
               <div className="h-10 bg-slate-950/60 rounded border border-white/5">
                 <WaveformCanvas
-                  data={waveforms[9]}
+                  data={waveforms[RESP_WAVEFORM_INDEX]}
                   height={40}
                   color="#5eead4"
-                  min={CH_RANGES[4][0]}
-                  max={CH_RANGES[9][1]}
+                  min={CH_RANGES[RESP_WAVEFORM_INDEX][0]}
+                  max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
                   gridLines={false}
                   lineWidth={1.2}
                 />
@@ -159,12 +166,12 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
                 SpO2 Pleth
               </span>
               <div className="flex items-end gap-[1px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/60 rounded border border-white/5">
-                {waveforms[10].slice(-240).map((val, i) => (
+                {waveforms[PPG_WAVEFORM_INDEX].slice(-240).map((val, i) => (
                   <div
                     key={i}
                     className="bg-teal-500/30 w-[2px] rounded-t-[1px] flex-shrink-0"
                     style={{
-                      height: `${Math.max(4, Math.min(100, (val / CH_RANGES[10][1]) * 100))}%`,
+                      height: `${Math.max(4, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%`,
                     }}
                   />
                 ))}

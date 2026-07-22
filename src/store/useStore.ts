@@ -92,7 +92,9 @@ const useStore = create<
   isLive: true,
   historyOffset: 0,
   viewMode: 'Normal',
+  desktopLayout: 'normal',
   simulationMode: 'normal',
+  notchFilterEnabled: true,
 
   /**
    * Flag indicating whether real data has arrived from the device.
@@ -193,6 +195,12 @@ const useStore = create<
 
   setViewMode: (mode) =>
     set({ viewMode: mode }),
+
+  setDesktopLayout: (layout) =>
+    set({ desktopLayout: layout }),
+
+  setNotchFilterEnabled: (enabled) =>
+    set({ notchFilterEnabled: enabled }),
 
   setSimulationMode: (mode) =>
     set({ simulationMode: mode }),

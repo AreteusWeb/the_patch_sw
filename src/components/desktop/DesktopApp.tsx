@@ -6,6 +6,7 @@
 import React from 'react';
 import { AnimatePresence } from 'motion/react';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import useStore from '../../store/useStore';
 import SideMenu from '../SideMenu';
 import EventBanner from '../EventBanner';
 import DesktopPatientBar from './DesktopPatientBar';
@@ -13,16 +14,20 @@ import DesktopLeftSidebar from './DesktopLeftSidebar';
 import DesktopCentralArea from './DesktopCentralArea';
 import DesktopRightSidebar from './DesktopRightSidebar';
 import DesktopStatusBar from './DesktopStatusBar';
+import FitnessLeftSidebar from './FitnessLeftSidebar';
+import FitnessCentralArea from './FitnessCentralArea';
+import FitnessRightSidebar from './FitnessRightSidebar';
 
 /**
  * DesktopApp Component.
- * Dashboard de escritorio según wireframe Areteus "The Patch":
- * barra de paciente arriba, 3 columnas (vitals | waveforms | AI), status bar abajo.
- * Reutiliza los mismos hooks de datos que MobileApp — la lógica vive en useStore
- * y useWebSocket, nunca se duplica aquí.
+ * Dashboard de escritorio Areteus "The Patch" con dos layouts:
+ * - Normal (clinical): vitals | multi-lead ECG | AI clinical
+ * - Fitness: training metrics | ECG+zones | recovery / AI coach
  */
 export default function DesktopApp() {
   const { waveforms } = useWebSocket();
+  const desktopLayout = useStore(s => s.desktopLayout);
+  const isFitness = desktopLayout === 'fitness';
 
   return (
     <div className="h-screen bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-hidden flex flex-col">
@@ -33,9 +38,19 @@ export default function DesktopApp() {
       </div>
 
       <div className="flex flex-1 min-h-0">
-        <DesktopLeftSidebar waveforms={waveforms} />
-        <DesktopCentralArea waveforms={waveforms} />
-        <DesktopRightSidebar waveforms={waveforms} />
+        {isFitness ? (
+          <>
+            <FitnessLeftSidebar waveforms={waveforms} />
+            <FitnessCentralArea waveforms={waveforms} />
+            <FitnessRightSidebar waveforms={waveforms} />
+          </>
+        ) : (
+          <>
+            <DesktopLeftSidebar waveforms={waveforms} />
+            <DesktopCentralArea waveforms={waveforms} />
+            <DesktopRightSidebar waveforms={waveforms} />
+          </>
+        )}
       </div>
 
       <DesktopStatusBar />

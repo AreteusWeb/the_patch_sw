@@ -1,6 +1,9 @@
 /** Available simulation signal modes. */
 export type SimulationMode = 'normal' | 'tachycardia' | 'bradycardia' | 'spo2drop' | 'fever';
 
+/** Desktop dashboard layout: clinical (default) vs fitness-focused. */
+export type DesktopLayoutMode = 'normal' | 'fitness';
+
 /** Severity categorizations for parsed physiological vitals. */
 export type SeverityLevel = 'normal' | 'moderate' | 'critical';
 
@@ -67,6 +70,7 @@ export interface AppState {
   advancedEcgMode: 'Single' | 'All';
   isAdvancedMenuOpen: boolean;
   notchFilterEnabled: boolean;
+  desktopLayout: DesktopLayoutMode;
 }
 
 /** Action mutators for the Zustand store. */
@@ -86,4 +90,5 @@ export interface AppActions {
   setIsAdvancedMenuOpen: (isOpen: boolean) => void;
   setNotchFilterEnabled: (enabled: boolean) => void;
   setActivityType: (type: string) => void;
+  setDesktopLayout: (layout: DesktopLayoutMode) => void;
 }

@@ -95,6 +95,10 @@ const useStore = create<
   desktopLayout: 'normal',
   simulationMode: 'normal',
   notchFilterEnabled: true,
+  ecgGridEnabled: true,
+  ecgPaperSpeed: 25,
+  ecgGain: 10,
+  ecgMeasureEnabled: false,
 
   /**
    * Flag indicating whether real data has arrived from the device.
@@ -198,6 +202,18 @@ const useStore = create<
 
   setDesktopLayout: (layout) =>
     set({ desktopLayout: layout }),
+
+  setEcgGridEnabled: (enabled) =>
+    set({ ecgGridEnabled: enabled }),
+
+  setEcgPaperSpeed: (speed) =>
+    set({ ecgPaperSpeed: speed }),
+
+  setEcgGain: (gain) =>
+    set({ ecgGain: gain }),
+
+  setEcgMeasureEnabled: (enabled) =>
+    set({ ecgMeasureEnabled: enabled }),
 
   setNotchFilterEnabled: (enabled) =>
     set({ notchFilterEnabled: enabled }),

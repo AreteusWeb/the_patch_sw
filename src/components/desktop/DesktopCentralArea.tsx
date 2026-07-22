@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
 import WaveformCanvas from '../WaveformCanvas';
+import EcgPaperControls from './EcgPaperControls';
 import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../../hooks/useWebSocket';
 import { cn } from '../../utils/cn';
 
@@ -52,7 +53,12 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
+  const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
+  const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
+  const ecgGain = useStore(s => s.ecgGain);
+  const ecgMeasureEnabled = useStore(s => s.ecgMeasureEnabled);
 
+  const paperGrid = ecgGridEnabled ? 'clinical' : 'off';
   const isLive = historyOffset === 0;
 
   const [now, setNow] = React.useState(Date.now());
@@ -83,20 +89,25 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-black overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
-        {/* 12-Lead ECG — primary panel */}
+        {/* Multi-lead ECG — digital paper strip */}
         <section>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-              12-Lead ECG
-            </h2>
-            <span className="text-[10px] text-slate-600">Primary Monitor</span>
+          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                12-Lead ECG
+              </h2>
+              <span className="text-[10px] text-slate-600">
+                Paper: 1 mm = 40 ms / 0.1 mV
+              </span>
+            </div>
+            <EcgPaperControls />
           </div>
 
           <div className="bg-slate-950/50 rounded-xl border border-white/5 overflow-hidden">
-            {/* Featured leads — larger */}
+            {/* Featured leads — larger paper strips + cal + measure */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-slate-800/30">
               {FEATURED_LEAD_INDICES.map((leadIdx) => (
-                <div key={LEADS[leadIdx]} className="relative bg-slate-950/80 h-36">
+                <div key={LEADS[leadIdx]} className="relative bg-[#140a0a] h-36">
                   <span className="absolute left-2 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
                     {LEADS[leadIdx]}
                   </span>
@@ -106,19 +117,24 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
                     color="#2dd4bf"
                     min={CH_RANGES[leadIdx][0]}
                     max={CH_RANGES[leadIdx][1]}
-                    gridLines
-                    lineWidth={2}
+                    autoScale={false}
+                    paperGrid={paperGrid}
+                    paperSpeed={ecgPaperSpeed}
+                    gain={ecgGain}
+                    showCalibration={ecgGridEnabled}
+                    measureEnabled={ecgMeasureEnabled}
+                    lineWidth={1.75}
                   />
                 </div>
               ))}
             </div>
 
-            {/* Remaining leads — compact stack */}
+            {/* Remaining leads — compact paper strips */}
             <div className="flex flex-col gap-px bg-slate-800/20">
               {LEADS.map((label, i) => {
                 if (FEATURED_LEAD_INDICES.includes(i as (typeof FEATURED_LEAD_INDICES)[number])) return null;
                 return (
-                  <div key={label} className="relative bg-slate-950/60 h-7">
+                  <div key={label} className="relative bg-[#120808] h-7">
                     <span className="absolute left-2 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">
                       {label}
                     </span>
@@ -128,7 +144,12 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
                       color="#2dd4bf"
                       min={CH_RANGES[i][0]}
                       max={CH_RANGES[i][1]}
-                      gridLines={false}
+                      autoScale={false}
+                      paperGrid={paperGrid}
+                      paperSpeed={ecgPaperSpeed}
+                      gain={ecgGain}
+                      showCalibration={false}
+                      measureEnabled={false}
                       lineWidth={1}
                     />
                   </div>

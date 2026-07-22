@@ -11,6 +11,7 @@ import {
   getHrvProxyMs,
   getWorkoutPhase,
 } from '../../utils/fitnessMetrics';
+import EcgPaperControls from './EcgPaperControls';
 
 const MAX_HISTORY_SECONDS = 3600;
 const RESP_WAVEFORM_INDEX = 8;
@@ -33,6 +34,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const activity = useStore(s => s.activity);
   const isConnected = useStore(s => s.isConnected);
   const hasRealData = useStore(s => s.hasRealData);
+  const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
+  const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
+  const ecgGain = useStore(s => s.ecgGain);
+  const ecgMeasureEnabled = useStore(s => s.ecgMeasureEnabled);
+  // Fitness: lighter paper grid by default when grid is on; overlays stay primary.
+  const paperGrid = ecgGridEnabled ? 'subtle' : 'off';
 
   const isLive = historyOffset === 0;
   const hr = vitals.heartRate.value;
@@ -78,22 +85,25 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
         {/* Real-time ECG + HRV */}
         <section>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-              Real-Time ECG + HRV
-            </h2>
-            <div className="flex items-center gap-3 text-[10px]">
-              <span className="text-slate-500">
-                HRV:{' '}
-                <span className="text-teal-400 tabular-nums font-semibold">
-                  {hrv != null ? `${hrv} ms` : '--'}
+          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                Real-Time ECG + HRV
+              </h2>
+              <div className="flex items-center gap-3 text-[10px]">
+                <span className="text-slate-500">
+                  HRV:{' '}
+                  <span className="text-teal-400 tabular-nums font-semibold">
+                    {hrv != null ? `${hrv} ms` : '--'}
+                  </span>
+                  {hrv != null && <span className="text-slate-600"> (est.)</span>}
                 </span>
-                {hrv != null && <span className="text-slate-600"> (est.)</span>}
-              </span>
-              <span style={{ color: zone.color }} className="font-semibold uppercase tracking-wider">
-                {zone.label}
-              </span>
+                <span style={{ color: zone.color }} className="font-semibold uppercase tracking-wider">
+                  {zone.label}
+                </span>
+              </div>
             </div>
+            <EcgPaperControls compact />
           </div>
           <div className="relative bg-slate-950/80 rounded-xl border border-white/5 overflow-hidden h-44">
             <span className="absolute left-3 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
@@ -109,7 +119,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
               color="#2dd4bf"
               min={CH_RANGES[LEAD_II][0]}
               max={CH_RANGES[LEAD_II][1]}
-              gridLines
+              autoScale={false}
+              paperGrid={paperGrid}
+              paperSpeed={ecgPaperSpeed}
+              gain={ecgGain}
+              showCalibration={ecgGridEnabled}
+              measureEnabled={ecgMeasureEnabled}
               lineWidth={2}
             />
           </div>

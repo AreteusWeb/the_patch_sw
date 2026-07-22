@@ -4,6 +4,10 @@ export type SimulationMode = 'normal' | 'tachycardia' | 'bradycardia' | 'spo2dro
 /** Desktop dashboard layout: clinical (default) vs fitness-focused. */
 export type DesktopLayoutMode = 'normal' | 'fitness';
 
+/** ECG paper strip display settings (digital grid / speed / gain). */
+export type EcgPaperSpeedSetting = 25 | 50;
+export type EcgGainSetting = 5 | 10 | 20;
+
 /** Severity categorizations for parsed physiological vitals. */
 export type SeverityLevel = 'normal' | 'moderate' | 'critical';
 
@@ -71,6 +75,12 @@ export interface AppState {
   isAdvancedMenuOpen: boolean;
   notchFilterEnabled: boolean;
   desktopLayout: DesktopLayoutMode;
+  /** ECG paper grid on waveform strips (clinical default: on). */
+  ecgGridEnabled: boolean;
+  ecgPaperSpeed: EcgPaperSpeedSetting;
+  ecgGain: EcgGainSetting;
+  /** Click-drag Δt / ΔV measurement on paper-mode strips. */
+  ecgMeasureEnabled: boolean;
 }
 
 /** Action mutators for the Zustand store. */
@@ -91,4 +101,8 @@ export interface AppActions {
   setNotchFilterEnabled: (enabled: boolean) => void;
   setActivityType: (type: string) => void;
   setDesktopLayout: (layout: DesktopLayoutMode) => void;
+  setEcgGridEnabled: (enabled: boolean) => void;
+  setEcgPaperSpeed: (speed: EcgPaperSpeedSetting) => void;
+  setEcgGain: (gain: EcgGainSetting) => void;
+  setEcgMeasureEnabled: (enabled: boolean) => void;
 }

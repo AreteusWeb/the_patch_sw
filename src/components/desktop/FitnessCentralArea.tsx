@@ -193,7 +193,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 <div className="text-lg font-light text-white tabular-nums mt-0.5">
                   {tempDisplay}
                   {vitals.temperature.trend === 'up' && tempDisplay !== '--' && (
-                    <span className="text-[10px] text-amber-400 ml-2 uppercase tracking-wider">
+                    <span className="text-[10px] text-teal-400 ml-2 uppercase tracking-wider">
                       Rising – Monitor
                     </span>
                   )}
@@ -205,7 +205,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                     key={i}
                     className={cn(
                       'w-2 h-2 rounded-full',
-                      tempDisplay !== '--' && i < 5 ? 'bg-orange-400/70' : 'bg-slate-800'
+                      tempDisplay !== '--' && i < 5 ? 'bg-teal-400/70' : 'bg-slate-800'
                     )}
                   />
                 ))}

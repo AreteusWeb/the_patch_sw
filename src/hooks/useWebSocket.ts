@@ -389,6 +389,7 @@ export const useWebSocket = () => {
   // ── Process incoming packets — supports BOTH formats ─────────────────────
   const handlePacket = useCallback((packet: { timestamp: number; channels: unknown[] }) => {
     const notchOn = useStore.getState().notchFilterEnabled;
+    let receivedSamples = false;
 
     packet.channels.forEach((ch, i) => {
       // ── Real format (server.cjs / device): { index, name, samples } ────────
@@ -402,6 +403,7 @@ export const useWebSocket = () => {
           const mv = rawToMv(raw);
           ring.push(notchOn ? filter.process(mv) : mv);
         }
+        if (named.samples.length > 0) receivedSamples = true;
         return;
       }
 
@@ -425,8 +427,18 @@ export const useWebSocket = () => {
         const ring = rings.current[slot];
         const filter = notchFilters.current[slot];
         for (const v of ch) ring.push(notchOn ? filter.process(v) : v);
+        if (ch.length > 0) receivedSamples = true;
       }
     });
+
+    // Patch is "connected" only once live sensor samples arrive — not on WS auth alone.
+    if (receivedSamples) {
+      const store = useStore.getState();
+      if (!store.isConnected) {
+        store.setConnected(true);
+        store.setConnectionStatus('Stable');
+      }
+    }
   }, []);
 
   const historyOffsetRef = useRef(historyOffset);
@@ -592,7 +604,9 @@ export const useWebSocket = () => {
     };
 
     const connect = () => {
+      setConnected(false);
       setConnectionStatus('Connecting');
+      useStore.getState().setHasRealData(false);
       const ws = new WebSocket(WS_URL);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -631,13 +645,15 @@ export const useWebSocket = () => {
           if (msg.channels) handlePacket(msg);
 
           if (msg.type === 'auth_ok') {
-            setConnected(true);
-            setConnectionStatus('Stable');
+            // WS authenticated — still waiting for the physical patch to stream data.
+            setConnected(false);
+            setConnectionStatus('Connecting');
           }
 
           if (msg.type === 'device_disconnected') {
             setConnected(false);
             setConnectionStatus('Disconnected');
+            useStore.getState().setHasRealData(false);
           }
         } catch { /* ignore non-JSON messages */ }
       };
@@ -645,6 +661,7 @@ export const useWebSocket = () => {
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
+        useStore.getState().setHasRealData(false);
         // startSim(); // SIMULATOR — uncomment only for a local fallback without a real device
         reconnect = setTimeout(connect, 5000);
       };

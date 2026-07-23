@@ -170,7 +170,7 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           </div>
           <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-amber-400/80 rounded-full transition-all duration-500"
+              className="h-full bg-teal-400/80 rounded-full transition-all duration-500"
               style={{ width: `${intensity.level}%` }}
             />
           </div>

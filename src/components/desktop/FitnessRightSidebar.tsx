@@ -10,9 +10,9 @@ import {
 import type { Vitals } from '../../types';
 
 const severityColor: Record<string, string> = {
-  high: 'border-red-500/40 bg-red-500/10',
-  medium: 'border-yellow-500/30 bg-yellow-500/10',
-  low: 'border-white/10 bg-slate-900/30',
+  high: 'border-rose-500/30 bg-rose-500/10',
+  medium: 'border-yellow-500/25 bg-yellow-500/10',
+  low: 'border-slate-800/80 bg-slate-900/30',
 };
 
 const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }> = ({
@@ -20,34 +20,31 @@ const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }>
   color,
   label,
 }) => {
-  const samples = data.slice(-48);
+  const samples = data.slice(-24);
   const hasData = samples.length >= 2;
   const min = hasData ? Math.min(...samples) : 0;
   const max = hasData ? Math.max(...samples) : 1;
   const range = max - min || 1;
 
   return (
-    <div className="bg-slate-950/60 rounded-lg border border-white/5 p-2">
-      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+    <div className="py-3 border-b border-slate-800/60 last:border-b-0">
+      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
         {label}
       </div>
-      <div className="h-12 flex items-end gap-px">
+      <div className="h-6 flex items-end gap-px">
         {hasData ? (
           samples.map((val, i) => (
             <div
               key={i}
-              className="flex-1 rounded-t-sm"
+              className="flex-1 rounded-sm opacity-80"
               style={{
-                height: `${Math.max(6, ((val - min) / range) * 100)}%`,
+                height: `${Math.max(8, ((val - min) / range) * 100)}%`,
                 backgroundColor: color,
-                opacity: 0.7,
               }}
             />
           ))
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[9px] text-slate-600 italic">
-            No data yet
-          </div>
+          <span className="text-[10px] text-slate-600 italic">No data yet</span>
         )}
       </div>
     </div>
@@ -106,85 +103,81 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) 
     [vitals, live]
   );
   const activeAlerts = alerts.slice(0, 4);
-
-  // Synthetic recovery trend bars from recovery score + HR energy
   const recoveryTrend = waveforms[1]?.slice(-48) ?? [];
 
   return (
-    <aside className="w-64 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3 flex flex-col gap-5">
-        {/* Recovery Insights */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
-            Recovery Insights
-          </h2>
-          <ul className="flex flex-col gap-2 text-[11px] text-slate-300">
-            <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5">•</span>
-              <span>
-                HRV:{' '}
-                <span className="text-white font-medium tabular-nums">
-                  {hrv != null ? `${hrv} ms` : '--'}
-                </span>
-                {hrv != null && (
-                  <span className="text-emerald-400/80">
-                    {' '}
-                    ({hrv >= 55 ? 'Good' : 'Low'})
-                  </span>
-                )}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5">•</span>
-              <span>
-                Readiness: <span className="text-white font-medium">{readiness}</span>
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5">•</span>
-              <span>
-                Sleep Quality Impact:{' '}
-                <span className="text-slate-500 italic">Pending sleep sync</span>
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-teal-500 mt-0.5">•</span>
-              <span>
-                Recovery Score:{' '}
-                <span className="text-white font-medium tabular-nums">
-                  {live ? `${recovery.score}/100` : '--'}
-                </span>
-                {live && (
-                  <span className="text-emerald-400/90"> ({recovery.label})</span>
-                )}
-              </span>
-            </li>
-          </ul>
-        </section>
+    <aside className="w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
+      <div className="px-4 py-3">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
+          Recovery Insights
+        </h2>
+      </div>
 
-        {/* AI Performance Notes */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
+      <div className="px-4 pb-4 flex flex-col">
+        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60 text-[11px] text-slate-300">
+          <li className="flex items-start gap-2">
+            <span className="text-teal-500 mt-0.5">•</span>
+            <span>
+              HRV:{' '}
+              <span className="text-white font-medium tabular-nums">
+                {hrv != null ? `${hrv} ms` : '--'}
+              </span>
+              {hrv != null && (
+                <span className="text-teal-400/80">
+                  {' '}
+                  ({hrv >= 55 ? 'Good' : 'Low'})
+                </span>
+              )}
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-teal-500 mt-0.5">•</span>
+            <span>
+              Readiness: <span className="text-white font-medium">{readiness}</span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-teal-500 mt-0.5">•</span>
+            <span>
+              Sleep Quality Impact:{' '}
+              <span className="text-slate-500 italic">Pending sleep sync</span>
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-teal-500 mt-0.5">•</span>
+            <span>
+              Recovery Score:{' '}
+              <span className="text-white font-medium tabular-nums">
+                {live ? `${recovery.score}/100` : '--'}
+              </span>
+              {live && (
+                <span className="text-teal-400/90"> ({recovery.label})</span>
+              )}
+            </span>
+          </li>
+        </ul>
+
+        <div className="py-3 border-b border-slate-800/60">
+          <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
             AI Performance Notes
-          </h2>
+          </h3>
           <ul className="flex flex-col gap-2">
             {notes.map((note) => (
               <li
                 key={note}
                 className="flex items-start gap-2 text-[11px] text-slate-300 leading-snug"
               >
-                <span className="text-amber-400/80 mt-0.5 flex-shrink-0">•</span>
+                <span className="text-teal-500 mt-0.5 flex-shrink-0">•</span>
                 {note}
               </li>
             ))}
           </ul>
-        </section>
+        </div>
 
-        {/* Live Alerts */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
+        <div className="py-3 border-b border-slate-800/60">
+          <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
             Live Alerts
-          </h2>
+          </h3>
           {activeAlerts.length === 0 ? (
             <p className="text-[11px] text-slate-600 italic">None currently</p>
           ) : (
@@ -203,22 +196,15 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) 
               ))}
             </div>
           )}
-        </section>
+        </div>
 
-        {/* Session Trends */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
+        <div className="pt-1">
+          <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             24H / Session Trends
-          </h2>
-          <div className="flex flex-col gap-2">
-            <MiniTrendGraph label="HR Trend" data={waveforms[1]} color="#2dd4bf" />
-            <MiniTrendGraph
-              label="Recovery Score Trend"
-              data={recoveryTrend}
-              color="#34d399"
-            />
-          </div>
-        </section>
+          </h3>
+          <MiniTrendGraph label="HR Trend" data={waveforms[1]} color="#2dd4bf" />
+          <MiniTrendGraph label="Recovery Score Trend" data={recoveryTrend} color="#5eead4" />
+        </div>
       </div>
     </aside>
   );

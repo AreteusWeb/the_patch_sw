@@ -251,12 +251,14 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-72 z-[70] flex flex-col bg-neutral-950/95 backdrop-blur-2xl shadow-2xl"
+            className="fixed right-0 top-0 h-full w-72 z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-white/5">
+            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80">
               <div className="flex items-center gap-2">
-                <User size={15} className="text-teal-400" />
+                <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20">
+                  <User size={15} />
+                </div>
                 <div>
                   <p className="text-sm font-semibold text-white">Profile</p>
                   <p className="text-[9px] text-slate-500 uppercase tracking-widest">Account settings</p>
@@ -264,7 +266,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
               </div>
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
               >
                 <X size={15} />
               </button>
@@ -288,13 +290,13 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
             {/* Sections */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
               {rows.map(({ key, label, icon: Icon, value }) => (
-                <div key={key} className="rounded-xl border border-white/5 bg-white/3 overflow-hidden">
+                <div key={key} className="rounded-xl border border-slate-800/80 bg-slate-900/40 overflow-hidden">
                   {/* Row header */}
                   <button
                     onClick={() => toggle(key)}
-                    className="flex items-center gap-3 w-full px-3 py-3 hover:bg-white/5 transition-all group"
+                    className="flex items-center gap-3 w-full px-3 py-3 hover:bg-slate-900/60 border border-transparent hover:border-slate-800/80 transition-all group"
                   >
-                    <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 text-slate-500 group-hover:text-teal-400 group-hover:bg-teal-500/10 transition-all flex-shrink-0">
+                    <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-900/60 text-slate-400 border border-slate-800 group-hover:text-teal-400 group-hover:bg-teal-500/15 group-hover:border-teal-500/20 transition-all flex-shrink-0">
                       <Icon size={13} />
                     </div>
                     <div className="flex-1 text-left min-w-0">
@@ -317,7 +319,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-3 pb-3 pt-1 border-t border-white/5 space-y-2">
+                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 space-y-2">
 
                           {/* Error */}
                           {error && activeSection === key && (

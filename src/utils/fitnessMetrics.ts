@@ -24,12 +24,12 @@ export function getHrZone(hr: number | string | undefined): HrZone {
     return { id: 'fat_burn', label: 'Fat Burn', color: '#2dd4bf', barClass: 'bg-teal-400', intensity: 45 };
   }
   if (bpm < 140) {
-    return { id: 'cardio', label: 'Cardio', color: '#fbbf24', barClass: 'bg-amber-400', intensity: 65 };
+    return { id: 'cardio', label: 'Cardio', color: '#22d3ee', barClass: 'bg-cyan-400', intensity: 65 };
   }
   if (bpm < 160) {
-    return { id: 'high', label: 'High Intensity', color: '#fb923c', barClass: 'bg-orange-400', intensity: 85 };
+    return { id: 'high', label: 'High Intensity', color: '#38bdf8', barClass: 'bg-sky-400', intensity: 85 };
   }
-  return { id: 'peak', label: 'Peak', color: '#f87171', barClass: 'bg-rose-400', intensity: 100 };
+  return { id: 'peak', label: 'Peak', color: '#60a5fa', barClass: 'bg-blue-400', intensity: 100 };
 }
 
 /**

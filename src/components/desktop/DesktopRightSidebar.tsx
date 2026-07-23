@@ -4,9 +4,9 @@ import { cn } from '../../utils/cn';
 import type { Vitals } from '../../types';
 
 const severityColor: Record<string, string> = {
-  high: 'border-red-500/40 bg-red-500/10',
-  medium: 'border-yellow-500/30 bg-yellow-500/10',
-  low: 'border-white/10 bg-slate-900/30',
+  high: 'border-rose-500/30 bg-rose-500/10',
+  medium: 'border-yellow-500/25 bg-yellow-500/10',
+  low: 'border-slate-800/80 bg-slate-900/30',
 };
 
 const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }> = ({
@@ -14,32 +14,29 @@ const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }>
   color,
   label,
 }) => {
-  const samples = data.slice(-48);
+  const samples = data.slice(-24);
   const hasData = samples.length >= 2;
   const min = hasData ? Math.min(...samples) : 0;
   const max = hasData ? Math.max(...samples) : 1;
   const range = max - min || 1;
 
   return (
-    <div className="bg-slate-950/60 rounded-lg border border-white/5 p-2">
-      <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+    <div className="py-3 border-b border-slate-800/60 last:border-b-0">
+      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
         {label}
       </div>
-      <div className="h-12 flex items-end gap-px">
+      <div className="h-6 flex items-end gap-px">
         {hasData ? samples.map((val, i) => (
           <div
             key={i}
-            className="flex-1 rounded-t-sm"
+            className="flex-1 rounded-sm opacity-80"
             style={{
-              height: `${Math.max(6, ((val - min) / range) * 100)}%`,
+              height: `${Math.max(8, ((val - min) / range) * 100)}%`,
               backgroundColor: color,
-              opacity: 0.7,
             }}
           />
         )) : (
-          <div className="w-full h-full flex items-center justify-center text-[9px] text-slate-600 italic">
-            No data yet
-          </div>
+          <span className="text-[10px] text-slate-600 italic">No data yet</span>
         )}
       </div>
     </div>
@@ -80,10 +77,6 @@ function buildAiInsights(vitals: Vitals, hasRealData: boolean): string[] {
   return insights.slice(0, 4);
 }
 
-/**
- * DesktopRightSidebar
- * Inteligencia accionable: AI insights, alertas activas y tendencias 24h.
- */
 interface DesktopRightSidebarProps {
   waveforms: number[][];
 }
@@ -101,31 +94,30 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
   const activeAlerts = alerts.slice(0, 5);
 
   return (
-    <aside className="w-64 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3 flex flex-col gap-5">
-        {/* AI Insights */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
-            AI Insights
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {aiInsights.map((insight) => (
-              <li
-                key={insight}
-                className="flex items-start gap-2 text-[11px] text-slate-300 leading-snug"
-              >
-                <span className="text-teal-500 mt-0.5 flex-shrink-0">•</span>
-                {insight}
-              </li>
-            ))}
-          </ul>
-        </section>
+    <aside className="w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
+      <div className="px-4 py-3">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
+          AI Insights
+        </h2>
+      </div>
 
-        {/* Active Alerts */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
+      <div className="px-4 pb-4 flex flex-col">
+        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60">
+          {aiInsights.map((insight) => (
+            <li
+              key={insight}
+              className="flex items-start gap-2 text-[11px] text-slate-300 leading-snug"
+            >
+              <span className="text-teal-500 mt-0.5 flex-shrink-0">•</span>
+              {insight}
+            </li>
+          ))}
+        </ul>
+
+        <div className="py-3 border-b border-slate-800/60">
+          <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
             Active Alerts
-          </h2>
+          </h3>
           {activeAlerts.length === 0 ? (
             <p className="text-[11px] text-slate-600 italic">None currently</p>
           ) : (
@@ -144,26 +136,15 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
               ))}
             </div>
           )}
-        </section>
+        </div>
 
-        {/* 24H Trends */}
-        <section>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-2">
+        <div className="pt-1">
+          <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             24H Trends
-          </h2>
-          <div className="flex flex-col gap-2">
-            <MiniTrendGraph
-              label="Heart Rate"
-              data={waveforms[1]}
-              color="#2dd4bf"
-            />
-            <MiniTrendGraph
-              label="SpO2"
-              data={waveforms[9]}
-              color="#5eead4"
-            />
-          </div>
-        </section>
+          </h3>
+          <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color="#2dd4bf" />
+          <MiniTrendGraph label="SpO2" data={waveforms[10]} color="#5eead4" />
+        </div>
       </div>
     </aside>
   );

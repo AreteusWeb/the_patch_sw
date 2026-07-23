@@ -81,6 +81,11 @@ export interface AppState {
   ecgGain: EcgGainSetting;
   /** Click-drag Δt / ΔV measurement on paper-mode strips. */
   ecgMeasureEnabled: boolean;
+  /**
+   * True once live sensor data has arrived from the device.
+   * While false, vitals UI shows '--' instead of placeholder defaults.
+   */
+  hasRealData: boolean;
 }
 
 /** Action mutators for the Zustand store. */
@@ -105,4 +110,5 @@ export interface AppActions {
   setEcgPaperSpeed: (speed: EcgPaperSpeedSetting) => void;
   setEcgGain: (gain: EcgGainSetting) => void;
   setEcgMeasureEnabled: (enabled: boolean) => void;
+  setHasRealData: (hasRealData: boolean) => void;
 }

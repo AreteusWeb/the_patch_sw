@@ -5,26 +5,20 @@ import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore
 import { db } from '../lib/firebase';
 import useStore from '../store/useStore';
 import type { ChestEvent } from '../store/useStore';
+import { cn } from '../utils/cn';
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+const EN_LOCALE = 'en-US';
 
-/**
- * Properties for the AlertsDrawer component.
- */
 interface AlertsDrawerProps {
-  /** Indicates whether the drawer is open. */
   open: boolean;
-  /** Callback function to close the drawer. */
   onClose: () => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const severityStyles: Record<string, { border: string; dot: string; label: string }> = {
   high: {
-    border: 'border-red-500/30',
-    dot: 'bg-red-400',
-    label: 'text-red-400',
+    border: 'border-rose-500/30',
+    dot: 'bg-rose-400',
+    label: 'text-rose-400',
   },
   medium: {
     border: 'border-yellow-500/25',
@@ -32,7 +26,7 @@ const severityStyles: Record<string, { border: string; dot: string; label: strin
     label: 'text-yellow-400',
   },
   low: {
-    border: 'border-white/8',
+    border: 'border-slate-800/80',
     dot: 'bg-slate-500',
     label: 'text-slate-500',
   },
@@ -50,20 +44,14 @@ const eventTypeIcon: Record<string, React.ReactNode> = {
   hypotension:  <Heart size={13} />,
 };
 
-/**
- * Formats a millisecond timestamp to a localized time string.
- */
 function formatTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], {
+  return new Date(epochMs).toLocaleTimeString(EN_LOCALE, {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
   });
 }
 
-/**
- * Generates a day label (e.g. 'Today', 'Yesterday', or full weekday name) for a given timestamp.
- */
 function getDayLabel(epochMs: number): string {
   const d = new Date(epochMs);
   const today = new Date();
@@ -71,12 +59,9 @@ function getDayLabel(epochMs: number): string {
   yesterday.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return 'Today';
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(EN_LOCALE, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-/**
- * Groups physiological events by calendar day, filtering only the last 7 days of history.
- */
 function groupByDay(events: ChestEvent[]): { label: string; events: ChestEvent[] }[] {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recent = events.filter(e => e.timestampEpoch >= cutoff);
@@ -91,8 +76,6 @@ function groupByDay(events: ChestEvent[]): { label: string; events: ChestEvent[]
     events: evts.sort((a, b) => b.timestampEpoch - a.timestampEpoch),
   }));
 }
-
-// ─── Vitals snapshot row ──────────────────────────────────────────────────────
 
 interface VitalsSnap {
   hr?: number;
@@ -115,7 +98,7 @@ const VitalsRow: React.FC<{ vitals?: VitalsSnap }> = ({ vitals }) => {
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {items.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/4 border border-white/6">
+        <div key={idx} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/60 border border-slate-800/80">
           <span className="text-teal-400/70">{item.icon}</span>
           <span className="text-[10px] font-medium text-slate-400 tabular-nums">{item.value}</span>
         </div>
@@ -123,8 +106,6 @@ const VitalsRow: React.FC<{ vitals?: VitalsSnap }> = ({ vitals }) => {
     </div>
   );
 };
-
-// ─── Event Card ───────────────────────────────────────────────────────────────
 
 interface EventCardProps {
   event: ChestEvent & { vitals?: VitalsSnap };
@@ -139,12 +120,15 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className={`relative flex flex-col gap-1 px-3 py-3 rounded-xl border bg-white/3 ${styles.border} hover:bg-white/5 transition-colors`}
+      className={cn(
+        'relative flex flex-col gap-1 px-3 py-3 rounded-xl border bg-slate-900/40 hover:bg-slate-900/60 transition-colors',
+        styles.border
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5 ${styles.dot}`} />
-          <span className={`flex-shrink-0 ${styles.label}`}>{icon}</span>
+          <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5', styles.dot)} />
+          <span className={cn('flex-shrink-0', styles.label)}>{icon}</span>
           <span className="text-[12px] font-semibold text-white truncate">{event.label}</span>
         </div>
         <button
@@ -161,28 +145,20 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
         <span className="text-[10px] text-slate-500 tabular-nums">{formatTime(event.timestampEpoch)}</span>
       </div>
       <div className="ml-[18px]">
-        <VitalsRow vitals={(event as any).vitals} />
+        <VitalsRow vitals={(event as ChestEvent & { vitals?: VitalsSnap }).vitals} />
       </div>
     </motion.div>
   );
 };
 
-// ─── Day section header ───────────────────────────────────────────────────────
-
 const DayHeader: React.FC<{ label: string; count: number }> = ({ label, count }) => (
   <div className="flex items-center gap-2 pt-2 pb-1">
     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">{label}</span>
-    <span className="text-[9px] font-bold text-slate-600 bg-white/5 px-1.5 py-0.5 rounded-md">{count}</span>
-    <div className="flex-1 h-px bg-white/5" />
+    <span className="text-[9px] font-bold text-slate-500 bg-slate-900/60 border border-slate-800/80 px-1.5 py-0.5 rounded-md">{count}</span>
+    <div className="flex-1 h-px bg-slate-800/80" />
   </div>
 );
 
-// ─── Clear all — deletes user events from Firestore ──────────────────────────
-
-/**
- * Deletes all physiological events associated with the given user ID from Firestore,
- * then clears the local Zustand store.
- */
 async function clearUserEvents(userId: string, clearStore: () => void) {
   try {
     const q = query(
@@ -197,14 +173,6 @@ async function clearUserEvents(userId: string, clearStore: () => void) {
   }
 }
 
-// ─── AlertsDrawer ─────────────────────────────────────────────────────────────
-
-/**
- * AlertsDrawer Component.
- * Displays a sliding drawer containing the chronological physiological events history
- * from the last 7 days. It allows users to jump back in time to specific event occurrences
- * and clear their history.
- */
 const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
   const events                = useStore(s => s.events);
   const jumpToEvent           = useStore(s => s.jumpToEvent);
@@ -212,7 +180,7 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
   const currentUser           = useStore(s => s.currentUser);
 
   const [clearing, setClearing] = React.useState(false);
-  const [confirmClear, setConfirmClear] = React.useState(false);
+  const [showConfirmClear, setShowConfirmClear] = React.useState(false);
 
   const grouped    = React.useMemo(() => groupByDay(events), [events]);
   const totalShown = grouped.reduce((acc, g) => acc + g.events.length, 0);
@@ -223,26 +191,24 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
     setIsAdvancedMenuOpen(false);
   };
 
-  const handleClear = async () => {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      setTimeout(() => setConfirmClear(false), 3000);
-      return;
-    }
+  const handleConfirmClear = async () => {
     if (!currentUser) return;
     setClearing(true);
-    setConfirmClear(false);
+    setShowConfirmClear(false);
     await clearUserEvents(currentUser.uid, () => {
       useStore.setState({ events: [], alerts: [], activeEventBanner: null });
     });
     setClearing(false);
   };
 
+  React.useEffect(() => {
+    if (!open) setShowConfirmClear(false);
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
             key="drawer-backdrop"
             initial={{ opacity: 0 }}
@@ -253,20 +219,19 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
             onClick={onClose}
           />
 
-          {/* Drawer */}
           <motion.div
             key="drawer-panel"
             initial={{ x: '100%', opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-80 z-[70] flex flex-col bg-neutral-950/95 backdrop-blur-2xl shadow-2xl"
+            className="fixed right-0 top-0 h-full w-80 z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-white/5 flex-shrink-0">
+            <div className="relative flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0">
               <div>
                 <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">
-                  Clinical history · last 7 days
+                  Clinical history
                 </p>
                 <p className="text-sm font-semibold text-white mt-0.5">
                   Events
@@ -279,37 +244,65 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Clear button — two taps: first requests confirmation, second performs deletion */}
                 {totalShown > 0 && (
                   <button
-                    onClick={handleClear}
+                    onClick={() => setShowConfirmClear(true)}
                     disabled={clearing}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-wider transition-all ${
-                      confirmClear
-                        ? 'bg-rose-500/20 border-rose-500/40 text-rose-400 animate-pulse'
-                        : 'bg-white/5 border-white/10 text-slate-500 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10'
-                    }`}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all disabled:opacity-40"
                     title="Clear all events"
                   >
-                    <Trash2 size={11} />
-                    <span>{clearing ? 'Clearing…' : confirmClear ? 'Confirm?' : 'Clear all'}</span>
+                    <Trash2 size={14} />
                   </button>
                 )}
 
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
                 >
                   <X size={15} />
                 </button>
               </div>
+
+              {/* Confirm clear dialog */}
+              <AnimatePresence>
+                {showConfirmClear && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-4 right-4 top-full mt-2 z-10 p-3 rounded-xl border border-slate-800 bg-slate-950 shadow-xl"
+                  >
+                    <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                      Do you want to delete all events?
+                    </p>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmClear(false)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[10px] font-medium uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+                      >
+                        No
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmClear}
+                        disabled={clearing}
+                        className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-[10px] font-medium uppercase tracking-wider text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-40"
+                      >
+                        {clearing ? '…' : 'Yes'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-4 py-3 scrollbar-hide">
               {grouped.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/4 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-center">
                     <Activity size={18} className="text-slate-600" />
                   </div>
                   <p className="text-[11px] text-slate-600 text-center">
@@ -330,9 +323,8 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
               )}
             </div>
 
-            {/* Footer */}
             {grouped.length > 0 && (
-              <div className="px-5 py-4 border-t border-white/5 flex-shrink-0">
+              <div className="px-5 py-4 border-t border-slate-800/80 flex-shrink-0">
                 <p className="text-[9px] text-slate-600 text-center uppercase tracking-widest">
                   Tap View to jump to that moment in history
                 </p>

@@ -1,9 +1,9 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
-import WaveformCanvas from '../WaveformCanvas';
-import { CH_RANGES, LEAD_CHANNEL_INDEX } from '../../hooks/useWebSocket';
-import { cn } from '../../utils/cn';
+import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
+import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
+import EcgPaperControls from './EcgPaperControls';
 import {
   formatDuration,
   getActivityIntensity,
@@ -11,11 +11,10 @@ import {
   getHrvProxyMs,
   getWorkoutPhase,
 } from '../../utils/fitnessMetrics';
-import EcgPaperControls from './EcgPaperControls';
+import { cn } from '../../utils/cn';
 
 const MAX_HISTORY_SECONDS = 3600;
-const RESP_WAVEFORM_INDEX = 8;
-const LEAD_II = LEAD_CHANNEL_INDEX['Lead II'];
+const LEAD_II = 1;
 
 const PHASES = [
   { id: 'warm-up', label: 'Warm-up' },
@@ -37,8 +36,6 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
   const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
   const ecgGain = useStore(s => s.ecgGain);
-  const ecgMeasureEnabled = useStore(s => s.ecgMeasureEnabled);
-  // Fitness: lighter paper grid by default when grid is on; overlays stay primary.
   const paperGrid = ecgGridEnabled ? 'subtle' : 'off';
 
   const isLive = historyOffset === 0;
@@ -83,12 +80,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-black overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
-        {/* Real-time ECG + HRV */}
-        <section>
-          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+        {/* All channels — single compact canvas */}
+        <section className={cn('flex flex-col', ecgGridEnabled ? 'flex-shrink-0' : 'min-h-[360px]')}>
+          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap flex-shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                Real-Time ECG + HRV
+                All Channels
               </h2>
               <div className="flex items-center gap-3 text-[10px]">
                 <span className="text-slate-500">
@@ -96,64 +93,40 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                   <span className="text-teal-400 tabular-nums font-semibold">
                     {hrv != null ? `${hrv} ms` : '--'}
                   </span>
-                  {hrv != null && <span className="text-slate-600"> (est.)</span>}
                 </span>
                 <span style={{ color: zone.color }} className="font-semibold uppercase tracking-wider">
                   {zone.label}
+                </span>
+                <span className="text-white tabular-nums font-light">
+                  {hasRealData && isConnected ? hr : '--'}
+                  <span className="text-slate-500 ml-1">bpm</span>
                 </span>
               </div>
             </div>
             <EcgPaperControls compact />
           </div>
-          <div className="relative bg-slate-950/80 rounded-xl border border-white/5 overflow-hidden h-44">
-            <span className="absolute left-3 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
-              ECG Rhythm · Lead II
-            </span>
-            <span className="absolute right-3 top-2 z-10 text-lg font-light tabular-nums text-white">
-              {hasRealData && isConnected ? hr : '--'}
-              <span className="text-[10px] text-slate-500 ml-1">bpm</span>
-            </span>
-            <WaveformCanvas
-              data={waveforms[LEAD_II]}
-              height={176}
-              color="#2dd4bf"
-              min={CH_RANGES[LEAD_II][0]}
-              max={CH_RANGES[LEAD_II][1]}
-              autoScale={false}
+          <div className={cn(
+            'rounded-xl border border-white/5',
+            ecgGridEnabled ? 'flex-shrink-0' : 'flex-1 min-h-[360px] overflow-hidden'
+          )}>
+            <MultiChannelWaveformCanvas
+              waveforms={waveforms}
+              channels={DESKTOP_WAVEFORM_CHANNELS}
+              fill
+              minHeight={360}
               paperGrid={paperGrid}
               paperSpeed={ecgPaperSpeed}
               gain={ecgGain}
-              showCalibration={ecgGridEnabled}
-              measureEnabled={ecgMeasureEnabled}
-              lineWidth={2}
             />
           </div>
         </section>
 
-        {/* Training overlay waveforms */}
+        {/* Training metrics (non-waveform) */}
         <section>
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Training Overlay Waveforms
+            Training Metrics
           </h2>
           <div className="grid grid-cols-1 gap-2">
-            <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                  Respiration
-                </span>
-                <span className="text-[10px] text-teal-400/80">Breathing Efficiency</span>
-              </div>
-              <WaveformCanvas
-                data={waveforms[RESP_WAVEFORM_INDEX]}
-                height={36}
-                color="#5eead4"
-                min={CH_RANGES[RESP_WAVEFORM_INDEX][0]}
-                max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
-                gridLines={false}
-                lineWidth={1.2}
-              />
-            </div>
-
             <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">

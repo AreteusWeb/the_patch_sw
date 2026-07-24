@@ -1,53 +1,20 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
-import WaveformCanvas from '../WaveformCanvas';
 import EcgPaperControls from './EcgPaperControls';
-import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../../hooks/useWebSocket';
+import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
+import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import { cn } from '../../utils/cn';
 
 const MAX_HISTORY_SECONDS = 3600;
-// Matches useWebSocket.ts: 0-7 ECG, 8 Resp, 9 PPG (no Lead III).
-const RESP_WAVEFORM_INDEX = 8;
-const PPG_WAVEFORM_INDEX = 9;
-// Featured panels: Lead II + V2 (clinical + precordial).
-const FEATURED_LEAD_INDICES = [
-  LEAD_CHANNEL_INDEX['Lead II'],
-  LEAD_CHANNEL_INDEX['V2'],
-] as const;
 
-const PlaceholderTrend: React.FC<{ label: string; value?: string; color?: string }> = ({
-  label,
-  value,
-  color = '#64748b',
-}) => (
-  <div className="flex flex-col gap-1">
-    <div className="flex items-center justify-between">
-      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">{label}</span>
-      {value && <span className="text-[10px] text-slate-500 tabular-nums">{value}</span>}
-    </div>
-    <div className="h-8 bg-slate-950/60 rounded border border-white/5 flex items-center px-2 overflow-hidden">
-      <svg className="w-full h-4" viewBox="0 0 200 16" preserveAspectRatio="none">
-        <path
-          d="M0,8 Q20,4 40,8 T80,8 T120,6 T160,10 T200,8"
-          fill="none"
-          stroke={color}
-          strokeWidth="1.5"
-          opacity="0.6"
-        />
-      </svg>
-    </div>
-  </div>
-);
-
-/**
- * DesktopCentralArea
- * Panel central dominante: 12-lead ECG, waveforms apilados y timeline scrubber.
- */
 interface DesktopCentralAreaProps {
   waveforms: number[][];
 }
 
+/**
+ * DesktopCentralArea — compact single-canvas multi-channel monitor + scrubber.
+ */
 const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
@@ -56,7 +23,6 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
   const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
   const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
   const ecgGain = useStore(s => s.ecgGain);
-  const ecgMeasureEnabled = useStore(s => s.ecgMeasureEnabled);
 
   const paperGrid = ecgGridEnabled ? 'clinical' : 'off';
   const isLive = historyOffset === 0;
@@ -88,132 +54,53 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
 
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-black overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
-        {/* Multi-lead ECG — digital paper strip */}
-        <section>
-          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+      <div className={cn(
+        'flex-1 min-h-0 px-4 py-3 flex flex-col gap-3',
+        ecgGridEnabled ? 'overflow-y-auto scrollbar-hide' : 'overflow-hidden'
+      )}>
+        <section className={cn('flex flex-col', ecgGridEnabled ? 'flex-shrink-0' : 'flex-1 min-h-0')}>
+          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap flex-shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                12-Lead ECG
+                All Channels
               </h2>
               <span className="text-[10px] text-slate-600">
-                Paper: 1 mm = 40 ms / 0.1 mV
+                8 ECG · Resp · SpO2 — single canvas
               </span>
             </div>
             <EcgPaperControls />
           </div>
 
-          <div className="bg-slate-950/50 rounded-xl border border-white/5 overflow-hidden">
-            {/* Featured leads — larger paper strips + cal + measure */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-slate-800/30">
-              {FEATURED_LEAD_INDICES.map((leadIdx) => (
-                <div key={LEADS[leadIdx]} className="relative bg-[#140a0a] h-36">
-                  <span className="absolute left-2 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
-                    {LEADS[leadIdx]}
-                  </span>
-                  <WaveformCanvas
-                    data={waveforms[leadIdx]}
-                    height={144}
-                    color="#2dd4bf"
-                    min={CH_RANGES[leadIdx][0]}
-                    max={CH_RANGES[leadIdx][1]}
-                    autoScale={false}
-                    paperGrid={paperGrid}
-                    paperSpeed={ecgPaperSpeed}
-                    gain={ecgGain}
-                    showCalibration={ecgGridEnabled}
-                    measureEnabled={ecgMeasureEnabled}
-                    lineWidth={1.75}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Remaining leads — compact paper strips */}
-            <div className="flex flex-col gap-px bg-slate-800/20">
-              {LEADS.map((label, i) => {
-                if (FEATURED_LEAD_INDICES.includes(i as (typeof FEATURED_LEAD_INDICES)[number])) return null;
-                return (
-                  <div key={label} className="relative bg-[#120808] h-7">
-                    <span className="absolute left-2 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">
-                      {label}
-                    </span>
-                    <WaveformCanvas
-                      data={waveforms[i]}
-                      height={28}
-                      color="#2dd4bf"
-                      min={CH_RANGES[i][0]}
-                      max={CH_RANGES[i][1]}
-                      autoScale={false}
-                      paperGrid={paperGrid}
-                      paperSpeed={ecgPaperSpeed}
-                      gain={ecgGain}
-                      showCalibration={false}
-                      measureEnabled={false}
-                      lineWidth={1}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* Multi-parameter waveforms */}
-        <section>
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Multi-Parameter Waveforms
-          </h2>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                Respiration
-              </span>
-              <div className="h-10 bg-slate-950/60 rounded border border-white/5">
-                <WaveformCanvas
-                  data={waveforms[RESP_WAVEFORM_INDEX]}
-                  height={40}
-                  color="#5eead4"
-                  min={CH_RANGES[RESP_WAVEFORM_INDEX][0]}
-                  max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
-                  gridLines={false}
-                  lineWidth={1.2}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                SpO2 Pleth
-              </span>
-              <div className="flex items-end gap-[1px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/60 rounded border border-white/5">
-                {waveforms[PPG_WAVEFORM_INDEX].slice(-240).map((val, i) => (
-                  <div
-                    key={i}
-                    className="bg-teal-500/30 w-[2px] rounded-t-[1px] flex-shrink-0"
-                    style={{
-                      height: `${Math.max(4, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%`,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <PlaceholderTrend label="BP Trend" color="#94a3b8" />
-            <PlaceholderTrend label="Temp" value={tempDisplay} color="#f97316" />
-          </div>
-
-          <div className="mt-3">
-            <PlaceholderTrend
-              label="Activity"
-              value={`${activity.activityType} • ${activity.steps.toLocaleString()} steps`}
-              color="#a78bfa"
+          <div className={cn(
+            'rounded-xl border border-white/5 overflow-hidden',
+            ecgGridEnabled ? 'flex-shrink-0' : 'flex-1 min-h-[320px]'
+          )}>
+            <MultiChannelWaveformCanvas
+              waveforms={waveforms}
+              channels={DESKTOP_WAVEFORM_CHANNELS}
+              fill
+              minHeight={320}
+              paperGrid={paperGrid}
+              paperSpeed={ecgPaperSpeed}
+              gain={ecgGain}
             />
+          </div>
+
+          {/* Non-waveform sensors — numeric only until hardware sends traces */}
+          <div className="mt-2 flex-shrink-0 grid grid-cols-3 gap-2 text-[10px]">
+            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+              BP Trend <span className="text-slate-600">— pending</span>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+              Temp <span className="text-slate-300 tabular-nums">{tempDisplay}</span>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+              Activity <span className="text-slate-300">{activity.activityType} · {activity.steps.toLocaleString()} steps</span>
+            </div>
           </div>
         </section>
       </div>
 
-      {/* Timeline scrubber */}
       <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/60 px-4 py-3">
         <div className="flex items-center gap-3">
           <button

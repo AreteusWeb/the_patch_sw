@@ -90,6 +90,25 @@ export function visibleMvRange(
   return displayHeightPx / (pxPerMm * gainMmPerMv);
 }
 
+/**
+ * Min stacked-canvas height so each ECG lane fits ±targetHalfMv at the
+ * selected paper gain (compact multi-lead view).
+ */
+export function multiLanePaperMinHeightPx(
+  traceWidthPx: number,
+  sampleCount: number,
+  paperSpeedMmPerSec: EcgPaperSpeed,
+  gainMmPerMv: EcgGain,
+  ecgLaneCount: number,
+  nonEcgLaneCount: number,
+  targetHalfMv = 1.2
+): number {
+  const pxPerMm = pxPerMmToFitWidth(traceWidthPx, sampleCount, paperSpeedMmPerSec);
+  const ecgLanePx = 2 * pxPerMm * gainMmPerMv * targetHalfMv + 8;
+  const nonEcgLanePx = 52;
+  return Math.ceil(ecgLaneCount * ecgLanePx + nonEcgLaneCount * nonEcgLanePx);
+}
+
 export function formatDurationMs(seconds: number): string {
   const ms = seconds * 1000;
   if (ms < 1000) return `${ms.toFixed(0)} ms`;

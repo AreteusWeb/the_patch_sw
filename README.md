@@ -17,7 +17,10 @@ Real-time monitoring of multi-channel ECG data from wearable chest patches ("The
 
 ## Two ways to run this
 
-The app supports a `cloud` mode (Firebase + Google Cloud Storage, used in production) and a `local` mode (no cloud account needed — great for development or self-hosting). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how that works under the hood.
+The app supports a `cloud` mode (Firebase + Google Cloud Storage, used in production) and a `local` mode (no cloud account needed — great for development or self-hosting).
+
+## `.env` vs `.env.example`
+Copy `.env.example` → `.env` in each folder and fill in your own values. `.env` is git-ignored and should never be committed or shared
 
 ### Run it locally (no account needed)
 
@@ -46,17 +49,12 @@ Point your ESP32 (or run `mock/mock-esp32.cjs` to simulate one) at `ws://<your-m
 
 You don't need to run anything locally to test with a real device — the ESP32's auth (by MAC) was never tied to Firebase, so this hasn't changed. Pick whichever fits what you're testing:
 
-- **Against production (Cloud Run)** — the simplest option. Leave the ESP32 pointed at the production URL (`wss://chestpad-ws-server-1048900719191.us-central1.run.app`), log in normally with Firebase in the app, add the device's MAC on "My Devices", and it should connect exactly as it always has. Good for confirming a backend deploy didn't break the real-device flow.
+- **Against production (Cloud Run)** — the simplest option. Leave the ESP32 pointed at the production URL, log in normally with Firebase in the app, add the device's MAC on "My Devices", and it should connect exactly as it always has. Good for confirming a backend deploy didn't break the real-device flow.
 - **Fully local** — useful if you don't want to touch production at all while iterating. Make sure your machine and the ESP32 are on the same WiFi network, find your machine's local IP (`ipconfig` on Windows, `ifconfig`/`ip a` on Mac/Linux), point the ESP32 at `ws://<that-ip>:8080` instead of the production URL, and run the backend + frontend in `local` mode as described above. If it doesn't connect, double check the device is actually hitting that IP:port (not still pointed at the old URL) and that your firewall isn't blocking port 8080 on the local network.
 
 ### Run it against the cloud (production/staging)
 
 Set `APP_MODE=cloud` on the backend with `GOOGLE_CLOUD_PROJECT` and `GCS_BUCKET_NAME`, and `VITE_APP_MODE=cloud` on the frontend with your `VITE_FIREBASE_*` variables. See `.env.example` in each folder for the full list.
 
-## `.env` vs `.env.example`
+.
 
-Copy `.env.example` → `.env` in each folder and fill in your own values. `.env` is git-ignored and should never be committed or shared.
-
-## More details
-
-For the reasoning behind the cloud/local split, the provider/wrapper pattern, what's implemented vs. still pending, and known limitations, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

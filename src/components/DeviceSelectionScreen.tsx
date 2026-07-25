@@ -3,8 +3,29 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Cpu, Plus, Trash2, LogOut, Activity, X, Check, AlertCircle, Smartphone } from 'lucide-react';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { IS_LOCAL_MODE } from '../lib/appConfig';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
+
+// ─── Local mode: device list stored in localStorage ────────────────────────
+// In cloud mode this list lives in Firestore (users/{uid}.devices). In local
+// mode there is no Firestore, so it is persisted in the browser — enough for
+// local dev/testing (not synced across devices, and lost if you clear browser
+// localStorage).
+const LOCAL_DEVICES_KEY = 'thepatch_local_devices';
+
+function loadLocalDevices(): Device[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_DEVICES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalDevices(devices: Device[]) {
+  localStorage.setItem(LOCAL_DEVICES_KEY, JSON.stringify(devices));
+}
 
 /**
  * Normalizes a raw MAC address string into the standard XX:XX:XX:XX:XX:XX format.
@@ -43,7 +64,13 @@ export default function DeviceSelectionScreen() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const userRef = doc(db, 'users', currentUser.uid);
+    if (IS_LOCAL_MODE) {
+      setDevices(loadLocalDevices());
+      setLoading(false);
+      return;
+    }
+
+    const userRef = doc(db!, 'users', currentUser.uid);
 
     const unsub = onSnapshot(
       userRef,
@@ -94,9 +121,15 @@ export default function DeviceSelectionScreen() {
 
     setModalLoading(true);
     try {
-      const userRef = doc(db, 'users', currentUser.uid);
       const updatedDevices = [...devices, { name: newName.trim(), mac: normalized }];
-      await updateDoc(userRef, { devices: updatedDevices });
+
+      if (IS_LOCAL_MODE) {
+        saveLocalDevices(updatedDevices);
+      } else {
+        const userRef = doc(db!, 'users', currentUser.uid);
+        await updateDoc(userRef, { devices: updatedDevices });
+      }
+      setDevices(updatedDevices);
 
       // Reset form & Close modal
       setNewName('');
@@ -110,13 +143,19 @@ export default function DeviceSelectionScreen() {
     }
   };
 
-  // Handle deleting a device from Firestore
+  // Handle deleting a device (localStorage in local mode, Firestore in cloud mode)
   const handleDeleteDevice = async (macToDelete: string) => {
     if (!currentUser) return;
     try {
-      const userRef = doc(db, 'users', currentUser.uid);
       const updatedDevices = devices.filter((d) => d.mac !== macToDelete);
-      await updateDoc(userRef, { devices: updatedDevices });
+
+      if (IS_LOCAL_MODE) {
+        saveLocalDevices(updatedDevices);
+      } else {
+        const userRef = doc(db!, 'users', currentUser.uid);
+        await updateDoc(userRef, { devices: updatedDevices });
+      }
+      setDevices(updatedDevices);
       setConfirmDeleteMac(null);
     } catch (err) {
       console.error('[DeviceSelection] Failed to delete device:', err);

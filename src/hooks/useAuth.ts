@@ -7,7 +7,15 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { IS_LOCAL_MODE } from '../lib/appConfig';
 import useStore from '../store/useStore';
+
+/** Fixed user used in local mode — no login (see meeting priority #4). */
+const LOCAL_DEV_USER = {
+  uid: 'local-dev-user',
+  email: 'local@thepatch.dev',
+  displayName: 'Local Dev',
+} as User;
 
 /**
  * Hook to manage Firebase authentication state.
@@ -18,6 +26,10 @@ import useStore from '../store/useStore';
  * 2. Create the `users/{uid}` document in Firestore if the user is logging in for the first time.
  * 3. Load the user's linked device MAC address, if any.
  * 4. Expose login and logout helpers.
+ *
+ * In local mode (VITE_APP_MODE=local) none of this runs: a fixed user is
+ * assigned immediately and the login screen is skipped entirely, since
+ * Firebase is not available to validate credentials.
  */
 export function useAuth() {
   const setCurrentUser = useStore(s => s.setCurrentUser);
@@ -25,13 +37,21 @@ export function useAuth() {
   const setAuthLoading = useStore(s => s.setAuthLoading);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (IS_LOCAL_MODE) {
+      setCurrentUser(LOCAL_DEV_USER);
+      setDeviceMac(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    const unsub = onAuthStateChanged(auth!, async (firebaseUser) => {
       if (firebaseUser) {
         // ── Authenticated User ──────────────────────────────────────────────
         setCurrentUser(firebaseUser);
 
         // Read or create the user document in Firestore
-        const userRef = doc(db, 'users', firebaseUser.uid);
+        // (db is non-null here: this branch only runs when !IS_LOCAL_MODE)
+        const userRef = doc(db!, 'users', firebaseUser.uid);
         const snap    = await getDoc(userRef);
 
         if (!snap.exists()) {
@@ -68,12 +88,20 @@ export function useAuth() {
  * The `onAuthStateChanged` listener will automatically handle updating the application state.
  */
 export async function login(email: string, password: string): Promise<void> {
-  await signInWithEmailAndPassword(auth, email, password);
+  if (IS_LOCAL_MODE) {
+    console.warn('[useAuth] login() is a no-op in local mode (no Firebase).');
+    return;
+  }
+  await signInWithEmailAndPassword(auth!, email, password);
 }
 
 /**
  * Logs out the current user.
  */
 export async function logout(): Promise<void> {
-  await signOut(auth);
+  if (IS_LOCAL_MODE) {
+    console.warn('[useAuth] logout() is a no-op in local mode (no Firebase).');
+    return;
+  }
+  await signOut(auth!);
 }

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Mail, Lock, User, Cpu, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User, Cpu, ChevronRight } from 'lucide-react';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { IS_LOCAL_MODE } from '../lib/appConfig';
 
 /**
  * Properties for the RegisterScreen component.
@@ -47,6 +48,11 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
     }
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (IS_LOCAL_MODE || !auth || !db) {
+      setError('Account creation requires cloud mode (Firebase).');
       return;
     }
 
@@ -116,7 +122,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
             <div className="flex items-center justify-center gap-3 mt-3 w-full">
               <div className="h-[1px] flex-1 bg-teal-500/30 max-w-[40px]" />
               <h2 className="text-lg font-bold text-teal-400 tracking-[0.4em] uppercase whitespace-nowrap mr-[-0.4em]">
-                ChestPad
+                The Patch
               </h2>
               <div className="h-[1px] flex-1 bg-teal-500/30 max-w-[40px]" />
             </div>
@@ -222,7 +228,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
                 />
               </div>
               <p className="text-[9px] text-slate-600 ml-1 tracking-wide">
-                Found on the label of your ChestPad device
+                Found on the label of your The Patch device
               </p>
             </div>
 

@@ -18,10 +18,9 @@ import { AnimatePresence } from 'motion/react';
 
 /**
  * MobileApp Component.
- * Layout de escritorio... digo, de MOBILE — este es exactamente el diseño
- * que ya aprobó tu jefe. Es el mismo JSX que antes vivía directo en App.tsx,
- * solo que ahora vive en su propio archivo para poder bifurcar hacia
- * DesktopApp sin tocar nada de este diseño.
+ * MOBILE layout — this is exactly the design that was already approved.
+ * Same JSX that previously lived directly in App.tsx, now in its own file
+ * so we can branch to DesktopApp without touching this design.
  */
 export default function MobileApp() {
   const viewMode = useStore(state => state.viewMode);

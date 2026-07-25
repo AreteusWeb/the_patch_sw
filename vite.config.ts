@@ -19,8 +19,8 @@ export default defineConfig(({mode}) => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // NUEVO: permite abrir la app desde la IP de red local (ej. tu celular
-      // en el mismo WiFi) sin que el WebSocket de HMR truene con handshake 400.
+      // Allows opening the app from the local network IP (e.g. your phone on
+      // the same WiFi) without the HMR WebSocket failing with a 400 handshake.
       host: true,
     },
   };

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { collection, onSnapshot, orderBy, query, limit, addDoc, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { IS_LOCAL_MODE } from '../lib/appConfig';
 import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 
@@ -52,8 +53,13 @@ export async function saveEventWithVitals(
     },
     userId: string
 ): Promise<string | null> {
+    // Local mode: no Firestore replacement for this yet (not required for
+    // priority #4 — the UI already shows live channels over WebSocket without
+    // going through here). Left as an explicit no-op instead of throwing.
+    if (IS_LOCAL_MODE) return null;
+
     try {
-        const ref = await addDoc(collection(db, 'events'), {
+        const ref = await addDoc(collection(db!, 'events'), {
             type: event.type,
             label: event.label,
             severity: event.severity,
@@ -105,10 +111,12 @@ export function useFirestore() {
     const currentUser = useStore(s => s.currentUser);
 
     useEffect(() => {
+        // Local mode: no Firestore, no remote event history.
+        if (IS_LOCAL_MODE) return;
         if (!currentUser) return;
 
         const q = query(
-            collection(db, 'events'),
+            collection(db!, 'events'),
             where('userId', '==', currentUser.uid),
             orderBy('timestamp', 'desc'),
             limit(200)

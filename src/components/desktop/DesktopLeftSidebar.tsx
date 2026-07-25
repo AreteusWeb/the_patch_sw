@@ -100,7 +100,7 @@ const VitalRow: React.FC<VitalRowProps> = ({
 
 /**
  * DesktopLeftSidebar
- * Vitals numéricos de un vistazo con mini-tendencias.
+ * Quick numeric vitals with mini trend sparklines.
  */
 interface DesktopLeftSidebarProps {
   waveforms: number[][];

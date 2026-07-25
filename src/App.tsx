@@ -15,11 +15,11 @@ import DeviceSelectionScreen from './components/DeviceSelectionScreen';
 
 /**
  * App Component.
- * Entry point de la interfaz. Maneja auth/loading (compartido) y decide
- * qué árbol de presentación renderizar — MobileApp o DesktopApp — según
- * el ancho del viewport. Ambos consumen los mismos hooks de datos
- * (useWebSocket, useStore, useFirestore), así que la lógica de negocio
- * vive en un solo lugar y nunca se duplica entre las dos capas visuales.
+ * UI entry point. Handles shared auth/loading and chooses which presentation
+ * tree to render — MobileApp or DesktopApp — based on viewport width. Both
+ * consume the same data hooks (useWebSocket, useStore, useFirestore), so
+ * business logic lives in one place and is never duplicated across the two
+ * visual layers.
  */
 export default function App() {
   useAuth();   // mounts the Firebase Auth listener (once)
@@ -30,7 +30,7 @@ export default function App() {
 
   const isDesktop = useIsDesktop();
 
-  // ── Mientras Firebase verifica la sesión (igual en mobile y desktop) ───────
+  // ── While Firebase verifies the session (same on mobile and desktop) ───────
   if (authLoading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
@@ -56,6 +56,6 @@ export default function App() {
     return <DeviceSelectionScreen />;
   }
 
-  // ── A partir de aquí, la capa visual se bifurca ─────────────────────────────
+  // ── From here, the visual layer branches ────────────────────────────────────
   return isDesktop ? <DesktopApp /> : <MobileApp />;
 }

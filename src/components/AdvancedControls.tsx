@@ -119,11 +119,11 @@ const AdvancedControls: React.FC = () => {
           {/* Izquierda: «← + Past Status */}
           <div className="flex flex-col items-center gap-1.5 min-w-[75px]">
             <div className="flex gap-1">
-              <button onClick={() => handleSeek('back', 60)} title="1 Min atrás"
+              <button onClick={() => handleSeek('back', 60)} title="1 min back"
                 className="p-2.5 px-3 rounded-full border border-slate-800/80 hover:bg-slate-800/50 transition-colors">
                 <ChevronsLeft size={16} className="text-slate-400" />
               </button>
-              <button onClick={() => handleSeek('back', 10)} title="10s atrás"
+              <button onClick={() => handleSeek('back', 10)} title="10s back"
                 className="p-2.5 px-3 rounded-full border border-slate-800/80 hover:bg-slate-800/50 transition-colors">
                 <ChevronLeft size={16} className="text-slate-400" />
               </button>
@@ -271,7 +271,7 @@ const AdvancedControls: React.FC = () => {
         </div>
       </div>
 
-      {/* Timestamp dinámico */}
+      {/* Dynamic timestamp */}
       <div className="flex justify-center items-center gap-2 mt-0.5">
         <span className="text-base font-bold tabular-nums tracking-wider bg-black px-4 flex items-center gap-2">
           <span className={cn("transition-colors", isLive ? "text-slate-500" : "text-slate-400")}>

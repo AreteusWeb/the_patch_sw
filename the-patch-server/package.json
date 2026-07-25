@@ -1,11 +1,12 @@
 {
-  "name": "chestpad-ws-server",
+  "name": "the-patch-server",
   "version": "1.0.0",
   "main": "server.cjs",
   "scripts": {
     "start": "node server.cjs"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "firebase-admin": "^13.10.0",
     "ws": "^8.20.1"
   },

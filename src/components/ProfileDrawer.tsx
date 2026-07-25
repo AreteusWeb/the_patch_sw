@@ -22,8 +22,8 @@ interface ProfileDrawerProps {
   onClose: () => void;
 }
 
-// NOTE: el mismo host que ya usa useWebSocket.ts para el WS — el server.cjs
-// atiende WS y REST (/api/...) desde el mismo servidor HTTP en Cloud Run.
+// NOTE: same host already used by useWebSocket.ts for WS — server.cjs serves
+// both WS and REST (/api/...) from the same HTTP server on Cloud Run.
 const API_BASE = 'https://chestpad-ws-server-1048900719191.us-central1.run.app';
 
 type Section = 'name' | 'email' | 'password' | 'mac' | 'ota' | null;
@@ -60,9 +60,9 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
   const [error,    setError]    = useState<string | null>(null);
 
   // ── OTA state ────────────────────────────────────────────────────────────
-  // "latestVersion" se lee de un documento de Firestore que la compañía
-  // mantiene (config/firmware). Así, cuando saquen una versión nueva, no
-  // hace falta un redeploy del frontend — solo actualizan ese documento.
+  // "latestVersion" is read from a Firestore document maintained by the
+  // company (config/firmware). When they release a new version, no frontend
+  // redeploy is needed — they only update that document.
   const [currentFwVersion, setCurrentFwVersion] = useState<string | null>(null);
   const [latestFwVersion,  setLatestFwVersion]  = useState<string | null>(null);
   const [otaStatus, setOtaStatus] = useState<'idle' | 'checking' | 'triggering' | 'sent' | 'error'>('idle');
@@ -80,7 +80,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
       setOtaStatus('idle');
       setOtaError(null);
 
-      // Trae versión actual del usuario + última versión publicada por la compañía
+      // Fetch user's current version + latest version published by the company
       (async () => {
         try {
           const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
@@ -89,7 +89,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
           const configSnap = await getDoc(doc(db, 'config', 'firmware'));
           setLatestFwVersion(configSnap.data()?.latestVersion ?? null);
         } catch {
-          // Si config/firmware no existe todavía, simplemente no mostramos "latest"
+          // If config/firmware does not exist yet, simply do not show "latest"
         }
       })();
     }

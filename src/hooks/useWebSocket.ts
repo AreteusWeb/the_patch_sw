@@ -49,10 +49,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 import { auth } from '../lib/firebase';
+import { WS_URL, IS_LOCAL_MODE } from '../lib/appConfig';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-
-const WS_URL = `wss://chestpad-ws-server-1048900719191.us-central1.run.app/ws`;
+// CHANGE: WS_URL is no longer hard-coded here — it comes from appConfig.ts,
+// which reads VITE_WS_URL (or uses a default based on VITE_APP_MODE). This
+// allows pointing at a local server (ws://localhost:8080/ws) without code changes.
 
 // 1 hour @ 250Hz = 900,000 samples per channel
 const BUFFER_SIZE = 900_000;
@@ -615,9 +617,17 @@ export const useWebSocket = () => {
         stopSim();
         setConnectionStatus('Connecting');
 
+        // Local mode: no login/Firebase — the server (also in local mode)
+        // accepts this handshake without a token. If the server were in cloud
+        // mode, it rejects this explicitly (see auth-provider on the backend).
+        if (IS_LOCAL_MODE) {
+          ws.send(JSON.stringify({ type: 'auth', local: true, deviceMac: deviceMac ?? '' }));
+          return;
+        }
+
         const user = await new Promise<import('firebase/auth').User | null>((resolve) => {
-          if (auth.currentUser) { resolve(auth.currentUser); return; }
-          const unsub = auth.onAuthStateChanged((u) => { unsub(); resolve(u); });
+          if (auth!.currentUser) { resolve(auth!.currentUser); return; }
+          const unsub = auth!.onAuthStateChanged((u) => { unsub(); resolve(u); });
         });
 
         if (!user) {

@@ -95,7 +95,7 @@ const useStore = create<
   desktopLayout: 'normal',
   simulationMode: 'normal',
   notchFilterEnabled: true,
-  ecgGridEnabled: true,
+  ecgGridEnabled: false,
   ecgPaperSpeed: 25,
   ecgGain: 10,
   ecgMeasureEnabled: false,

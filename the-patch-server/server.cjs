@@ -1,9 +1,9 @@
 /**
- * ChestPad WebSocket Server — production + relay + GCS persistence
+ * The Patch WebSocket Server — relay + provider-agnostic persistence
  * Receives real data from ESP32 according to Data_format.docx
  * Relays data to connected web clients (React app) in real time
  * Buffers 10-second chunks per device, converts raw ADC → mV,
- * and writes them to GCS for the AI/preprocessing pipeline.
+ * and writes them via storage-provider for the AI/preprocessing pipeline.
  *
  * CHANGE (2026-07-14): channel format updated per Axel's confirmation.
  * Before: channels: [[25 samples], [25 samples], ...] (array of arrays, positional)
@@ -13,33 +13,39 @@
  * 25 samples/channel every 100ms (250Hz). The 11th channel (Temperature) is
  * still in development and not sent yet.
  *
- * Install: npm install ws firebase-admin @google-cloud/storage
+ * CHANGE (wrappers): this file no longer imports firebase-admin or
+ * @google-cloud/storage directly. All of that logic lives behind
+ * ./providers/{auth,storage,db}-provider.cjs, selected by the APP_MODE
+ * environment variable:
+ *   - APP_MODE=cloud (default) -> real Firebase Auth + Firestore + GCS
+ *   - APP_MODE=local           -> no real auth, memory instead of
+ *                                 Firestore, disk instead of GCS
+ * Thus, switching providers in the future (S3, Postgres, Supabase, etc.)
+ * only requires adding a new file in providers/ — this server.cjs is not
+ * touched.
+ *
+ * Install (cloud): npm install ws firebase-admin @google-cloud/storage
+ * Install (local): npm install ws   (firebase-admin/@google-cloud/storage
+ *                   are not loaded at all when APP_MODE=local)
  * Run:     node server.cjs
  */
 
 const { WebSocketServer } = require('ws');
-const admin = require('firebase-admin');
-const { Storage } = require('@google-cloud/storage');
 const http = require('http');
 
-// ─── Firebase Admin ───────────────────────────────────────────────────────────
-// On Cloud Run, credentials are obtained automatically from the environment.
-// No service account key is needed.
-admin.initializeApp({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT || 'areteus-chestpad-backend-dev',
-});
+// Loads the-patch-server/.env into process.env. Without this, the .env file
+// was never actually read — it only worked on Cloud Run because env vars
+// are set directly on the platform there, not via an .env file.
+require('dotenv').config();
 
-// ─── GCS ──────────────────────────────────────────────────────────────────────
-// Same as Firebase Admin — on Cloud Run, credentials are obtained automatically
-// from the service's service account, no key needed.
-const storage = new Storage();
-const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'areteus-patch-ecg-raw';
-const bucket = storage.bucket(BUCKET_NAME);
-const FIRMWARE_BUCKET_NAME = process.env.FIRMWARE_BUCKET_NAME || BUCKET_NAME;
-const firmwareBucket = storage.bucket(FIRMWARE_BUCKET_NAME);
-const db = admin.firestore();
+const authProvider = require('./providers/auth-provider.cjs');
+const storageProvider = require('./providers/storage-provider.cjs');
+const dbProvider = require('./providers/db-provider.cjs');
 
+const APP_MODE = (process.env.APP_MODE || 'cloud').toLowerCase();
 const PORT = process.env.PORT || 8080;
+
+console.log(`[BOOT] APP_MODE=${APP_MODE}${APP_MODE === 'local' ? ' (no Firebase/GCS — data in memory/disk)' : ''}`);
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -53,14 +59,15 @@ function readJsonBody(req) {
     req.on('error', reject);
   });
 }
-// Verifica el Firebase ID Token del header Authorization: Bearer <token>
+// Verifies the session token from Authorization: Bearer <token>
+// (delegated to auth-provider — does not know whether Firebase or local is used)
 async function verifyAuthHeader(req) {
   const authHeader = req.headers['authorization'] || '';
   const match = authHeader.match(/^Bearer (.+)$/);
-  if (!match) return null;
+  if (!match && !authProvider.isLocalMode()) return null;
   try {
-    const decoded = await admin.auth().verifyIdToken(match[1]);
-    return decoded.uid;
+    const result = await authProvider.verifyToken(match ? match[1] : null);
+    return result ? result.uid : null;
   } catch (err) {
     console.warn(`[API AUTH FAIL] ${err.message}`);
     return null;
@@ -80,8 +87,8 @@ function sendJson(res, status, obj) {
 function normalizeMac(mac) {
   return (mac || '').replace(/:/g, '').toUpperCase();
 }
-// ─── Handler principal de rutas /api/devices/* ───
-// Regresa `true` si ya atendió el request, `false` si no era para él
+// ─── Main handler for /api/devices/* routes ───
+// Returns `true` if the request was handled, `false` if it was not for this handler
 async function handleDevicesApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -99,8 +106,7 @@ async function handleDevicesApi(req, res) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/devices') {
-    const snap = await db.collection('devices').where('ownerUid', '==', uid).get();
-    const devices = snap.docs.map(d => d.data());
+    const devices = await dbProvider.getDevicesByOwner(uid);
     sendJson(res, 200, { devices });
     return true;
   }
@@ -116,9 +122,8 @@ async function handleDevicesApi(req, res) {
       return true;
     }
 
-    const ref = db.collection('devices').doc(deviceMac);
-    const existing = await ref.get();
-    if (existing.exists) {
+    const existing = await dbProvider.getDeviceByMac(deviceMac);
+    if (existing) {
       sendJson(res, 409, { error: 'device_already_registered' });
       return true;
     }
@@ -130,7 +135,7 @@ async function handleDevicesApi(req, res) {
       firmwareVersion: null,
       registeredAt: Date.now(),
     };
-    await ref.set(deviceDoc);
+    await dbProvider.createDevice(deviceDoc);
     console.log(`[DEVICE REGISTERED] mac=${deviceMac} owner=${uid}`);
     sendJson(res, 201, { device: deviceDoc });
     return true;
@@ -138,19 +143,18 @@ async function handleDevicesApi(req, res) {
 
   if (req.method === 'DELETE' && url.pathname.startsWith('/api/devices/')) {
     const deviceMac = normalizeMac(url.pathname.split('/').pop());
-    const ref = db.collection('devices').doc(deviceMac);
-    const existing = await ref.get();
+    const existing = await dbProvider.getDeviceByMac(deviceMac);
 
-    if (!existing.exists) {
+    if (!existing) {
       sendJson(res, 404, { error: 'not_found' });
       return true;
     }
-    if (existing.data().ownerUid !== uid) {
+    if (existing.ownerUid !== uid) {
       sendJson(res, 403, { error: 'not_owner' });
       return true;
     }
 
-    await ref.delete();
+    await dbProvider.deleteDevice(deviceMac);
     console.log(`[DEVICE DELETED] mac=${deviceMac} owner=${uid}`);
     sendJson(res, 200, { ok: true });
     return true;
@@ -160,7 +164,7 @@ async function handleDevicesApi(req, res) {
   return true;
 }
 
-// ─── FASE 2 — OTA (trigger firmware update) ───────────────────────────────
+// ─── PHASE 2 — OTA (trigger firmware update) ──────────────────────────────
 // This keeps the owner check aligned with the current frontend model, where
 // the user's profile stores a single device MAC in users/{uid}.deviceMac.
 const OTA_URL_EXPIRY_MS = 60 * 60 * 1000;
@@ -197,8 +201,8 @@ async function handleOtaApi(req, res) {
       return true;
     }
 
-    const userDoc = await db.collection('users').doc(uid).get();
-    const ownedMac = normalizeMac(userDoc.data()?.deviceMac);
+    const userDoc = await dbProvider.getUser(uid);
+    const ownedMac = normalizeMac(userDoc?.deviceMac);
     if (!ownedMac || ownedMac !== mac) {
       sendJson(res, 403, { error: 'not_owner' });
       return true;
@@ -211,25 +215,19 @@ async function handleOtaApi(req, res) {
     }
 
     const firmwarePath = `firmware/${version}/update.bin`;
-    const file = firmwareBucket.file(firmwarePath);
-    const [exists] = await file.exists();
-    if (!exists) {
+    const firmware = await storageProvider.getFirmwareDownloadUrl(firmwarePath);
+    if (!firmware.exists) {
       sendJson(res, 404, { error: 'firmware_not_found', path: firmwarePath });
       return true;
     }
 
-    const [signedUrl] = await file.getSignedUrl({
-      action: 'read',
-      expires: Date.now() + OTA_URL_EXPIRY_MS,
-    });
-
-    deviceSession.ws.send(JSON.stringify({ type: 'ota', url: signedUrl, version }));
+    deviceSession.ws.send(JSON.stringify({ type: 'ota', url: firmware.url, version }));
     console.log(`[OTA] Triggered device=${mac} version=${version} by uid=${uid}`);
 
-    await db.collection('users').doc(uid).set(
-      { lastOtaTriggeredVersion: version, lastOtaTriggeredAt: Date.now() },
-      { merge: true }
-    );
+    await dbProvider.setUserOtaTriggered(uid, {
+      lastOtaTriggeredVersion: version,
+      lastOtaTriggeredAt: Date.now(),
+    });
 
     sendJson(res, 200, { ok: true, version, expiresInMs: OTA_URL_EXPIRY_MS });
     return true;
@@ -332,8 +330,8 @@ function onChannelsPacket(deviceId, timestamp, channelsArr) {
   buf.packetCount++;
 
   if (buf.packetCount >= PACKETS_PER_CHUNK) {
-    flushChunkToGCS(deviceId, buf).catch(err => {
-      console.error(`[GCS ERROR] device=${deviceId} | ${err.message}`);
+    flushChunk(deviceId, buf).catch(err => {
+      console.error(`[STORAGE ERROR] device=${deviceId} | ${err.message}`);
       // TODO: no retry/local persistence for now (conscious decision,
       // see pipeline proposal) — if the flush fails, that chunk is lost.
     });
@@ -341,7 +339,7 @@ function onChannelsPacket(deviceId, timestamp, channelsArr) {
   }
 }
 
-async function flushChunkToGCS(deviceId, buf) {
+async function flushChunk(deviceId, buf) {
   // CHANGE: sort by channel index so the chunk always comes out consistent
   // regardless of the order channels arrived in within each packet.
   const sortedIndices = [...buf.channelData.keys()].sort((a, b) => a - b);
@@ -360,8 +358,8 @@ async function flushChunkToGCS(deviceId, buf) {
   const dateStr = new Date().toISOString().slice(0, 10);
   const path = `${deviceId}/${dateStr}/${buf.startTs}.json`;
 
-  await bucket.file(path).save(payload, { contentType: 'application/json' });
-  console.log(`[GCS] device=${deviceId} | chunk written → gs://${BUCKET_NAME}/${path} | channels=${channel_labels.join(',')} | samples/ch=${data[0]?.length ?? 0}`);
+  const { location } = await storageProvider.saveChunk(path, payload);
+  console.log(`[STORAGE] device=${deviceId} | chunk written → ${location} | channels=${channel_labels.join(',')} | samples/ch=${data[0]?.length ?? 0}`);
 }
 
 wss.on('connection', (ws, req) => {
@@ -414,21 +412,47 @@ wss.on('connection', (ws, req) => {
     // ── Auth handshake ────────────────────────────────────────────────────────
     if (msg.type === 'auth') {
 
-      // ── Webclient: Firebase JWT ────────────────────────────────────────────
+      // ── Webclient: local mode, no login (only if the SERVER is in
+      // APP_MODE=local — we do not trust the client to declare this) ─────────
+      if (msg.local === true) {
+        if (!authProvider.isLocalMode()) {
+          console.warn('[AUTH FAIL] Client requested local auth but the server is running in cloud mode');
+          ws.send(JSON.stringify({ type: 'auth_error', reason: 'local_auth_not_allowed' }));
+          ws.close();
+          return;
+        }
+
+        const { uid } = await authProvider.verifyToken(null); // local: always fixed dev uid
+
+        clearTimeout(authTimeout);
+        ws.authenticated = true;
+        ws.role          = 'webclient';
+        ws.uid           = uid;
+        ws.deviceMac     = (msg.deviceMac ?? '').replace(/:/g, '').toUpperCase();
+
+        webClients.add(ws);
+        console.log(`[AUTH OK] WEBCLIENT (local) | uid=${uid} | deviceMac=${ws.deviceMac} | webclients=${webClients.size}`);
+        ws.send(JSON.stringify({ type: 'auth_ok', role: 'webclient', uid }));
+        return;
+      }
+
+      // ── Webclient: real session token (Firebase or other provider) ────────
       if (msg.token) {
         try {
-          const decoded = await admin.auth().verifyIdToken(msg.token);
+          const result = await authProvider.verifyToken(msg.token);
+          if (!result) throw new Error('token rejected by auth provider');
+          const { uid } = result;
 
           clearTimeout(authTimeout);
           ws.authenticated = true;
           ws.role          = 'webclient';
-          ws.uid           = decoded.uid;
+          ws.uid           = uid;
           // Normalize MAC the same way as devices (no colons, uppercase)
           ws.deviceMac     = (msg.deviceMac ?? '').replace(/:/g, '').toUpperCase();
 
           webClients.add(ws);
-          console.log(`[AUTH OK] WEBCLIENT | uid=${decoded.uid} | deviceMac=${ws.deviceMac} | webclients=${webClients.size}`);
-          ws.send(JSON.stringify({ type: 'auth_ok', role: 'webclient', uid: decoded.uid }));
+          console.log(`[AUTH OK] WEBCLIENT | uid=${uid} | deviceMac=${ws.deviceMac} | webclients=${webClients.size}`);
+          ws.send(JSON.stringify({ type: 'auth_ok', role: 'webclient', uid }));
 
         } catch (err) {
           console.warn(`[AUTH FAIL] Invalid token — ${err.message}`);

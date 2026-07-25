@@ -3,14 +3,13 @@ import { useState, useEffect } from 'react';
 /**
  * useIsDesktop
  * ------------------------------------------------------------------
- * Detecta si el viewport actual debe usar el layout de escritorio.
- * Usa `matchMedia` (más eficiente que escuchar `resize` a mano) y se
- * actualiza en vivo si el usuario redimensiona la ventana o rota el
- * dispositivo — útil por ejemplo si alguien usa la app en una tablet
- * y gira la pantalla.
+ * Detects whether the current viewport should use the desktop layout.
+ * Uses `matchMedia` (more efficient than listening to `resize` manually) and
+ * updates live if the user resizes the window or rotates the device — useful
+ * e.g. when someone uses the app on a tablet and rotates the screen.
  *
- * Breakpoint: 1024px (el estándar "lg" de Tailwind). Ajusta este
- * número si tu especificación de escritorio define otro punto de corte.
+ * Breakpoint: 1024px (Tailwind's standard "lg"). Adjust this number if your
+ * desktop spec defines a different breakpoint.
  */
 const DESKTOP_BREAKPOINT_PX = 1024;
 

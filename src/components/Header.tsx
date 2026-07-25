@@ -46,7 +46,7 @@ const Header: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Filtro Notch 60Hz — quita el zumbido de línea eléctrica del ECG */}
+        {/* 60Hz notch filter — removes power-line hum from the ECG */}
         <button
           onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
           title={notchFilterEnabled ? '60Hz notch filter: ON' : '60Hz notch filter: OFF'}

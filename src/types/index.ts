@@ -75,7 +75,7 @@ export interface AppState {
   isAdvancedMenuOpen: boolean;
   notchFilterEnabled: boolean;
   desktopLayout: DesktopLayoutMode;
-  /** ECG paper grid on waveform strips (clinical default: on). */
+  /** ECG paper grid on waveform strips (default: off — enable for clinical paper view). */
   ecgGridEnabled: boolean;
   ecgPaperSpeed: EcgPaperSpeedSetting;
   ecgGain: EcgGainSetting;

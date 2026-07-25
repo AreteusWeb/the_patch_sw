@@ -42,6 +42,23 @@ npm run dev
 
 Point your ESP32 (or run `mock/mock-esp32.cjs` to simulate one) at `ws://<your-machine-ip>:8080`, open the app, add the device's MAC on "My Devices", and you should see live channels.
 
+**Optional — skip device registration (local dev only):** you can go straight to the main UI and show whatever device is streaming, without adding or selecting a MAC. This only works in `local` mode; both sides must opt in:
+
+`the-patch-server/.env`:
+```dotenv
+APP_MODE=local
+DEV_SHOW_ANY_DEVICE=true
+```
+
+Root `.env`:
+```dotenv
+VITE_APP_MODE=local
+VITE_WS_URL=ws://localhost:8080/ws
+VITE_DEV_SHOW_ANY_DEVICE=true
+```
+
+Restart the backend and frontend after changing `.env` (Vite may not pick up env changes live). With both flags on, the backend ignores MAC matching for the relay — any connected ESP32 or mock device is shown immediately. Leave either flag off and behavior is unchanged.
+
 ## Testing with a real ESP32
 
 You don't need to run anything locally to test with a real device — the ESP32's auth (by MAC) was never tied to Firebase, so this hasn't changed. Pick whichever fits what you're testing:

@@ -45,7 +45,14 @@ const dbProvider = require('./providers/db-provider.cjs');
 const APP_MODE = (process.env.APP_MODE || 'cloud').toLowerCase();
 const PORT = process.env.PORT || 8080;
 
-console.log(`[BOOT] APP_MODE=${APP_MODE}${APP_MODE === 'local' ? ' (no Firebase/GCS — data in memory/disk)' : ''}`);
+// DEV_SHOW_ANY_DEVICE — convenience flag for local dev, requested so nobody
+// has to register/select a device just to see data flowing during
+// development. Only takes effect when APP_MODE=local — same safety
+// principle as the "local" auth handshake: a flag like this must never be
+// able to change behavior on a cloud deployment, no matter how it's set.
+const DEV_SHOW_ANY_DEVICE = APP_MODE === 'local' && ['true', '1'].includes((process.env.DEV_SHOW_ANY_DEVICE || '').toLowerCase());
+
+console.log(`[BOOT] APP_MODE=${APP_MODE}${APP_MODE === 'local' ? ' (no Firebase/GCS — data in memory/disk)' : ''}${DEV_SHOW_ANY_DEVICE ? ' | DEV_SHOW_ANY_DEVICE=true (ignoring MAC match — DEV ONLY)' : ''}`);
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -60,7 +67,7 @@ function readJsonBody(req) {
   });
 }
 // Verifies the session token from Authorization: Bearer <token>
-// (delegated to auth-provider — does not know whether Firebase or local is used)
+// (delegado al auth-provider — no sabe si por dentro es Firebase o local)
 async function verifyAuthHeader(req) {
   const authHeader = req.headers['authorization'] || '';
   const match = authHeader.match(/^Bearer (.+)$/);
@@ -87,8 +94,8 @@ function sendJson(res, status, obj) {
 function normalizeMac(mac) {
   return (mac || '').replace(/:/g, '').toUpperCase();
 }
-// ─── Main handler for /api/devices/* routes ───
-// Returns `true` if the request was handled, `false` if it was not for this handler
+// ─── Handler principal de rutas /api/devices/* ───
+// Regresa `true` si ya atendió el request, `false` si no era para él
 async function handleDevicesApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -164,7 +171,7 @@ async function handleDevicesApi(req, res) {
   return true;
 }
 
-// ─── PHASE 2 — OTA (trigger firmware update) ──────────────────────────────
+// ─── FASE 2 — OTA (trigger firmware update) ───────────────────────────────
 // This keeps the owner check aligned with the current frontend model, where
 // the user's profile stores a single device MAC in users/{uid}.deviceMac.
 const OTA_URL_EXPIRY_MS = 60 * 60 * 1000;
@@ -384,10 +391,12 @@ wss.on('connection', (ws, req) => {
     if (isBinary) {
       if (ws.role !== 'device') return;
 
-      // Relay only to the webclient that owns this device
+      // Relay only to the webclient that owns this device — unless
+      // DEV_SHOW_ANY_DEVICE is on (local dev convenience), in which case
+      // relay to every connected webclient regardless of MAC.
       let relayed = 0;
       for (const client of webClients) {
-        if (client.readyState === client.OPEN && client.deviceMac === ws.deviceId) {
+        if (client.readyState === client.OPEN && (DEV_SHOW_ANY_DEVICE || client.deviceMac === ws.deviceId)) {
           client.send(data, { binary: true });
           relayed++;
         }
@@ -422,7 +431,7 @@ wss.on('connection', (ws, req) => {
           return;
         }
 
-        const { uid } = await authProvider.verifyToken(null); // local: always fixed dev uid
+        const { uid } = await authProvider.verifyToken(null); // local: siempre uid fijo de dev
 
         clearTimeout(authTimeout);
         ws.authenticated = true;
@@ -436,7 +445,7 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
-      // ── Webclient: real session token (Firebase or other provider) ────────
+      // ── Webclient: token de sesión real (Firebase u otro proveedor) ────────
       if (msg.token) {
         try {
           const result = await authProvider.verifyToken(msg.token);
@@ -506,13 +515,15 @@ wss.on('connection', (ws, req) => {
       sess.packetCount++;
       sess.lastSeen = Date.now();
 
-      // Relay ONLY to the webclient whose deviceMac matches this device
-      // (live behavior, unchanged — still sends raw values, not mV, so as
-      // not to break what the frontend already consumes)
+      // Relay to the webclient whose deviceMac matches this device — unless
+      // DEV_SHOW_ANY_DEVICE is on (local dev convenience), in which case
+      // relay to every connected webclient regardless of MAC (still sends
+      // raw values, not mV, so as not to break what the frontend already
+      // consumes)
       const payload = JSON.stringify({ timestamp, channels });
       let relayed = 0;
       for (const client of webClients) {
-        if (client.readyState === client.OPEN && client.deviceMac === ws.deviceId) {
+        if (client.readyState === client.OPEN && (DEV_SHOW_ANY_DEVICE || client.deviceMac === ws.deviceId)) {
           client.send(payload);
           relayed++;
         }

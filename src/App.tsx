@@ -12,6 +12,7 @@ import LoginScreen from './components/LoginScreen';
 import MobileApp from './components/mobile/MobileApp';
 import DesktopApp from './components/desktop/DesktopApp';
 import DeviceSelectionScreen from './components/DeviceSelectionScreen';
+import { DEV_SHOW_ANY_DEVICE } from './lib/appConfig';
 
 /**
  * App Component.
@@ -52,7 +53,7 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  if (!isDeviceSelected) {
+  if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {
     return <DeviceSelectionScreen />;
   }
 

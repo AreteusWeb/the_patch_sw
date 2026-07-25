@@ -15,7 +15,17 @@ export const APP_MODE: AppMode =
 
 export const IS_LOCAL_MODE = APP_MODE === 'local';
 
-// ─── ChestPad server WebSocket ───────────────────────────────────────────────
+// DEV_SHOW_ANY_DEVICE — local dev convenience, requested so nobody has to
+// register/select a device just to see data flowing. Skips the "My
+// Devices" screen and shows whatever device is streaming, straight to the
+// UI. Only takes effect in local mode; the backend has the matching flag
+// (DEV_SHOW_ANY_DEVICE in the-patch-server/.env) and independently
+// enforces the same "local mode only" rule — a client can't turn this on
+// against a cloud-mode server just by setting this env var.
+export const DEV_SHOW_ANY_DEVICE =
+  IS_LOCAL_MODE && import.meta.env.VITE_DEV_SHOW_ANY_DEVICE === 'true';
+
+// ─── The Patch server WebSocket ───────────────────────────────────────────────
 
 // This URL used to be hard-coded inside useWebSocket.ts pointing always at
 // production. It can now be overridden with VITE_WS_URL — required for local

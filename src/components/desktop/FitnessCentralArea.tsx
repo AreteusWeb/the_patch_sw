@@ -1,9 +1,9 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
-import WaveformCanvas from '../WaveformCanvas';
-import { CH_RANGES, LEAD_CHANNEL_INDEX } from '../../hooks/useWebSocket';
-import { cn } from '../../utils/cn';
+import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
+import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
+import EcgPaperControls from './EcgPaperControls';
 import {
   formatDuration,
   getActivityIntensity,
@@ -11,11 +11,10 @@ import {
   getHrvProxyMs,
   getWorkoutPhase,
 } from '../../utils/fitnessMetrics';
-import EcgPaperControls from './EcgPaperControls';
+import { cn } from '../../utils/cn';
 
 const MAX_HISTORY_SECONDS = 3600;
-const RESP_WAVEFORM_INDEX = 8;
-const LEAD_II = LEAD_CHANNEL_INDEX['Lead II'];
+const LEAD_II = 1;
 
 const PHASES = [
   { id: 'warm-up', label: 'Warm-up' },
@@ -37,8 +36,6 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
   const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
   const ecgGain = useStore(s => s.ecgGain);
-  const ecgMeasureEnabled = useStore(s => s.ecgMeasureEnabled);
-  // Fitness: lighter paper grid by default when grid is on; overlays stay primary.
   const paperGrid = ecgGridEnabled ? 'subtle' : 'off';
 
   const isLive = historyOffset === 0;
@@ -57,13 +54,13 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
     return () => clearInterval(id);
   }, [isConnected, historyOffset]);
 
-  // Session phase progress — assume a 3h training window for phase mapping.
+  // Session phase progress ? assume a 3h training window for phase mapping.
   const progress01 = Math.min(1, elapsed / (3 * 3600));
   const activePhase = getWorkoutPhase(progress01);
 
   const tempDisplay =
     typeof vitals.temperature.value === 'number'
-      ? `${vitals.temperature.value}°C`
+      ? `${vitals.temperature.value}�C`
       : '--';
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
@@ -80,15 +77,18 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const zoneMax = zoneSamples.length ? Math.max(...zoneSamples) : 1;
   const zoneRange = zoneMax - zoneMin || 1;
 
+  // Fixed canvas height so Fitness metric bar charts cannot flex-overlap the ECG lanes.
+  const channelsCanvasHeight = ecgGridEnabled ? undefined : 420;
+
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-black overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
-        {/* Real-time ECG + HRV */}
-        <section>
-          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
+        {/* All channels ? single compact canvas (intrinsic height, never flex-fill) */}
+        <section className="relative z-10 flex flex-col flex-shrink-0 isolate">
+          <div className="flex items-center justify-between mb-2 gap-3 flex-wrap flex-shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                Real-Time ECG + HRV
+                All Channels
               </h2>
               <div className="flex items-center gap-3 text-[10px]">
                 <span className="text-slate-500">
@@ -96,64 +96,41 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                   <span className="text-teal-400 tabular-nums font-semibold">
                     {hrv != null ? `${hrv} ms` : '--'}
                   </span>
-                  {hrv != null && <span className="text-slate-600"> (est.)</span>}
                 </span>
                 <span style={{ color: zone.color }} className="font-semibold uppercase tracking-wider">
                   {zone.label}
+                </span>
+                <span className="text-white tabular-nums font-light">
+                  {hasRealData && isConnected ? hr : '--'}
+                  <span className="text-slate-500 ml-1">bpm</span>
                 </span>
               </div>
             </div>
             <EcgPaperControls compact />
           </div>
-          <div className="relative bg-slate-950/80 rounded-xl border border-white/5 overflow-hidden h-44">
-            <span className="absolute left-3 top-2 z-10 text-[10px] font-bold text-teal-500/80 uppercase">
-              ECG Rhythm · Lead II
-            </span>
-            <span className="absolute right-3 top-2 z-10 text-lg font-light tabular-nums text-white">
-              {hasRealData && isConnected ? hr : '--'}
-              <span className="text-[10px] text-slate-500 ml-1">bpm</span>
-            </span>
-            <WaveformCanvas
-              data={waveforms[LEAD_II]}
-              height={176}
-              color="#2dd4bf"
-              min={CH_RANGES[LEAD_II][0]}
-              max={CH_RANGES[LEAD_II][1]}
-              autoScale={false}
+          <div
+            className="rounded-xl border border-white/5 overflow-hidden bg-[#0a0a0f] flex-shrink-0"
+            style={channelsCanvasHeight != null ? { height: channelsCanvasHeight } : undefined}
+          >
+            <MultiChannelWaveformCanvas
+              waveforms={waveforms}
+              channels={DESKTOP_WAVEFORM_CHANNELS}
+              fill={ecgGridEnabled}
+              height={channelsCanvasHeight ?? 420}
+              minHeight={channelsCanvasHeight ?? 420}
               paperGrid={paperGrid}
               paperSpeed={ecgPaperSpeed}
               gain={ecgGain}
-              showCalibration={ecgGridEnabled}
-              measureEnabled={ecgMeasureEnabled}
-              lineWidth={2}
             />
           </div>
         </section>
 
-        {/* Training overlay waveforms */}
-        <section>
+        {/* Training metrics (non-waveform) */}
+        <section className="relative z-0 flex-shrink-0">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Training Overlay Waveforms
+            Training Metrics
           </h2>
           <div className="grid grid-cols-1 gap-2">
-            <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                  Respiration
-                </span>
-                <span className="text-[10px] text-teal-400/80">Breathing Efficiency</span>
-              </div>
-              <WaveformCanvas
-                data={waveforms[RESP_WAVEFORM_INDEX]}
-                height={36}
-                color="#5eead4"
-                min={CH_RANGES[RESP_WAVEFORM_INDEX][0]}
-                max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
-                gridLines={false}
-                lineWidth={1.2}
-              />
-            </div>
-
             <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
@@ -166,16 +143,16 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                   {intensity.label}
                 </span>
               </div>
-              <div className="h-6 flex items-end gap-px">
+              <div className="h-6 flex items-end gap-px overflow-hidden">
                 {Array.from({ length: 40 }).map((_, i) => {
                   const base = intensity.level / 100;
-                  const h = Math.max(12, (base * 70 + Math.sin(i * 0.4 + elapsed * 0.05) * 20 + 20));
+                  const hPx = Math.max(3, Math.min(24, base * 16 + Math.sin(i * 0.4 + elapsed * 0.05) * 5 + 6));
                   return (
                     <div
                       key={i}
                       className="flex-1 rounded-sm"
                       style={{
-                        height: `${Math.min(100, h)}%`,
+                        height: hPx,
                         backgroundColor: zone.color,
                         opacity: 0.35 + (i / 40) * 0.5,
                       }}
@@ -194,7 +171,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                   {tempDisplay}
                   {vitals.temperature.trend === 'up' && tempDisplay !== '--' && (
                     <span className="text-[10px] text-teal-400 ml-2 uppercase tracking-wider">
-                      Rising – Monitor
+                      Rising ? Monitor
                     </span>
                   )}
                 </div>
@@ -215,13 +192,13 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
         </section>
 
         {/* Timeline + activity map */}
-        <section>
+        <section className="relative z-0 flex-shrink-0">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
             Timeline + Activity Map
           </h2>
           <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
             <div className="text-[10px] text-slate-500 mb-2 uppercase tracking-wider">
-              Workout Phases · Session {formatDuration(elapsed)}
+              Workout Phases � Session {formatDuration(elapsed)}
             </div>
             <div className="flex items-center gap-0 mb-3">
               {PHASES.map((phase, i) => {
@@ -253,18 +230,18 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span>
-                Accelerometer · Steps:{' '}
+                Accelerometer � Steps:{' '}
                 <span className="text-white tabular-nums font-medium">
                   {activity.steps.toLocaleString()}
                 </span>
               </span>
-              <span className="text-slate-500">Pace Trend · {activity.activityType}</span>
+              <span className="text-slate-500">Pace Trend � {activity.activityType}</span>
             </div>
           </div>
         </section>
 
         {/* HR + Power Zone Graph */}
-        <section>
+        <section className="relative z-0 flex-shrink-0">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
             HR + Intensity Zone
           </h2>
@@ -274,19 +251,19 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 {zone.label} Zone
               </span>
               <span className="text-[10px] text-slate-500">
-                Combined view · Live waveform energy
+                Combined view � Live waveform energy
               </span>
             </div>
-            <div className="h-16 flex items-end gap-px">
+            <div className="h-16 flex items-end gap-px overflow-hidden">
               {zoneSamples.length >= 2 ? (
                 zoneSamples.map((val, i) => {
-                  const h = ((val - zoneMin) / zoneRange) * 100;
+                  const hPx = Math.max(4, ((val - zoneMin) / zoneRange) * 64);
                   return (
                     <div
                       key={i}
                       className="flex-1 rounded-t-sm"
                       style={{
-                        height: `${Math.max(8, h)}%`,
+                        height: hPx,
                         backgroundColor: zone.color,
                         opacity: 0.45 + (i / zoneSamples.length) * 0.4,
                       }}
@@ -295,7 +272,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 })
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-600 italic">
-                  Waiting for ECG…
+                  Waiting for ECG?
                 </div>
               )}
             </div>
@@ -347,7 +324,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
             )}
           >
-            ● Live
+            ? Live
           </button>
         </div>
       </div>

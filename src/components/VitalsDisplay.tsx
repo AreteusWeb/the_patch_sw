@@ -86,7 +86,8 @@ const VitalCard: React.FC<{
   const stableStatus = { ...status, severity: stableSeverity.current as typeof status.severity };
 
   // Show '--' if there is no real data yet, if disconnected, or if frozen without data
-  const showDash = !hasData || disconnected;
+  // Keep vitals visible while scrubbing history even if the socket dropped
+  const showDash = !hasData;
 
   const alertLabel = !frozen && !dismissed && !!onAlertTap && !showDash
     ? getAlertLabel(label, stableStatus)
@@ -147,7 +148,7 @@ const VitalCard: React.FC<{
           <span className={cn(
             "font-light tracking-tight transition-colors duration-300",
             isXL ? 'text-7xl' : size === 'normal' ? 'text-4xl' : 'text-2xl',
-            frozen ? "text-slate-400" : showDash ? "text-slate-600" : color
+            showDash ? "text-slate-600" : frozen ? "text-teal-300" : color
           )}>
             {showDash ? '--' : status.value}
           </span>
@@ -157,12 +158,12 @@ const VitalCard: React.FC<{
             <span className={cn(
               "font-light transition-all duration-300 ml-1",
               isXL ? 'text-2xl' : size === 'normal' ? 'text-lg' : 'text-xs',
-              frozen ? "text-slate-500" : color
+              frozen ? "text-teal-500/70" : color
             )}>{status.unit}</span>
           )}
         </div>
 
-        {/* Severity arrows — only with real data */}
+        {/* Severity arrows — hide while scrubbing past (values still update) */}
         {!frozen && !showDash && (
           <SeverityArrows
             trend={status.trend}
@@ -176,7 +177,7 @@ const VitalCard: React.FC<{
       <span className={cn(
         "font-normal uppercase tracking-widest mt-1 transition-all duration-300",
         size === 'sm' ? 'text-[8px]' : 'text-xs',
-        frozen ? "text-slate-600" : "text-slate-500"
+        frozen ? "text-teal-700" : "text-slate-500"
       )}>{label}</span>
     </div>
   );
@@ -208,19 +209,10 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
   const hasRealData   = useStore(state => state.hasRealData);  // ← new flag
   const isAdvanced    = viewMode === 'Advanced';
 
-  const frozenVitals = React.useRef(vitals);
-  const wasFrozen    = React.useRef(false);
-  const isFrozen     = historyOffset > 0;
-
-  if (isFrozen && !wasFrozen.current) {
-    frozenVitals.current = vitals;
-    wasFrozen.current = true;
-  }
-  if (!isFrozen && wasFrozen.current) {
-    wasFrozen.current = false;
-  }
-
-  const displayVitals = isFrozen ? frozenVitals.current : vitals;
+  // Scrubbing updates vitals from history / re-estimation in useWebSocket —
+  // always show the store values for the current historyOffset.
+  const displayVitals = vitals;
+  const isFrozen = historyOffset > 0;
 
   const prevOffset = React.useRef(historyOffset);
   const [goLiveSignal, setGoLiveSignal] = React.useState(0);

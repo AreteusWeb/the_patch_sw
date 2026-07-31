@@ -95,7 +95,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               Temp <span className="text-slate-300 tabular-nums">{tempDisplay}</span>
             </div>
             <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
-              Activity <span className="text-slate-300">{activity.activityType} � {activity.steps.toLocaleString()} steps</span>
+              Activity <span className="text-slate-300">{activity.activityType} - {activity.steps.toLocaleString()} steps</span>
             </div>
           </div>
         </section>
@@ -144,7 +144,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
                 : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
             )}
           >
-            ? Live
+            Live
           </button>
         </div>
       </div>

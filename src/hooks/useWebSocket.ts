@@ -446,7 +446,57 @@ export const useWebSocket = () => {
   const historyOffsetRef = useRef(historyOffset);
   useEffect(() => { historyOffsetRef.current = historyOffset; }, [historyOffset]);
 
+  // Pause freeze only (desktop Pause button). Scrubber sets historyOffset
+  // directly and must not be overwritten by this ticker.
+  const viewEpochRef = useRef<number | null>(null);
+  const pauseFrozenRef = useRef(false);
+  const pauseTickerRef = useRef(false);
+
+  useEffect(() => {
+    let prevLive = useStore.getState().isLive;
+    let prevOffset = useStore.getState().historyOffset;
+
+    const unsub = useStore.subscribe((state) => {
+      historyOffsetRef.current = state.historyOffset;
+
+      if (state.isLive || state.historyOffset === 0) {
+        viewEpochRef.current = null;
+        pauseFrozenRef.current = false;
+      } else if (prevLive && !state.isLive) {
+        pauseFrozenRef.current = true;
+        viewEpochRef.current = Date.now() - state.historyOffset * 1000;
+      } else if (
+        !pauseTickerRef.current &&
+        state.historyOffset !== prevOffset
+      ) {
+        // User scrubber/seek — fixed offset, no auto-advance
+        pauseFrozenRef.current = false;
+        viewEpochRef.current = null;
+      }
+
+      prevLive = state.isLive;
+      prevOffset = state.historyOffset;
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!pauseFrozenRef.current || viewEpochRef.current == null) return;
+      if (useStore.getState().isLive) return;
+      const offset = Math.min(3600, Math.max(0, (Date.now() - viewEpochRef.current) / 1000));
+      pauseTickerRef.current = true;
+      useStore.setState({ historyOffset: offset, isLive: false });
+      pauseTickerRef.current = false;
+      historyOffsetRef.current = offset;
+    }, 250);
+    return () => clearInterval(id);
+  }, []);
+
   const prevVitals = useRef({ hr: 0, spo2: 0, resp: 0 });
+  // Snapshots keyed by ring sample count so scrub offset maps 1:1 to past vitals
+  const vitalsHistoryRef = useRef<Array<{ atSize: number; hr: number; spo2: number; rr: number }>>([]);
+  const MAX_VITAL_SNAPS = 3600;
 
   const getTrend = useCallback((curr: number, prev: number, margin: number): 'up' | 'down' | 'stable' => {
     if (prev === 0) return 'stable';
@@ -454,6 +504,77 @@ export const useWebSocket = () => {
     if (curr < prev - margin) return 'down';
     return 'stable';
   }, []);
+
+  const lookupVitalsAtSize = useCallback((targetSize: number) => {
+    const hist = vitalsHistoryRef.current;
+    if (hist.length === 0) return null;
+    let lo = 0;
+    let hi = hist.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (hist[mid].atSize < targetSize) lo = mid + 1;
+      else hi = mid;
+    }
+    const a = hist[Math.max(0, lo - 1)];
+    const b = hist[lo];
+    return Math.abs(a.atSize - targetSize) <= Math.abs(b.atSize - targetSize) ? a : b;
+  }, []);
+
+  const applyDisplayVitals = useCallback((hr: number, spo2: number, rr: number) => {
+    const hrTrend   = getTrend(hr, prevVitals.current.hr, 1);
+    const spo2Trend = getTrend(spo2, prevVitals.current.spo2, 0.5);
+    const rrTrend   = getTrend(rr, prevVitals.current.resp, 1);
+    prevVitals.current = { hr, spo2, resp: rr };
+
+    if (hr > 0) {
+      updateVitals({
+        heartRate: {
+          value: hr,
+          trend: hrTrend,
+          severity: hr > 120 || hr < 45 ? 'critical' : hr > 100 || hr < 55 ? 'moderate' : 'normal',
+        }
+      });
+      if (!useStore.getState().hasRealData) {
+        useStore.getState().setHasRealData(true);
+      }
+    }
+
+    updateVitals({
+      spo2: {
+        value: spo2,
+        trend: spo2Trend,
+        severity: spo2 < 90 ? 'critical' : spo2 < 94 ? 'moderate' : 'normal',
+      },
+      respirationRate: {
+        value: rr > 0 ? rr : 16,
+        trend: rrTrend,
+        severity: rr > 25 || rr < 10 ? 'critical' : 'normal',
+      },
+    });
+  }, [getTrend, updateVitals]);
+
+  // Instant vitals update when the scrubber moves (don't wait for the 1s tick)
+  useEffect(() => {
+    const offsetSec = historyOffset;
+    if (offsetSec <= 0) return;
+
+    const leadIIRing = rings.current[LEAD_CHANNEL_INDEX['Lead II']];
+    const respRing   = rings.current[RESP_SLOT];
+    const ppgRing    = rings.current[PPG_SLOT];
+    const offsetSamples = Math.round(offsetSec * 250);
+    const targetSize = Math.max(0, leadIIRing.size - offsetSamples);
+
+    const snap = lookupVitalsAtSize(targetSize);
+    if (snap) {
+      applyDisplayVitals(snap.hr, snap.spo2, snap.rr);
+      return;
+    }
+
+    const hr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
+    const spo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
+    const rr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
+    applyDisplayVitals(hr, spo2, rr);
+  }, [historyOffset, lookupVitalsAtSize, applyDisplayVitals]);
 
   // ── Render Loop + Vitals Estimation @ 30fps ─────────────────────────────────
   useEffect(() => {
@@ -466,7 +587,8 @@ export const useWebSocket = () => {
       if (now - last < 33) return;
       last = now;
 
-      const offsetSamples = historyOffsetRef.current * 250;
+      const offsetSec = historyOffsetRef.current;
+      const offsetSamples = Math.round(offsetSec * 250);
 
       // Waveforms (0-7 leads, 8 Resp, 9 PPG, 10 Temp-reserved)
       const next = rings.current.map((ring, slot) => {
@@ -503,52 +625,42 @@ export const useWebSocket = () => {
       const respRing   = rings.current[RESP_SLOT];
       const ppgRing    = rings.current[PPG_SLOT];
 
-      const ecg  = offsetSamples === 0 ? leadIIRing.slice(750)  : leadIIRing.sliceAt(750, offsetSamples);
-      const ppg  = offsetSamples === 0 ? ppgRing.slice(250)     : ppgRing.sliceAt(250, offsetSamples);
-      const resp = offsetSamples === 0 ? respRing.slice(1500)   : respRing.sliceAt(1500, offsetSamples);
+      // Always record a live-edge snapshot keyed by ring size for scrub lookup
+      const liveHr   = estimateHR(leadIIRing.slice(750));
+      const liveSpo2 = estimateSpO2(ppgRing.slice(250));
+      const liveRr   = estimateResp(respRing.slice(1500));
+      vitalsHistoryRef.current.push({
+        atSize: leadIIRing.size,
+        hr: liveHr > 0 ? liveHr : prevVitals.current.hr,
+        spo2: liveSpo2,
+        rr: liveRr > 0 ? liveRr : 16,
+      });
+      if (vitalsHistoryRef.current.length > MAX_VITAL_SNAPS) {
+        vitalsHistoryRef.current.splice(0, vitalsHistoryRef.current.length - MAX_VITAL_SNAPS);
+      }
 
-      const hr   = estimateHR(ecg);
-      const spo2 = estimateSpO2(ppg);
-      const rr   = estimateResp(resp);
+      let hr = liveHr;
+      let spo2 = liveSpo2;
+      let rr = liveRr;
 
-      const hrTrend   = getTrend(hr, prevVitals.current.hr, 1);
-      const spo2Trend = getTrend(spo2, prevVitals.current.spo2, 0.5);
-      const rrTrend   = getTrend(rr, prevVitals.current.resp, 1);
-
-      prevVitals.current = { hr, spo2, resp: rr };
-
-      if (hr > 0) {
-        updateVitals({
-          heartRate: {
-            value: hr,
-            trend: hrTrend,
-            severity: hr > 120 || hr < 45 ? 'critical' : hr > 100 || hr < 55 ? 'moderate' : 'normal',
-          }
-        });
-
-        if (!useStore.getState().hasRealData) {
-          useStore.getState().setHasRealData(true);
+      // While scrubbing, show vitals from that point in the ring history
+      if (offsetSec > 0) {
+        const targetSize = Math.max(0, leadIIRing.size - offsetSamples);
+        const snap = lookupVitalsAtSize(targetSize);
+        if (snap) {
+          hr = snap.hr > 0 ? snap.hr : hr;
+          spo2 = snap.spo2;
+          rr = snap.rr;
+        } else {
+          hr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
+          spo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
+          rr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
         }
       }
 
-      // NOTE: Temperature and Blood Pressure are NOT updated here — the real
-      // hardware doesn't have those sensors yet (Temp pending, BP never
-      // will). They stay at whatever useStore.ts's default is — which
-      // currently is NOT '--' (see file header). Fix that in useStore.ts.
-      updateVitals({
-        spo2: {
-          value: spo2,
-          trend: spo2Trend,
-          severity: spo2 < 90 ? 'critical' : spo2 < 94 ? 'moderate' : 'normal',
-        },
-        respirationRate: {
-          value: rr > 0 ? rr : 16,
-          trend: rrTrend,
-          severity: rr > 25 || rr < 10 ? 'critical' : 'normal',
-        },
-      });
+      applyDisplayVitals(hr, spo2, rr);
 
-      if (historyOffsetRef.current === 0) {
+      if (offsetSec === 0) {
         if (hr > 120)          addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
         if (hr > 0 && hr < 45) addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Low HR: ${hr} BPM`, severity: 'high' });
         if (spo2 < 90)         addAlert({ timestamp: new Date().toLocaleTimeString(), message: `SpO2 Drop: ${spo2}%`, severity: 'high' });
@@ -557,7 +669,7 @@ export const useWebSocket = () => {
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [updateVitals, addAlert]);
+  }, [addAlert, applyDisplayVitals, lookupVitalsAtSize]);
 
   // ── WebSocket + Simulator Fallback ─────────────────────────────────────────
   useEffect(() => {

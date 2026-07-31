@@ -60,7 +60,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
 
   const tempDisplay =
     typeof vitals.temperature.value === 'number'
-      ? `${vitals.temperature.value}°C`
+      ? `${vitals.temperature.value}ï¿½C`
       : '--';
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
@@ -198,7 +198,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </h2>
           <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
             <div className="text-[10px] text-slate-500 mb-2 uppercase tracking-wider">
-              Workout Phases · Session {formatDuration(elapsed)}
+              Workout Phases ï¿½ Session {formatDuration(elapsed)}
             </div>
             <div className="flex items-center gap-0 mb-3">
               {PHASES.map((phase, i) => {
@@ -230,12 +230,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span>
-                Accelerometer · Steps:{' '}
+                Accelerometer ï¿½ Steps:{' '}
                 <span className="text-white tabular-nums font-medium">
                   {activity.steps.toLocaleString()}
                 </span>
               </span>
-              <span className="text-slate-500">Pace Trend · {activity.activityType}</span>
+              <span className="text-slate-500">Pace Trend ï¿½ {activity.activityType}</span>
             </div>
           </div>
         </section>
@@ -251,7 +251,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 {zone.label} Zone
               </span>
               <span className="text-[10px] text-slate-500">
-                Combined view · Live waveform energy
+                Combined view ï¿½ Live waveform energy
               </span>
             </div>
             <div className="h-16 flex items-end gap-px overflow-hidden">
@@ -324,7 +324,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
             )}
           >
-            ? Live
+            Live
           </button>
         </div>
       </div>

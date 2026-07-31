@@ -56,8 +56,8 @@ const VitalRow: React.FC<VitalRowProps> = ({
   barPercent,
 }) => {
   const hasRealData = useStore(s => s.hasRealData);
-  const isConnected = useStore(s => s.isConnected);
-  const showDash = !hasRealData || !isConnected;
+  // Keep last/history vitals visible after disconnect so scrubbing still works
+  const showDash = !hasRealData;
 
   return (
     <div className="py-3 border-b border-slate-800/60 last:border-b-0">

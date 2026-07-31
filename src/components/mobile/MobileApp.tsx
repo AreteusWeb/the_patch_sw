@@ -9,10 +9,11 @@ import VitalsDisplay from '../VitalsDisplay';
 import ActivityStats from '../ActivityStats';
 import AlertsPanel from '../AlertsPanel';
 import WaveformContainer from '../WaveformContainer';
-import BottomNav from '../BottomNav';
 import AdvancedControls from '../AdvancedControls';
 import SideMenu from '../SideMenu';
 import Footer from '../Footer';
+import MobileLiveBar from './MobileLiveBar';
+import { useWebSocket } from '../../hooks/useWebSocket';
 import useStore from '../../store/useStore';
 import { AnimatePresence } from 'motion/react';
 
@@ -24,28 +25,33 @@ import { AnimatePresence } from 'motion/react';
  */
 export default function MobileApp() {
   const viewMode = useStore(state => state.viewMode);
+  // Own the socket/history here so scrubbing keeps working across Normal/Advanced
+  const { waveforms } = useWebSocket();
 
   return (
     <div className="min-h-screen bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-y-auto scrollbar-hide">
       <div className="max-w-md mx-auto relative flex flex-col min-h-screen border-x border-slate-900 shadow-2xl bg-black">
         <Header />
 
-        <main className="flex-1 flex flex-col pb-2">
+        <main className="flex-1 flex flex-col pb-2 min-h-0">
           {viewMode === 'Normal' ? (
             <div className="flex flex-col animate-in fade-in duration-500 flex-1">
               <VitalsDisplay />
               <ActivityStats />
               <AlertsPanel />
-              <WaveformContainer />
+              <WaveformContainer waveforms={waveforms} />
             </div>
           ) : (
             <div className="flex flex-col animate-in fade-in duration-500 flex-1">
               <VitalsDisplay compact />
               <AdvancedControls />
-              <WaveformContainer />
+              <WaveformContainer waveforms={waveforms} />
             </div>
           )}
         </main>
+
+        {/* Same live/scrub model as desktop — works in Normal and Advanced */}
+        <MobileLiveBar />
 
         <AnimatePresence>
           <SideMenu key="side-menu" />

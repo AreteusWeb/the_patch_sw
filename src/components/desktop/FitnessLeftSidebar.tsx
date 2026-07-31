@@ -49,8 +49,8 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
   const hasRealData = useStore(s => s.hasRealData);
-  const isConnected = useStore(s => s.isConnected);
-  const showDash = !hasRealData || !isConnected;
+  // Keep last/history vitals visible after disconnect so scrubbing still works
+  const showDash = !hasRealData;
 
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);

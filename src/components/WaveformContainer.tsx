@@ -3,9 +3,7 @@ import useStore from '../store/useStore';
 import WaveformCanvas from './WaveformCanvas';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-react';
-import { useWebSocket, CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../hooks/useWebSocket';
-
-import CustomDropdown from './ui/CustomDropdown';
+import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../hooks/useWebSocket';
 
 // CHANGE: fixed indices for Resp/PPG, matching useWebSocket.ts's 11-slot
 // layout (0-7 ECG leads, 8 Resp, 9 PPG, 10 Temp-reserved). Named constants
@@ -14,12 +12,17 @@ import CustomDropdown from './ui/CustomDropdown';
 const RESP_WAVEFORM_INDEX = 8;
 const PPG_WAVEFORM_INDEX = 9;
 
+interface WaveformContainerProps {
+  /** Scrubbed waveform windows from the parent useWebSocket() instance. */
+  waveforms: number[][];
+}
+
 /**
  * WaveformContainer Component.
  * Contains and coordinates multiple biological waveform display panels (ECG leads, Respiration, SpO2).
  * Operates in either Normal (single lead overlay) or Advanced (multi-lead array + Resp + SpO2 tracking grids) view modes.
  */
-const WaveformContainer: React.FC = () => {
+const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
   const viewMode = useStore(state => state.viewMode);
   const selectedLeadIndex = useStore(state => state.selectedLeadIndex);
   const setSelectedLeadIndex = useStore(state => state.setSelectedLeadIndex);
@@ -27,9 +30,6 @@ const WaveformContainer: React.FC = () => {
   const setIsEcgExpanded = useStore(state => state.setIsEcgExpanded);
   const advancedEcgMode = useStore(state => state.advancedEcgMode);
   const setAdvancedEcgMode = useStore(state => state.setAdvancedEcgMode);
-
-  const { waveforms } = useWebSocket();
-  const vitals = useStore(state => state.vitals);
 
   // CHANGE: `leads` now comes from the shared LEADS export (no 'Lead III',
   // matches useWebSocket.ts exactly) instead of a locally hardcoded array.

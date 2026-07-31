@@ -10,7 +10,11 @@
  */
 
 const WebSocket = require('ws');
-const { sampleForChannel } = require('./mock-waveform-samples.cjs');
+const {
+  sampleForChannel,
+  getSimVitalsAtSample,
+  PHASE_SECONDS,
+} = require('./mock-waveform-samples.cjs');
 
 // ─── Config ───────────────────────────────────────────────────────────────
 const SERVER_URL = process.env.SERVER_URL || 'wss://chestpad-ws-server-1048900719191.us-central1.run.app';
@@ -18,6 +22,7 @@ const MOCK_MAC = 'AA:BB:CC:DD:EE:FF';
 const PACKETS_TO_SEND = 600; // 600 × 100 ms = 60 s (set 0 for infinite loop)
 const SAMPLES_PER_PACKET = 25;
 const PACKET_INTERVAL_MS = 100;
+let lastLoggedPhase = -1;
 
 const CHANNEL_NAMES = [
   'V6', 'V5', 'V4', 'V3', 'V2', 'V1', 'Lead II', 'Lead I', 'Resp', 'PPG',
@@ -85,9 +90,18 @@ function startSendingPackets() {
     ws.send(JSON.stringify({ timestamp: Date.now(), channels }));
     packetsSent++;
 
+    const vitals = getSimVitalsAtSample(globalSampleCounter - 1);
+    if (vitals.phase !== lastLoggedPhase) {
+      lastLoggedPhase = vitals.phase;
+      console.log(
+        `[MOCK-UI] Vitals phase "${vitals.label}" → HR=${vitals.hr} Resp=${vitals.resp} SpO2=${vitals.spo2}` +
+        ` (changes every ${PHASE_SECONDS}s — scrub timeline to verify past values)`
+      );
+    }
+
     if (packetsSent % 10 === 0) {
       const limit = PACKETS_TO_SEND > 0 ? `/${PACKETS_TO_SEND}` : '';
-      console.log(`[MOCK-UI] Packet ${packetsSent}${limit}`);
+      console.log(`[MOCK-UI] Packet ${packetsSent}${limit} | HR=${vitals.hr} Resp=${vitals.resp}`);
     }
   }, PACKET_INTERVAL_MS);
 }

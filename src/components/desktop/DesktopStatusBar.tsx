@@ -2,6 +2,7 @@ import React from 'react';
 import useStore from '../../store/useStore';
 import { estimateCalories, formatSessionClock } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
+import { exportSessionJson } from '../../utils/exportSessionJson';
 
 /**
  * DesktopStatusBar
@@ -59,9 +60,14 @@ const DesktopStatusBar: React.FC = () => {
             <span className="text-slate-700">•</span>
             <span>AI Analysis: {fitnessSessionStatus === 'recording' ? 'Real-time' : '—'}</span>
             <span className="text-slate-700">•</span>
-            <span className="text-slate-600 hover:text-slate-400 cursor-pointer transition-colors">
-              Export: Summary / PDF
-            </span>
+            <button
+              type="button"
+              onClick={() => exportSessionJson('fitness')}
+              className="text-slate-600 hover:text-teal-400 cursor-pointer transition-colors"
+              title="Download session snapshot as JSON"
+            >
+              Export: JSON
+            </button>
           </div>
         ) : (
           <div className="flex items-center gap-4 text-slate-500">
@@ -71,9 +77,14 @@ const DesktopStatusBar: React.FC = () => {
             <span className="text-slate-700">•</span>
             <span>AI Last Analyzed: {isConnected ? '2 min ago' : '—'}</span>
             <span className="text-slate-700">•</span>
-            <span className="text-slate-600 hover:text-slate-400 cursor-pointer transition-colors">
-              Export RAW / PDF
-            </span>
+            <button
+              type="button"
+              onClick={() => exportSessionJson('clinical')}
+              className="text-slate-600 hover:text-teal-400 cursor-pointer transition-colors"
+              title="Download monitoring snapshot as JSON"
+            >
+              Export: JSON
+            </button>
           </div>
         )}
 

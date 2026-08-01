@@ -12,6 +12,7 @@ import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
+import { exportSessionJson } from '../../utils/exportSessionJson';
 
 /**
  * DesktopPatientBar
@@ -249,8 +250,10 @@ const DesktopPatientBar: React.FC = () => {
           </button>
 
           <button
+            type="button"
+            onClick={() => exportSessionJson(isFitness ? 'fitness' : 'clinical')}
             className={actionBtnClass}
-            title="Export (coming soon)"
+            title="Download session snapshot as JSON"
           >
             <Download size={14} />
             {isFitness ? 'Export' : 'Export Data'}

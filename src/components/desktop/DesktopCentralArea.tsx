@@ -38,7 +38,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
     const end = new Date(isLive ? now : Date.now() - historyOffset * 1000);
     const start = new Date(end.getTime() - 105 * 60 * 1000);
     const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return `${fmt(start)} ? ${fmt(end)}`;
+    return `${fmt(start)} – ${fmt(end)}`;
   }, [isLive, now, historyOffset]);
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
@@ -122,7 +122,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               className="timeline-scrubber w-full"
             />
             <div className="flex items-center justify-between text-[10px] text-slate-500">
-              <span>Timeline Scrubber</span>
+              <span>Timeline</span>
               <span className="tabular-nums">{timeRange}</span>
             </div>
           </div>

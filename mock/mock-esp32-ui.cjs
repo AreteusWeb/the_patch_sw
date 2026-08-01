@@ -1,10 +1,12 @@
 /**
  * Mock ESP32 — UI / frontend testing
  *
- * Same wire format as mock-esp32.cjs, longer run (60s default, or infinite).
+ * Same wire format as mock-esp32.cjs. Default: infinite stream (good for
+ * Fitness Start Session + timeline scrubbing). Set PACKETS_TO_SEND>0 to cap.
  *
  * Usage:
  *   node mock/mock-esp32-ui.cjs
+ *   set PACKETS_TO_SEND=1800&& node mock/mock-esp32-ui.cjs   # ~3 min (Windows)
  *
  * Requires the app MAC in profile to match MOCK_MAC (default AA:BB:CC:DD:EE:FF).
  */
@@ -19,7 +21,8 @@ const {
 // ─── Config ───────────────────────────────────────────────────────────────
 const SERVER_URL = process.env.SERVER_URL || 'wss://chestpad-ws-server-1048900719191.us-central1.run.app';
 const MOCK_MAC = 'AA:BB:CC:DD:EE:FF';
-const PACKETS_TO_SEND = 600; // 600 × 100 ms = 60 s (set 0 for infinite loop)
+// 0 = infinite (Ctrl+C to stop). Or: PACKETS_TO_SEND=1800 → ~3 min
+const PACKETS_TO_SEND = Number(process.env.PACKETS_TO_SEND ?? 0);
 const SAMPLES_PER_PACKET = 25;
 const PACKET_INTERVAL_MS = 100;
 let lastLoggedPhase = -1;

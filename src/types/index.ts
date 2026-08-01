@@ -55,6 +55,9 @@ export interface PhysiologicalPacket {
   channels: number[][];
 }
 
+/** Front-only fitness training session (no backend yet). */
+export type FitnessSessionStatus = 'idle' | 'recording' | 'paused' | 'ended';
+
 /** Store state layout representation. */
 export interface AppState {
   isConnected: boolean;
@@ -86,6 +89,12 @@ export interface AppState {
    * While false, vitals UI shows '--' instead of placeholder defaults.
    */
   hasRealData: boolean;
+  /** Fitness Start Session state machine (front-only). */
+  fitnessSessionStatus: FitnessSessionStatus;
+  /** Wall-clock ms when the current recording segment started; null if not recording. */
+  fitnessSessionStartedAt: number | null;
+  /** Completed recording time (ms) from prior segments before the latest pause. */
+  fitnessSessionAccumulatedMs: number;
 }
 
 /** Action mutators for the Zustand store. */
@@ -111,4 +120,8 @@ export interface AppActions {
   setEcgGain: (gain: EcgGainSetting) => void;
   setEcgMeasureEnabled: (enabled: boolean) => void;
   setHasRealData: (hasRealData: boolean) => void;
+  startFitnessSession: () => void;
+  pauseFitnessSession: () => void;
+  resumeFitnessSession: () => void;
+  endFitnessSession: () => void;
 }

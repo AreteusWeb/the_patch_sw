@@ -119,6 +119,31 @@ export function formatDuration(totalSeconds: number): string {
   return `${h}h ${m}m`;
 }
 
+/** Live session clock — updates every second (m:ss or h:mm:ss). */
+export function formatSessionClock(totalSeconds: number): string {
+  const sec = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Elapsed seconds for the front-only fitness session state machine. */
+export function getFitnessSessionElapsedSec(
+  status: 'idle' | 'recording' | 'paused' | 'ended',
+  startedAt: number | null,
+  accumulatedMs: number,
+  nowMs: number = Date.now(),
+): number {
+  if (status === 'idle') return 0;
+  const running =
+    status === 'recording' && startedAt != null ? nowMs - startedAt : 0;
+  return Math.floor((accumulatedMs + running) / 1000);
+}
+
 export function estimateCalories(elapsedSeconds: number, hr: number | string | undefined, steps: number): number {
   const bpm = typeof hr === 'number' ? hr : 70;
   const hours = elapsedSeconds / 3600;

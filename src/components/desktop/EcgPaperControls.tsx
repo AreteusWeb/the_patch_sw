@@ -80,7 +80,11 @@ const EcgPaperControls: React.FC<{ compact?: boolean }> = ({ compact = false }) 
       <button
         type="button"
         onClick={() => setEcgMeasureEnabled(!ecgMeasureEnabled)}
-        title={ecgMeasureEnabled ? 'Measure tool: ON — drag on strip' : 'Measure tool: OFF'}
+        title={
+          ecgMeasureEnabled
+            ? 'Measure ON — drag on the ECG strip to read Δt / ΔV (ms and mV)'
+            : 'Measure — drag on the ECG strip to read time (ms) and voltage (mV) between two points'
+        }
         className={cn(
           'flex items-center gap-1 px-2 py-1 rounded border text-[9px] font-bold uppercase tracking-wider transition-colors',
           ecgMeasureEnabled

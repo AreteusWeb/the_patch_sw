@@ -140,13 +140,14 @@ const AdvancedControls: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col px-1">
+      <div className="flex flex-col px-1 flex-shrink-0">
         <span className="text-[9px] font-medium text-slate-400 uppercase tracking-[0.2em] mb-1">Recent Alerts</span>
-        <div className="flex flex-col gap-1 max-h-[100px] overflow-y-auto scrollbar-hide">
+        {/* Fixed height ≈ 2 alert rows; scroll inside for the rest (like Normal's 3) */}
+        <div className="flex flex-col gap-1 h-[72px] overflow-y-auto overscroll-contain scrollbar-hide">
           {alerts.length === 0 ? (
             <span className="text-[9px] text-slate-600 italic px-1">No alerts</span>
           ) : (
-            alerts.slice(0, 5).map(alert => (
+            alerts.map(alert => (
               <div
                 key={alert.id}
                 className={cn(

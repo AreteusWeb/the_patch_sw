@@ -106,6 +106,11 @@ const useStore = create<
    */
   hasRealData: false,
 
+  // Fitness session — front-only state machine (idle → recording → paused → ended)
+  fitnessSessionStatus: 'idle',
+  fitnessSessionStartedAt: null,
+  fitnessSessionAccumulatedMs: 0,
+
   vitals: {
     heartRate: {
       value: 72,
@@ -165,7 +170,7 @@ const useStore = create<
   connectionStatus: 'Disconnected',
 
   userName: 'User',
-  deviceName: 'ChestPad v2',
+  deviceName: 'The Patch v2',
 
   selectedLeadIndex: 0,
 
@@ -214,6 +219,47 @@ const useStore = create<
 
   setEcgMeasureEnabled: (enabled) =>
     set({ ecgMeasureEnabled: enabled }),
+
+  startFitnessSession: () =>
+    set({
+      fitnessSessionStatus: 'recording',
+      fitnessSessionStartedAt: Date.now(),
+      fitnessSessionAccumulatedMs: 0,
+    }),
+
+  pauseFitnessSession: () => {
+    const { fitnessSessionStatus, fitnessSessionStartedAt, fitnessSessionAccumulatedMs } = get();
+    if (fitnessSessionStatus !== 'recording' || fitnessSessionStartedAt == null) return;
+    set({
+      fitnessSessionStatus: 'paused',
+      fitnessSessionStartedAt: null,
+      fitnessSessionAccumulatedMs:
+        fitnessSessionAccumulatedMs + (Date.now() - fitnessSessionStartedAt),
+    });
+  },
+
+  resumeFitnessSession: () => {
+    const { fitnessSessionStatus } = get();
+    if (fitnessSessionStatus !== 'paused') return;
+    set({
+      fitnessSessionStatus: 'recording',
+      fitnessSessionStartedAt: Date.now(),
+    });
+  },
+
+  endFitnessSession: () => {
+    const { fitnessSessionStatus, fitnessSessionStartedAt, fitnessSessionAccumulatedMs } = get();
+    if (fitnessSessionStatus !== 'recording' && fitnessSessionStatus !== 'paused') return;
+    const running =
+      fitnessSessionStatus === 'recording' && fitnessSessionStartedAt != null
+        ? Date.now() - fitnessSessionStartedAt
+        : 0;
+    set({
+      fitnessSessionStatus: 'ended',
+      fitnessSessionStartedAt: null,
+      fitnessSessionAccumulatedMs: fitnessSessionAccumulatedMs + running,
+    });
+  },
 
   setNotchFilterEnabled: (enabled) =>
     set({ notchFilterEnabled: enabled }),

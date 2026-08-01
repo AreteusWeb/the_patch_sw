@@ -8,4 +8,46 @@
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
   }
+
+  /* Teal track + thumb for desktop/mobile timeline scrubbers */
+  .timeline-scrubber {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 9999px;
+    background: rgba(45, 212, 191, 0.35);
+    outline: none;
+    cursor: pointer;
+  }
+  .timeline-scrubber::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: rgba(45, 212, 191, 0.35);
+  }
+  .timeline-scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border-radius: 9999px;
+    background: #2dd4bf;
+    border: 2px solid #99f6e4;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25);
+    cursor: pointer;
+  }
+  .timeline-scrubber::-moz-range-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: rgba(45, 212, 191, 0.35);
+  }
+  .timeline-scrubber::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    background: #2dd4bf;
+    border: 2px solid #99f6e4;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25);
+    cursor: pointer;
+  }
 }

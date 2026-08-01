@@ -5,11 +5,13 @@ import {
   Play,
   Settings,
   Sparkles,
+  Square,
   Zap,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
-import { formatDuration, getRecoveryScore } from '../../utils/fitnessMetrics';
+import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
+import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 
 /**
  * DesktopPatientBar
@@ -31,6 +33,11 @@ const DesktopPatientBar: React.FC = () => {
     setDesktopLayout,
     vitals,
     hasRealData,
+    fitnessSessionStatus,
+    startFitnessSession,
+    pauseFitnessSession,
+    resumeFitnessSession,
+    endFitnessSession,
   } = useStore();
 
   const displayName =
@@ -70,20 +77,34 @@ const DesktopPatientBar: React.FC = () => {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }, []);
 
-  const [elapsed, setElapsed] = React.useState(0);
-  React.useEffect(() => {
-    if (!patchLive) {
-      setElapsed(0);
-      return;
-    }
-    const start = Date.now();
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start + historyOffset * 1000) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [patchLive, historyOffset]);
+  const sessionElapsed = useFitnessSessionElapsed();
+  const sessionActive =
+    fitnessSessionStatus === 'recording' || fitnessSessionStatus === 'paused';
+
+  const sessionStatusLabel =
+    fitnessSessionStatus === 'recording' ? 'Recording'
+      : fitnessSessionStatus === 'paused' ? 'Paused'
+        : fitnessSessionStatus === 'ended' ? 'Ended'
+          : 'Idle';
 
   const recovery = getRecoveryScore(vitals, patchLive);
+
+  const handleFitnessPrimary = () => {
+    if (fitnessSessionStatus === 'idle' || fitnessSessionStatus === 'ended') {
+      startFitnessSession();
+      return;
+    }
+    endFitnessSession();
+  };
+
+  const handlePauseResume = () => {
+    if (isFitness && sessionActive) {
+      if (fitnessSessionStatus === 'recording') pauseFitnessSession();
+      else resumeFitnessSession();
+      return;
+    }
+    setIsLive(!isLive);
+  };
 
   const actionBtnClass =
     'flex items-center gap-1.5 h-10 px-3.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[11px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-slate-700 transition-colors';
@@ -112,7 +133,20 @@ const DesktopPatientBar: React.FC = () => {
             <div className="min-h-[18px] text-[11px] text-slate-500">
               {isFitness ? (
                 <span>
-                  Session: Training Day • Duration: {formatDuration(elapsed)}
+                  Session:{' '}
+                  <span className={cn(
+                    'font-semibold',
+                    fitnessSessionStatus === 'recording' && 'text-teal-400',
+                    fitnessSessionStatus === 'paused' && 'text-amber-400',
+                    fitnessSessionStatus === 'ended' && 'text-slate-300',
+                  )}>
+                    {sessionStatusLabel}
+                  </span>
+                  {' • '}
+                  Duration:{' '}
+                  <span className="text-white font-semibold tabular-nums">
+                    {formatSessionClock(sessionElapsed)}
+                  </span>
                   {' • '}
                   Recovery:{' '}
                   <span className="text-teal-400 font-semibold tabular-nums">
@@ -164,21 +198,53 @@ const DesktopPatientBar: React.FC = () => {
         <div className="flex items-center gap-2 flex-shrink-0 z-10 ml-auto self-center">
           {isFitness && (
             <button
-              className={actionBtnClass}
-              title="Start new session (coming soon)"
+              type="button"
+              onClick={handleFitnessPrimary}
+              className={cn(
+                actionBtnClass,
+                sessionActive && 'border-rose-500/40 text-rose-300 hover:text-rose-200'
+              )}
+              title={
+                sessionActive
+                  ? 'End training session'
+                  : fitnessSessionStatus === 'ended'
+                    ? 'Start a new training session'
+                    : 'Start training session'
+              }
             >
-              <Play size={14} />
-              Start Session
+              {sessionActive ? <Square size={14} /> : <Play size={14} />}
+              {sessionActive
+                ? 'End Session'
+                : fitnessSessionStatus === 'ended'
+                  ? 'New Session'
+                  : 'Start Session'}
             </button>
           )}
 
           <button
-            onClick={() => setIsLive(!isLive)}
-            className={actionBtnClass}
+            type="button"
+            onClick={handlePauseResume}
+            disabled={isFitness && (fitnessSessionStatus === 'idle' || fitnessSessionStatus === 'ended')}
+            className={cn(
+              actionBtnClass,
+              isFitness && (fitnessSessionStatus === 'idle' || fitnessSessionStatus === 'ended')
+                && 'opacity-40 cursor-not-allowed hover:text-slate-300 hover:border-slate-800'
+            )}
+            title={
+              isFitness
+                ? (fitnessSessionStatus === 'recording'
+                  ? 'Pause session timer'
+                  : fitnessSessionStatus === 'paused'
+                    ? 'Resume session timer'
+                    : 'Start a session first')
+                : (isLive ? 'Pause live view' : 'Resume live view')
+            }
           >
-            {isLive ? <Pause size={14} /> : <Play size={14} />}
             {isFitness
-              ? (isLive ? 'Pause' : 'Resume')
+              ? (fitnessSessionStatus === 'recording' ? <Pause size={14} /> : <Play size={14} />)
+              : (isLive ? <Pause size={14} /> : <Play size={14} />)}
+            {isFitness
+              ? (fitnessSessionStatus === 'recording' ? 'Pause' : 'Resume')
               : (isLive ? 'Pause Recording' : 'Resume')}
           </button>
 
@@ -202,7 +268,11 @@ const DesktopPatientBar: React.FC = () => {
 
           <button
             onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
-            title={notchFilterEnabled ? '60Hz notch filter: ON' : '60Hz notch filter: OFF'}
+            title={
+              notchFilterEnabled
+                ? '60 Hz notch filter ON — removes electrical hum from the ECG'
+                : '60 Hz notch filter OFF — click to cut electrical hum from the ECG'
+            }
             className={cn(
               iconBtnClass,
               notchFilterEnabled

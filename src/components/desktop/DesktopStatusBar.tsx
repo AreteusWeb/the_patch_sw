@@ -1,6 +1,7 @@
 import React from 'react';
 import useStore from '../../store/useStore';
-import { estimateCalories, formatDuration } from '../../utils/fitnessMetrics';
+import { estimateCalories, formatSessionClock } from '../../utils/fitnessMetrics';
+import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 
 /**
  * DesktopStatusBar
@@ -12,26 +13,36 @@ const DesktopStatusBar: React.FC = () => {
   const desktopLayout = useStore(s => s.desktopLayout);
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
+  const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
+  const sessionElapsed = useFitnessSessionElapsed();
 
-  const [elapsed, setElapsed] = React.useState(0);
+  const [monitorElapsed, setMonitorElapsed] = React.useState(0);
 
   React.useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || desktopLayout === 'fitness') return;
     const start = Date.now();
     const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start + historyOffset * 1000) / 1000));
+      setMonitorElapsed(Math.floor((Date.now() - start + historyOffset * 1000) / 1000));
     }, 1000);
     return () => clearInterval(id);
-  }, [isConnected, historyOffset]);
+  }, [isConnected, historyOffset, desktopLayout]);
 
-  const hours = Math.floor(elapsed / 3600);
-  const minutes = Math.floor((elapsed % 3600) / 60);
+  const hours = Math.floor(monitorElapsed / 3600);
+  const minutes = Math.floor((monitorElapsed % 3600) / 60);
   const isFitness = desktopLayout === 'fitness';
-  const calories = estimateCalories(elapsed, vitals.heartRate.value, activity.steps);
+  const calories = estimateCalories(sessionElapsed, vitals.heartRate.value, activity.steps);
 
   const recordingLabel = isConnected
     ? `Recording: ${hours}h ${minutes}m`
     : 'Recording: —';
+
+  const sessionLabel =
+    fitnessSessionStatus === 'idle' ? '—'
+      : `${formatSessionClock(sessionElapsed)}${
+        fitnessSessionStatus === 'paused' ? ' (paused)'
+          : fitnessSessionStatus === 'ended' ? ' (ended)'
+            : ''
+      }`;
 
   return (
     <footer className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur-sm">
@@ -39,14 +50,14 @@ const DesktopStatusBar: React.FC = () => {
         {isFitness ? (
           <div className="flex items-center gap-4 text-slate-500">
             <span className="tabular-nums">
-              Session Data: {isConnected ? formatDuration(elapsed) : '—'}
+              Session Data: {sessionLabel}
             </span>
             <span className="text-slate-700">•</span>
             <span className="tabular-nums">
-              Calories Est: {isConnected ? `~${calories.toLocaleString()}` : '—'}
+              Calories Est: {fitnessSessionStatus !== 'idle' ? `~${calories.toLocaleString()}` : '—'}
             </span>
             <span className="text-slate-700">•</span>
-            <span>AI Analysis: {isConnected ? 'Real-time' : '—'}</span>
+            <span>AI Analysis: {fitnessSessionStatus === 'recording' ? 'Real-time' : '—'}</span>
             <span className="text-slate-700">•</span>
             <span className="text-slate-600 hover:text-slate-400 cursor-pointer transition-colors">
               Export: Summary / PDF

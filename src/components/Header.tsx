@@ -28,33 +28,43 @@ const Header: React.FC = () => {
     ?? currentUser?.email?.split('@')[0]       // fallback: email local part
     ?? 'User';
 
+  const statusLabel = connectionStatus === 'Connecting'
+    ? 'Connecting...'
+    : isConnected
+      ? 'Connected'
+      : 'Disconnected';
+
   return (
-    <header className="flex justify-between items-center px-4 py-3 bg-transparent whitespace-nowrap relative z-50">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 text-[10px] font-light text-slate-400 uppercase tracking-tighter">
-          <span>{displayName} • </span>
-          <span className={cn(
-            !isConnected
-              ? 'text-rose-500'
-              : connectionStatus === 'Connecting'
-                ? 'text-yellow-500'
-                : 'text-emerald-500'
-          )}>
-            Device {connectionStatus === 'Connecting' ? 'Connecting...' : (isConnected ? 'Connected' : 'Disconnected')}
-          </span>
-        </div>
+    <header className="flex justify-between items-center gap-2 px-4 py-3 bg-transparent relative z-50">
+      <div className="flex items-center gap-1 min-w-0 flex-1 text-[10px] font-light text-slate-400 uppercase tracking-tighter">
+        <span className="truncate flex-shrink-0">{displayName}</span>
+        <span className="flex-shrink-0">•</span>
+        <span className={cn(
+          'truncate',
+          !isConnected
+            ? 'text-rose-500'
+            : connectionStatus === 'Connecting'
+              ? 'text-yellow-500'
+              : 'text-emerald-500'
+        )}>
+          {statusLabel}
+        </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         {/* 60Hz notch filter — removes power-line hum from the ECG */}
         <button
           onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
-          title={notchFilterEnabled ? '60Hz notch filter: ON' : '60Hz notch filter: OFF'}
-          className={cn(
-            "w-6 h-6 flex items-center justify-center rounded-full transition-all shadow-lg border",
+          title={
             notchFilterEnabled
-              ? "bg-teal-500 text-white border-teal-400 shadow-teal-500/20"
-              : "bg-slate-800/60 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white"
+              ? '60 Hz notch filter ON — removes electrical hum from the ECG (not the 250 Hz sample rate)'
+              : '60 Hz notch filter OFF — click to cut electrical hum from the ECG (not the 250 Hz sample rate)'
+          }
+          className={cn(
+            'w-6 h-6 flex items-center justify-center rounded-full transition-all shadow-lg border flex-shrink-0',
+            notchFilterEnabled
+              ? 'bg-teal-500 text-white border-teal-400 shadow-teal-500/20'
+              : 'bg-slate-800/60 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white'
           )}
         >
           <Zap size={12} />

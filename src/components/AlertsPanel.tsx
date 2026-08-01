@@ -48,11 +48,12 @@ const AlertsPanel: React.FC = () => {
   const alerts = useStore((s) => s.alerts);
 
   return (
-    <div className="flex flex-col w-full px-6 py-4 flex-1 min-h-0 overflow-hidden">
-      <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.2em] mb-2 flex-shrink-0">
+    <div className="flex flex-col w-full px-6 py-3 flex-shrink-0">
+      <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.2em] mb-2">
         Recent Alerts
       </h3>
-      <div className="flex flex-col gap-2 overflow-y-auto max-h-[120px] scrollbar-hide">
+      {/* Fixed height ≈ 3 alert rows; scroll inside for the rest */}
+      <div className="flex flex-col gap-2 h-[108px] overflow-y-auto overscroll-contain scrollbar-hide">
         {alerts.length === 0 ? (
           <p className="text-[10px] text-slate-600 italic">No alerts</p>
         ) : (

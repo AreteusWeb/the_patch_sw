@@ -5,12 +5,13 @@ import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import EcgPaperControls from './EcgPaperControls';
 import {
-  formatDuration,
+  formatSessionClock,
   getActivityIntensity,
   getHrZone,
   getHrvProxyMs,
   getWorkoutPhase,
 } from '../../utils/fitnessMetrics';
+import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
 
 const MAX_HISTORY_SECONDS = 3600;
@@ -43,18 +44,10 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const zone = getHrZone(hr);
   const intensity = getActivityIntensity(activity, hr);
   const hrv = getHrvProxyMs(hr, hasRealData && isConnected);
+  const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
+  const elapsed = useFitnessSessionElapsed();
 
-  const [elapsed, setElapsed] = React.useState(0);
-  React.useEffect(() => {
-    if (!isConnected) return;
-    const start = Date.now();
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start + historyOffset * 1000) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isConnected, historyOffset]);
-
-  // Session phase progress ? assume a 3h training window for phase mapping.
+  // Session phase progress — assume a 3h training window for phase mapping.
   const progress01 = Math.min(1, elapsed / (3 * 3600));
   const activePhase = getWorkoutPhase(progress01);
 
@@ -198,7 +191,10 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </h2>
           <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
             <div className="text-[10px] text-slate-500 mb-2 uppercase tracking-wider">
-              Workout Phases � Session {formatDuration(elapsed)}
+              Workout Phases · Session {formatSessionClock(elapsed)}
+              {fitnessSessionStatus === 'idle' && ' (start a session)'}
+              {fitnessSessionStatus === 'paused' && ' · paused'}
+              {fitnessSessionStatus === 'ended' && ' · ended'}
             </div>
             <div className="flex items-center gap-0 mb-3">
               {PHASES.map((phase, i) => {
@@ -299,11 +295,11 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
               step={10}
               value={-historyOffset}
               onChange={(e) => setHistoryOffset(-parseInt(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-500"
+              className="timeline-scrubber w-full"
             />
             <div className="flex items-center justify-between text-[10px] text-slate-500">
               <span>Session Scrubber</span>
-              <span className="tabular-nums">{formatDuration(elapsed)} elapsed</span>
+              <span className="tabular-nums">{formatSessionClock(elapsed)} elapsed</span>
             </div>
           </div>
 

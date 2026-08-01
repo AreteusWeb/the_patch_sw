@@ -374,6 +374,9 @@ export const useWebSocket = () => {
   const [waveforms, setWaveforms] = useState<number[][]>(
     VIEW_SIZES.map(n => new Array(n).fill(0))
   );
+  /** Seconds of waveform history currently in the ring buffers (for scrubber range). */
+  const [bufferedSeconds, setBufferedSeconds] = useState(0);
+  const bufferedSecondsRef = useRef(0);
 
   const rings  = useRef<RingBuffer[]>(Array.from({ length: TOTAL_SLOTS }, () => new RingBuffer(BUFFER_SIZE)));
   const wsRef  = useRef<WebSocket | null>(null);
@@ -555,25 +558,26 @@ export const useWebSocket = () => {
 
   // Instant vitals update when the scrubber moves (don't wait for the 1s tick)
   useEffect(() => {
-    const offsetSec = historyOffset;
-    if (offsetSec <= 0) return;
+    if (historyOffset <= 0) return;
 
     const leadIIRing = rings.current[LEAD_CHANNEL_INDEX['Lead II']];
     const respRing   = rings.current[RESP_SLOT];
     const ppgRing    = rings.current[PPG_SLOT];
+    const availSec = Math.floor(leadIIRing.size / 250);
+    const offsetSec = Math.min(historyOffset, availSec);
+    if (offsetSec <= 0) return;
+
     const offsetSamples = Math.round(offsetSec * 250);
-    const targetSize = Math.max(0, leadIIRing.size - offsetSamples);
+    const pastHr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
+    const pastSpo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
+    const pastRr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
+    const snap = lookupVitalsAtSize(Math.max(0, leadIIRing.size - offsetSamples));
 
-    const snap = lookupVitalsAtSize(targetSize);
-    if (snap) {
-      applyDisplayVitals(snap.hr, snap.spo2, snap.rr);
-      return;
-    }
-
-    const hr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
-    const spo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
-    const rr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
-    applyDisplayVitals(hr, spo2, rr);
+    applyDisplayVitals(
+      pastHr > 0 ? pastHr : (snap?.hr ?? 0),
+      snap && pastSpo2 === 98 ? snap.spo2 : pastSpo2,
+      pastRr > 0 ? pastRr : (snap?.rr ?? 16),
+    );
   }, [historyOffset, lookupVitalsAtSize, applyDisplayVitals]);
 
   // ── Render Loop + Vitals Estimation @ 30fps ─────────────────────────────────
@@ -587,8 +591,21 @@ export const useWebSocket = () => {
       if (now - last < 33) return;
       last = now;
 
-      const offsetSec = historyOffsetRef.current;
+      const leadIISize = rings.current[LEAD_CHANNEL_INDEX['Lead II']].size;
+      const availSec = Math.floor(leadIISize / 250);
+      if (availSec !== bufferedSecondsRef.current) {
+        // keep scrubber range in sync with real buffer (not a fixed 1h span)
+        bufferedSecondsRef.current = availSec;
+        setBufferedSeconds(availSec);
+      }
+
+      // Clamp to what's actually buffered — scrubbing past the buffer looks empty/frozen
+      const offsetSec = Math.min(historyOffsetRef.current, availSec);
       const offsetSamples = Math.round(offsetSec * 250);
+      if (offsetSec !== historyOffsetRef.current && historyOffsetRef.current > 0) {
+        historyOffsetRef.current = offsetSec;
+        useStore.setState({ historyOffset: offsetSec, isLive: offsetSec === 0 });
+      }
 
       // Waveforms (0-7 leads, 8 Resp, 9 PPG, 10 Temp-reserved)
       const next = rings.current.map((ring, slot) => {
@@ -643,19 +660,19 @@ export const useWebSocket = () => {
       let spo2 = liveSpo2;
       let rr = liveRr;
 
-      // While scrubbing, show vitals from that point in the ring history
+      // While scrubbing: re-estimate from the waveform window at that offset
+      // (primary), then fall back to a recorded snapshot if estimation fails.
       if (offsetSec > 0) {
+        const pastHr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
+        const pastSpo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
+        const pastRr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
         const targetSize = Math.max(0, leadIIRing.size - offsetSamples);
         const snap = lookupVitalsAtSize(targetSize);
-        if (snap) {
-          hr = snap.hr > 0 ? snap.hr : hr;
-          spo2 = snap.spo2;
-          rr = snap.rr;
-        } else {
-          hr   = estimateHR(leadIIRing.sliceAt(750, offsetSamples));
-          spo2 = estimateSpO2(ppgRing.sliceAt(250, offsetSamples));
-          rr   = estimateResp(respRing.sliceAt(1500, offsetSamples));
-        }
+
+        hr   = pastHr > 0 ? pastHr : (snap?.hr ?? hr);
+        spo2 = pastSpo2;
+        rr   = pastRr > 0 ? pastRr : (snap?.rr ?? rr);
+        if (snap && pastSpo2 === 98) spo2 = snap.spo2;
       }
 
       applyDisplayVitals(hr, spo2, rr);
@@ -783,7 +800,11 @@ export const useWebSocket = () => {
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
-        useStore.getState().setHasRealData(false);
+        // Keep hasRealData if we still have buffered history — scrubbing
+        // past data must keep showing vitals after the stream ends.
+        if (rings.current[LEAD_CHANNEL_INDEX['Lead II']].size === 0) {
+          useStore.getState().setHasRealData(false);
+        }
         // startSim(); // SIMULATOR — uncomment only for a local fallback without a real device
         reconnect = setTimeout(connect, 5000);
       };
@@ -811,5 +832,5 @@ export const useWebSocket = () => {
     }
   }, [simulationMode]);
 
-  return { waveforms };
+  return { waveforms, bufferedSeconds };
 };

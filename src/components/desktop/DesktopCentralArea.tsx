@@ -119,7 +119,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               step={10}
               value={-historyOffset}
               onChange={(e) => setHistoryOffset(-parseInt(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-500"
+              className="timeline-scrubber w-full"
             />
             <div className="flex items-center justify-between text-[10px] text-slate-500">
               <span>Timeline Scrubber</span>

@@ -2,16 +2,23 @@ import React from 'react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 
-const MAX_HISTORY_SECONDS = 3600;
+interface MobileLiveBarProps {
+  /** Seconds of history actually buffered — slider only spans this range. */
+  bufferedSeconds: number;
+}
 
 /**
  * Mobile timeline — slider + Live only.
- * Dragging left shows past waveforms/vitals; Live jumps back to now.
+ * Range matches real buffered history so dragging always lands on real data.
  */
-const MobileLiveBar: React.FC = () => {
+const MobileLiveBar: React.FC<MobileLiveBarProps> = ({ bufferedSeconds }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
-  const isLive = historyOffset === 0;
+
+  const maxOffset = Math.max(1, bufferedSeconds);
+  const clampedOffset = Math.min(historyOffset, maxOffset);
+  const isLive = clampedOffset === 0;
+  const canScrub = bufferedSeconds > 0;
 
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
@@ -20,14 +27,24 @@ const MobileLiveBar: React.FC = () => {
     return () => clearInterval(id);
   }, [isLive]);
 
+  React.useEffect(() => {
+    if (historyOffset > maxOffset) {
+      setHistoryOffset(maxOffset);
+    }
+  }, [historyOffset, maxOffset, setHistoryOffset]);
+
   const displayTime = React.useMemo(() => {
-    const target = new Date(isLive ? now : Date.now() - historyOffset * 1000);
+    const target = new Date(isLive ? now : Date.now() - clampedOffset * 1000);
     return target.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
     });
-  }, [isLive, now, historyOffset]);
+  }, [isLive, now, clampedOffset]);
+
+  const agoLabel = clampedOffset >= 60
+    ? `${Math.floor(clampedOffset / 60)}m ${clampedOffset % 60}s ago`
+    : `${clampedOffset}s ago`;
 
   return (
     <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/80 px-3 py-2.5">
@@ -35,15 +52,25 @@ const MobileLiveBar: React.FC = () => {
         <div className="flex-1 flex flex-col gap-1 min-w-0">
           <input
             type="range"
-            min={-MAX_HISTORY_SECONDS}
+            min={-maxOffset}
             max={0}
             step={1}
-            value={-historyOffset}
+            disabled={!canScrub}
+            value={-clampedOffset}
             onChange={(e) => setHistoryOffset(-Number(e.target.value))}
-            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-500"
+            className={cn(
+              'w-full h-1.5 bg-slate-800 rounded-lg appearance-none accent-teal-500',
+              canScrub ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'
+            )}
           />
           <div className="flex items-center justify-between text-[10px] text-slate-500">
-            <span>{isLive ? 'Timeline' : 'Viewing past'}</span>
+            <span>
+              {!canScrub
+                ? 'Waiting for data…'
+                : isLive
+                  ? `Timeline · ${bufferedSeconds}s buffered`
+                  : agoLabel}
+            </span>
             <span className={cn('tabular-nums', isLive ? 'text-teal-400' : 'text-slate-300')}>
               {displayTime}
               {isLive && (

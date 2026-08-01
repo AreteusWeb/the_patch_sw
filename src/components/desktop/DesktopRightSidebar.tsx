@@ -91,7 +91,7 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
     [vitals, hasRealData]
   );
 
-  const activeAlerts = alerts.slice(0, 5);
+  const activeAlerts = alerts;
 
   return (
     <aside className="w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
@@ -121,12 +121,13 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
           {activeAlerts.length === 0 ? (
             <p className="text-[11px] text-slate-600 italic">None currently</p>
           ) : (
-            <div className="flex flex-col gap-2">
+            /* Fixed height ≈ 3 alert rows; scroll for the rest (same as mobile) */
+            <div className="flex flex-col gap-2 h-[168px] overflow-y-auto overscroll-contain scrollbar-hide">
               {activeAlerts.map((alert) => (
                 <div
                   key={alert.id}
                   className={cn(
-                    'px-3 py-2 rounded-lg border text-[10px]',
+                    'px-3 py-2 rounded-lg border text-[10px] flex-shrink-0',
                     severityColor[alert.severity] ?? severityColor.low
                   )}
                 >

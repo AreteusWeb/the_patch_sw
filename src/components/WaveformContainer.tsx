@@ -97,7 +97,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
   const singleLeadWIdx = waveformIndexForLead(selectedLeadIndex);
 
   return (
-    <div className="flex flex-col p-2 pt-0.5 gap-1 bg-black flex-1 justify-between">
+    <div className="flex flex-col p-2 pt-0.5 gap-1 bg-black flex-shrink-0">
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-4 text-[9px] font-bold uppercase tracking-[0.2em]">
           <button

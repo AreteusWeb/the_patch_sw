@@ -1,0 +1,12 @@
+  {
+    "message": "Based on what I told you earlier, what should I focus on this week?",
+    "metricsSnapshot": {
+      "heartRate": 68,
+      "spo2": 97,
+      "respirationRate": 14,
+      "temperature": 36.6,
+      "hrvProxyMs": 55,
+      "recoveryScore": 72,
+      "hasRealData": true
+    }
+  }

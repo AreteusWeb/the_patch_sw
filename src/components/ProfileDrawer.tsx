@@ -11,6 +11,7 @@ import {
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import useStore from '../store/useStore';
+import { API_BASE } from '../lib/appConfig';
 
 /**
  * Properties for the ProfileDrawer component.
@@ -21,10 +22,6 @@ interface ProfileDrawerProps {
   /** Callback function to close the profile drawer. */
   onClose: () => void;
 }
-
-// NOTE: same host already used by useWebSocket.ts for WS — server.cjs serves
-// both WS and REST (/api/...) from the same HTTP server on Cloud Run.
-const API_BASE = 'https://chestpad-ws-server-1048900719191.us-central1.run.app';
 
 type Section = 'name' | 'email' | 'password' | 'mac' | 'ota' | null;
 

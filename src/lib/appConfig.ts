@@ -37,6 +37,19 @@ export const WS_URL: string =
   import.meta.env.VITE_WS_URL ||
   (IS_LOCAL_MODE ? DEFAULT_LOCAL_WS_URL : DEFAULT_CLOUD_WS_URL);
 
+/**
+ * HTTP base for the-patch-server REST routes (/api/ota, /api/coach, …).
+ * - VITE_API_BASE_OVERRIDE wins when set (any mode).
+ * - In Vite DEV, default to local server (node server.cjs on :8080).
+ * - Otherwise production Cloud Run.
+ */
+const DEFAULT_CLOUD_API_BASE =
+  'https://chestpad-ws-server-1048900719191.us-central1.run.app';
+
+export const API_BASE =
+  import.meta.env.VITE_API_BASE_OVERRIDE ||
+  (import.meta.env.DEV ? 'http://localhost:8080' : DEFAULT_CLOUD_API_BASE);
+
 if (!import.meta.env.VITE_WS_URL) {
   // Does not throw — only warns. The production default is documented here
   // (not a secret), but ideally set it via VITE_WS_URL.

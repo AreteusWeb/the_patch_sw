@@ -13,6 +13,7 @@ import { cn } from '../../utils/cn';
 import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
+import AiCoachPanel from './AiCoachPanel';
 
 /**
  * DesktopPatientBar
@@ -40,6 +41,8 @@ const DesktopPatientBar: React.FC = () => {
     resumeFitnessSession,
     endFitnessSession,
   } = useStore();
+
+  const [coachOpen, setCoachOpen] = React.useState(false);
 
   const displayName =
     currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'Patient';
@@ -114,6 +117,7 @@ const DesktopPatientBar: React.FC = () => {
     'h-10 w-10 flex items-center justify-center rounded-lg border transition-all';
 
   return (
+    <>
     <header className="relative flex-shrink-0 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md">
       <div className="px-6 py-3 flex items-start justify-between gap-6 min-h-[56px]">
         {/* Left: identity + toggle */}
@@ -261,6 +265,8 @@ const DesktopPatientBar: React.FC = () => {
 
           {isFitness && (
             <button
+              type="button"
+              onClick={() => setCoachOpen(true)}
               className={actionBtnClass}
               title="AI Coach Insights"
             >
@@ -324,6 +330,9 @@ const DesktopPatientBar: React.FC = () => {
         </div>
       </div>
     </header>
+
+      <AiCoachPanel open={coachOpen} onClose={() => setCoachOpen(false)} />
+    </>
   );
 };
 

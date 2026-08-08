@@ -19,6 +19,45 @@ interface CoachChatMessage {
   text: string;
 }
 
+/** Break "1. … 2. …" into lines when the model dumps a list in one paragraph. */
+function normalizeCoachText(text: string): string {
+  if (text.includes('\n')) return text;
+  return text.replace(/\s+(\d+)\.\s+/g, '\n$1. ');
+}
+
+/** Render light markdown: **bold** and line breaks (no HTML injection). */
+function CoachMessageBody({ text }: { text: string }) {
+  const normalized = normalizeCoachText(text);
+  const lines = normalized.split('\n');
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {lines.map((line, lineIdx) => {
+        const parts = line.split(/(\*\*[^*]+\*\*)/g);
+        return (
+          <React.Fragment key={lineIdx}>
+            {lineIdx > 0 && '\n'}
+            {parts.map((part, partIdx) => {
+              const bold = /^\*\*([^*]+)\*\*$/.exec(part);
+              if (bold) {
+                return (
+                  <strong
+                    key={partIdx}
+                    className="font-semibold text-white"
+                  >
+                    {bold[1]}
+                  </strong>
+                );
+              }
+              return <React.Fragment key={partIdx}>{part}</React.Fragment>;
+            })}
+          </React.Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
 /**
  * Fitness AI Coach drawer — chats with POST /api/coach/message.
  * Visual pattern matches AlertsDrawer / ProfileDrawer (right-side panel).
@@ -299,7 +338,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                         : 'bg-slate-900/80 border border-slate-800 text-slate-200 rounded-bl-md'
                     )}
                   >
-                    {msg.text}
+                    {msg.role === 'model' ? (
+                      <CoachMessageBody text={msg.text} />
+                    ) : (
+                      msg.text
+                    )}
                   </div>
                 </div>
               ))}

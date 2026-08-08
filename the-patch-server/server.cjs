@@ -350,7 +350,7 @@ async function handleCoachApi(req, res) {
       sendJson(req, res, 200, { sessionId: session.sessionId });
       return true;
     } catch (err) {
-      console.error(`[COACH] new-session failed for uid=${uid}:`, err);
+      console.error('[coach/new-session] error:', err?.stack || err);
       sendJson(req, res, 500, { error: 'coach_failed' });
       return true;
     }
@@ -451,7 +451,7 @@ async function handleCoachApi(req, res) {
       sendJson(req, res, 200, { sessionId, reply: reply.text });
       return true;
     } catch (err) {
-      console.error(`[COACH] Failed for uid=${uid}:`, err);
+      console.error('[coach/message] error:', err?.stack || err);
       sendJson(req, res, 500, { error: 'coach_failed' });
       return true;
     }

@@ -34,4 +34,6 @@ module.exports = {
   generateSessionSummary: impl.generateSessionSummary,
   /** Vertex-format tool declarations for the coach endpoint. */
   getCoachTools: impl.getCoachTools,
+  /** Unsplash reference-image search (hotlink + attribution metadata). */
+  searchReferenceImage: impl.searchReferenceImage,
 };

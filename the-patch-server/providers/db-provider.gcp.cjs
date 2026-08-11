@@ -184,7 +184,18 @@ async function getRecentSessionSummaries(uid, excludeSessionId, limit = 3) {
 
 /**
  * Appends a message and bumps the session's lastMessageAt.
- * @param {{ role: 'user'|'model', text: string, metricsSnapshot?: object|null, toolCalls?: array }} msg
+ * @param {{
+ *   role: 'user'|'model',
+ *   text: string,
+ *   metricsSnapshot?: object|null,
+ *   toolCalls?: array,
+ *   attachments?: Array<{
+ *     type: 'image',
+ *     imageUrl: string,
+ *     photographerName: string,
+ *     photographerProfileUrl: string,
+ *   }>,
+ * }} msg
  */
 async function appendMessage(uid, sessionId, msg) {
   const now = Date.now();
@@ -197,6 +208,7 @@ async function appendMessage(uid, sessionId, msg) {
     createdAt: now,
     metricsSnapshot: msg.metricsSnapshot ?? null,
     toolCalls: Array.isArray(msg.toolCalls) ? msg.toolCalls : [],
+    attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
   };
 
   const batch = db.batch();

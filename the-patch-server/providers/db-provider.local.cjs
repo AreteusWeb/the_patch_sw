@@ -193,6 +193,7 @@ async function appendMessage(uid, sessionId, msg) {
     createdAt: now,
     metricsSnapshot: msg.metricsSnapshot ?? null,
     toolCalls: Array.isArray(msg.toolCalls) ? msg.toolCalls : [],
+    attachments: Array.isArray(msg.attachments) ? msg.attachments : [],
   };
 
   messagesFor(uid, sessionId).push(payload);

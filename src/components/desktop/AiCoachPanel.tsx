@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Send, Sparkles, MessageSquarePlus, Loader2 } from 'lucide-react';
+import { X, Send, MessageSquarePlus, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
@@ -13,10 +13,18 @@ interface AiCoachPanelProps {
 
 type CoachRole = 'user' | 'model';
 
+interface CoachImageAttachment {
+  type: 'image';
+  imageUrl: string;
+  photographerName: string;
+  photographerProfileUrl: string;
+}
+
 interface CoachChatMessage {
   id: string;
   role: CoachRole;
   text: string;
+  attachments?: CoachImageAttachment[];
 }
 
 /** Break "1. … 2. …" into lines when the model dumps a list in one paragraph. */
@@ -43,7 +51,7 @@ function CoachMessageBody({ text }: { text: string }) {
                 return (
                   <strong
                     key={partIdx}
-                    className="font-semibold text-white"
+                    className="font-semibold text-[#F5F5F5]"
                   >
                     {bold[1]}
                   </strong>
@@ -55,6 +63,58 @@ function CoachMessageBody({ text }: { text: string }) {
         );
       })}
     </span>
+  );
+}
+
+/** Unsplash attribution (required by Unsplash API guidelines). */
+function CoachImageAttachmentView({
+  attachment,
+}: {
+  attachment: CoachImageAttachment;
+}) {
+  const [broken, setBroken] = useState(false);
+  const profileUrl =
+    attachment.photographerProfileUrl || 'https://unsplash.com';
+  const name = attachment.photographerName || 'Unknown';
+
+  return (
+    <div className="mt-3 w-full min-w-0">
+      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-1.5 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.5)]">
+        {!broken ? (
+          <img
+            src={attachment.imageUrl}
+            alt=""
+            loading="lazy"
+            className="block w-full max-w-full h-auto rounded-[12px]"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <div className="w-full h-28 rounded-[12px] bg-slate-900/80 flex items-center justify-center text-[10px] text-[#6B7280]">
+            Image unavailable
+          </div>
+        )}
+      </div>
+      <p className="mt-1.5 text-[8px] leading-normal text-[#6B7280]">
+        Photo by{' '}
+        <a
+          href={profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-[#6B7280]/60 text-[#A0A0A8] hover:text-teal-400"
+        >
+          {name}
+        </a>{' '}
+        on{' '}
+        <a
+          href="https://unsplash.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-[#6B7280]/60 text-[#A0A0A8] hover:text-teal-400"
+        >
+          Unsplash
+        </a>
+      </p>
+    </div>
   );
 }
 
@@ -76,13 +136,28 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const resizeComposer = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const maxPx = 5 * 20; // ~5 lines
+    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+  };
 
   useEffect(() => {
     if (!open) return;
-    const t = window.setTimeout(() => inputRef.current?.focus(), 200);
+    const t = window.setTimeout(() => {
+      inputRef.current?.focus();
+      resizeComposer();
+    }, 200);
     return () => window.clearTimeout(t);
   }, [open]);
+
+  useEffect(() => {
+    resizeComposer();
+  }, [input]);
 
   useEffect(() => {
     if (!listRef.current) return;
@@ -138,6 +213,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
       setMessages([]);
       setSessionLimitReached(false);
       setInput('');
+      window.setTimeout(() => resizeComposer(), 0);
       if (typeof data.sessionId === 'string') {
         setSessionId(data.sessionId);
       } else {
@@ -162,6 +238,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
 
     setError(null);
     setInput('');
+    window.setTimeout(() => resizeComposer(), 0);
 
     const userMsg: CoachChatMessage = {
       id: `u_${Date.now()}`,
@@ -217,9 +294,38 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
           ? data.reply.trim()
           : 'No reply from coach.';
 
+      const attachments: CoachImageAttachment[] = Array.isArray(data.attachments)
+        ? data.attachments
+            .filter(
+              (a: unknown): a is CoachImageAttachment =>
+                !!a &&
+                typeof a === 'object' &&
+                (a as CoachImageAttachment).type === 'image' &&
+                typeof (a as CoachImageAttachment).imageUrl === 'string' &&
+                !!(a as CoachImageAttachment).imageUrl
+            )
+            .map((a: CoachImageAttachment) => ({
+              type: 'image' as const,
+              imageUrl: a.imageUrl,
+              photographerName:
+                typeof a.photographerName === 'string'
+                  ? a.photographerName
+                  : 'Unknown',
+              photographerProfileUrl:
+                typeof a.photographerProfileUrl === 'string'
+                  ? a.photographerProfileUrl
+                  : 'https://unsplash.com',
+            }))
+        : [];
+
       setMessages(prev => [
         ...prev,
-        { id: `m_${Date.now()}`, role: 'model', text: replyText },
+        {
+          id: `m_${Date.now()}`,
+          role: 'model',
+          text: replyText,
+          attachments,
+        },
       ]);
     } catch {
       setError('Network error — could not reach the coach server.');
@@ -228,7 +334,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
     }
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void sendMessage();
@@ -257,43 +363,38 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-[22rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
+            className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-2">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
-                  <Sparkles size={15} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">
-                    Performance
-                  </p>
-                  <p className="text-sm font-semibold text-white mt-0.5 truncate">
-                    AI Coach
-                  </p>
-                </div>
+            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
+                  Performance
+                </p>
+                <p className="text-base font-bold text-[#F5F5F5] mt-0.5 truncate leading-tight">
+                  AI Coach
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
                 <button
                   type="button"
                   onClick={() => void startNewConversation()}
                   disabled={busy}
-                  className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[9px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-teal-500/40 hover:bg-teal-500/10 transition-all disabled:opacity-40"
+                  className="flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400 transition-colors disabled:opacity-40"
                   title="Start a new conversation"
                 >
                   {startingNew ? (
-                    <Loader2 size={13} className="animate-spin text-teal-400" />
+                    <Loader2 size={14} className="animate-spin text-teal-400" />
                   ) : (
-                    <MessageSquarePlus size={13} />
+                    <MessageSquarePlus size={14} />
                   )}
                   {startingNew ? 'Starting' : 'New'}
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] hover:bg-slate-800/80 transition-colors"
                   aria-label="Close AI Coach"
                 >
                   <X size={15} />
@@ -304,19 +405,19 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
             {/* Messages */}
             <div
               ref={listRef}
-              className="relative flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-4 flex flex-col gap-3"
+              className="relative flex-1 min-h-0 overflow-y-auto scrollbar-hide px-5 py-5 flex flex-col gap-3.5"
             >
               {startingNew && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
-                  <Loader2 size={28} className="animate-spin text-teal-400" />
-                  <p className="text-[11px] text-slate-400 font-medium">
+                  <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
+                  <p className="text-[11px] text-[#A0A0A8] font-medium">
                     Starting new conversation…
                   </p>
                 </div>
               )}
 
               {messages.length === 0 && !loading && !startingNew && (
-                <p className="text-[11px] text-slate-500 leading-relaxed px-1">
+                <p className="text-[12px] text-[#6B7280] leading-[1.5] px-0.5">
                   Ask about training, recovery, hydration, or effort. This is
                   performance coaching — not medical advice.
                 </p>
@@ -326,31 +427,40 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                 <div
                   key={msg.id}
                   className={cn(
-                    'flex',
+                    'flex min-w-0 w-full',
                     msg.role === 'user' ? 'justify-end' : 'justify-start'
                   )}
                 >
                   <div
                     className={cn(
-                      'max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-snug',
+                      'max-w-[85%] min-w-0 px-3.5 py-3 text-[13px] leading-[1.45] break-words [overflow-wrap:anywhere] text-[#F5F5F5]',
                       msg.role === 'user'
-                        ? 'bg-teal-500/20 border border-teal-500/30 text-teal-50 rounded-br-md'
-                        : 'bg-slate-900/80 border border-slate-800 text-slate-200 rounded-bl-md'
+                        ? 'bg-slate-700/90 border border-slate-600/50 font-medium rounded-[16px] rounded-br-[4px]'
+                        : 'bg-slate-800/70 border border-slate-700/60 rounded-[16px] rounded-bl-[4px]'
                     )}
+                    style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                   >
                     {msg.role === 'model' ? (
                       <CoachMessageBody text={msg.text} />
                     ) : (
                       msg.text
                     )}
+                    {msg.role === 'model' &&
+                      Array.isArray(msg.attachments) &&
+                      msg.attachments.map((att, idx) => (
+                        <CoachImageAttachmentView
+                          key={`${msg.id}_img_${idx}`}
+                          attachment={att}
+                        />
+                      ))}
                   </div>
                 </div>
               ))}
 
               {loading && (
                 <div className="flex justify-start">
-                  <div className="bg-slate-900/80 border border-slate-800 text-slate-400 text-[11px] px-3 py-2 rounded-2xl rounded-bl-md italic flex items-center gap-2">
-                    <Loader2 size={12} className="animate-spin text-teal-400" />
+                  <div className="bg-slate-800/70 border border-slate-700/60 text-[#A0A0A8] text-[12px] px-3.5 py-3 rounded-[16px] rounded-bl-[4px] italic flex items-center gap-2 leading-[1.45]">
+                    <Loader2 size={13} className="animate-spin text-[#A0A0A8]" />
                     Coach is typing…
                   </div>
                 </div>
@@ -358,16 +468,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
             </div>
 
             {/* Error + composer */}
-            <div className="flex-shrink-0 border-t border-slate-800/80 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex-shrink-0 border-t border-slate-800/80 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {error && (
-                <div className="mb-2 space-y-2">
-                  <p className="text-[10px] text-rose-400 leading-snug">{error}</p>
+                <div className="mb-3 space-y-2">
+                  <p className="text-[11px] text-rose-400 leading-[1.45]">{error}</p>
                   {sessionLimitReached && (
                     <button
                       type="button"
                       onClick={() => void startNewConversation()}
                       disabled={busy}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-teal-500/30 bg-teal-500/10 text-[10px] font-bold uppercase tracking-wider text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors disabled:opacity-40"
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-teal-500/40 bg-transparent text-[10px] font-bold uppercase tracking-wider text-teal-400 hover:bg-teal-500/10 transition-colors disabled:opacity-40"
                     >
                       {startingNew ? (
                         <Loader2 size={13} className="animate-spin" />
@@ -380,14 +490,14 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                 </div>
               )}
               {sessionId && (
-                <p className="text-[8px] text-slate-600 uppercase tracking-wider mb-1.5 truncate">
+                <p className="text-[8px] text-[#6B7280] uppercase tracking-wider mb-2 truncate">
                   Session {sessionId}
                 </p>
               )}
-              <div className="flex items-center gap-2">
-                <input
+              <div className="flex items-end gap-2.5">
+                <textarea
                   ref={inputRef}
-                  type="text"
+                  rows={1}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onKeyDown}
@@ -397,16 +507,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                       ? 'Start a new conversation to continue…'
                       : 'Ask your coach…'
                   }
-                  className="flex-1 min-w-0 bg-slate-900/60 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2.5 focus:outline-none focus:border-teal-500/40 focus:ring-1 focus:ring-teal-500/20 placeholder:text-slate-600 disabled:opacity-50"
+                  className="flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 text-[#F5F5F5] text-[13px] rounded-2xl px-3.5 py-3 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] max-h-[6.25rem] transition-[border-color,box-shadow]"
                 />
                 <button
                   type="button"
                   onClick={() => void sendMessage()}
                   disabled={busy || sessionLimitReached || !input.trim()}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-teal-500 text-slate-950 hover:bg-teal-400 transition-colors disabled:opacity-40 disabled:hover:bg-teal-500 shrink-0"
+                  className="w-11 h-11 flex items-center justify-center rounded-2xl bg-teal-500 text-slate-950 hover:bg-teal-400 active:bg-teal-600 active:scale-[0.97] transition-all disabled:opacity-35 disabled:hover:bg-teal-500 disabled:active:scale-100 shrink-0"
                   aria-label="Send message"
                 >
-                  <Send size={15} strokeWidth={2.5} />
+                  <Send size={16} strokeWidth={2.5} />
                 </button>
               </div>
             </div>

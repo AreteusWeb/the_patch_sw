@@ -94,10 +94,107 @@ const COACH_FUNCTION_DECLARATIONS = [
       },
     },
   },
+  {
+    name: 'search_reference_image',
+    description:
+      'Search for a reference photo to help illustrate a concept, object, ' +
+      'or piece of equipment mentioned in the conversation (e.g. a kettlebell, ' +
+      'a foam roller, a body part). Use this when a visual would help the ' +
+      'athlete understand something you\'re describing.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Short search term in English (e.g. "kettlebell", "foam roller").',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 function getCoachTools() {
   return [{ functionDeclarations: COACH_FUNCTION_DECLARATIONS }];
+}
+
+/**
+ * Unsplash photo search (hotlink URLs only — never download/rehost).
+ * Triggers Unsplash download tracking as fire-and-forget after building the payload.
+ *
+ * @param {{ query?: string }} args
+ * @returns {Promise<{
+ *   imageUrl: string|null,
+ *   photographerName?: string,
+ *   photographerProfileUrl?: string,
+ *   downloadTrackingUrl?: string|null,
+ * }>}
+ */
+async function searchReferenceImage({ query } = {}) {
+  const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+  if (!accessKey) {
+    console.warn('[ai-provider.gcp] UNSPLASH_ACCESS_KEY is not set');
+    return { imageUrl: null };
+  }
+
+  const q = typeof query === 'string' ? query.trim() : '';
+  if (!q) return { imageUrl: null };
+
+  let photo;
+  try {
+    const url =
+      'https://api.unsplash.com/search/photos' +
+      `?query=${encodeURIComponent(q)}&per_page=1`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Client-ID ${accessKey}` },
+    });
+    if (!res.ok) {
+      console.warn(
+        `[ai-provider.gcp] Unsplash search failed: HTTP ${res.status}`
+      );
+      return { imageUrl: null };
+    }
+    const data = await res.json();
+    photo = Array.isArray(data?.results) ? data.results[0] : null;
+  } catch (err) {
+    console.warn(
+      '[ai-provider.gcp] Unsplash search error:',
+      err?.message || err
+    );
+    return { imageUrl: null };
+  }
+
+  if (!photo?.urls?.regular) {
+    return { imageUrl: null };
+  }
+
+  const payload = {
+    imageUrl: photo.urls.regular,
+    photographerName: photo.user?.name || 'Unknown',
+    photographerProfileUrl:
+      photo.user?.links?.html || 'https://unsplash.com',
+    downloadTrackingUrl: photo.links?.download_location || null,
+  };
+
+  // Unsplash guideline: ping download_location when a photo is used (non-blocking).
+  if (payload.downloadTrackingUrl) {
+    fetch(payload.downloadTrackingUrl, {
+      headers: { Authorization: `Client-ID ${accessKey}` },
+    })
+      .then((res) => {
+        if (res.ok) {
+          console.log('[unsplash] download tracked ok');
+        } else {
+          console.error('[unsplash] download tracking failed:', res.status);
+        }
+      })
+      .catch((err) => {
+        console.error('[unsplash] download tracking failed:', err?.message || err);
+      });
+  }
+
+  return payload;
 }
 
 /**
@@ -354,6 +451,7 @@ module.exports = {
   generateCoachReply,
   generateSessionSummary,
   getCoachTools,
+  searchReferenceImage,
   COACH_FUNCTION_DECLARATIONS,
   MAX_TOOL_ROUNDS,
 };

@@ -15,8 +15,55 @@ function getCoachTools() {
       { name: 'get_session_history', description: 'mock', parameters: { type: 'object', properties: { limit: { type: 'number' } } } },
       { name: 'get_trend', description: 'mock', parameters: { type: 'object', properties: { metric: { type: 'string' }, days: { type: 'number' } }, required: ['metric'] } },
       { name: 'get_recent_alerts', description: 'mock', parameters: { type: 'object', properties: { limit: { type: 'number' } } } },
+      {
+        name: 'search_reference_image',
+        description:
+          'Search for a reference photo to help illustrate a concept, object, ' +
+          'or piece of equipment mentioned in the conversation (e.g. a kettlebell, ' +
+          'a foam roller, a body part). Use this when a visual would help the ' +
+          'athlete understand something you\'re describing.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description:
+                'Short search term in English (e.g. "kettlebell", "foam roller").',
+            },
+          },
+          required: ['query'],
+        },
+      },
     ],
   }];
+}
+
+/**
+ * Local mock Unsplash search — fixed placeholder + example photographer.
+ * Still fires a non-blocking tracking ping when downloadTrackingUrl is set.
+ *
+ * @param {{ query?: string }} _args
+ */
+async function searchReferenceImage({ query: _query } = {}) {
+  const payload = {
+    imageUrl:
+      'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1080&q=80',
+    photographerName: 'Example Photographer',
+    photographerProfileUrl: 'https://unsplash.com/@example',
+    downloadTrackingUrl: null,
+  };
+
+  // Mirror cloud contract: fire-and-forget tracking when a URL is present.
+  if (payload.downloadTrackingUrl) {
+    fetch(payload.downloadTrackingUrl).catch((err) => {
+      console.warn(
+        '[ai-provider.local] Unsplash download tracking failed:',
+        err?.message || err
+      );
+    });
+  }
+
+  return payload;
 }
 
 /**
@@ -56,10 +103,33 @@ async function generateCoachReply({
     result: historyResult,
   });
 
+  // Optionally exercise image search when the user asks for a visual.
+  const wantsVisual =
+    /\b(show|image|photo|picture|visual|kettlebell|foam\s*roller|equipment)\b/i.test(
+      String(userMessage || '')
+    );
+  if (wantsVisual && typeof toolHandlers?.search_reference_image === 'function') {
+    const imageArgs = { query: 'kettlebell' };
+    let imageResult = { imageUrl: null };
+    try {
+      imageResult = await toolHandlers.search_reference_image(imageArgs);
+    } catch (err) {
+      imageResult = { error: err.message || 'tool_failed' };
+    }
+    toolCalls.push({
+      name: 'search_reference_image',
+      args: imageArgs,
+      result: imageResult,
+    });
+  }
+
   const sessionCount = Array.isArray(historyResult) ? historyResult.length : 0;
   const text =
     `[local coach mock] Got your message (${turns} prior turn(s)): "${preview || '(empty)'}". ` +
     `Looked up session history via tool (${sessionCount} closed session(s)). ` +
+    (wantsVisual
+      ? 'Attached a reference photo when a visual helps. '
+      : '') +
     `Keep training smart — hydrate, watch recovery score trends, and ease off if HR stays elevated at rest. ` +
     `This is performance coaching only, not medical advice.`;
 
@@ -75,4 +145,9 @@ async function generateSessionSummary({ messages: _messages }) {
   return '[local mock summary] Discussed recovery and training topics.';
 }
 
-module.exports = { generateCoachReply, generateSessionSummary, getCoachTools };
+module.exports = {
+  generateCoachReply,
+  generateSessionSummary,
+  getCoachTools,
+  searchReferenceImage,
+};

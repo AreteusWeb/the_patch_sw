@@ -278,7 +278,8 @@ const COACH_SYSTEM_PROMPT_PLACEHOLDER = `You are the AI Coach for The Patch, a p
 YOUR ROLE:
 - Give practical tips on training, recovery, hydration, sleep, and effort management, based on the athlete's data.
 - Tone: motivating, direct, concise — like a coach, not a doctor or a generic chatbot. Keep responses to 2-4 sentences or short lists, never long paragraphs.
-- Use the available tools (get_current_metrics, get_trend, get_session_history, get_recent_alerts) whenever the question calls for data you don't already have, instead of assuming values.
+- Use the available tools (get_current_metrics, get_trend, get_session_history, get_recent_alerts, search_reference_image) whenever the question calls for data you don't already have, instead of assuming values.
+- When you use the search_reference_image tool and get a result, do NOT include the image URL, markdown image syntax (e.g. ![text](url) or [text](url)), or any link to the photo in your text response — the image is already displayed to the user automatically as an attachment below your message. Just reference it naturally in words, e.g. "Here's a kettlebell:" without the markdown/URL.
 - Respond in the same language the athlete writes in (English or Spanish). If unclear, default to English.
 
 WHAT YOU NEVER DO:
@@ -415,6 +416,7 @@ async function handleCoachApi(req, res) {
 
       // Tool handlers are injected from db-provider (bound to this uid).
       // ai-provider must not import db-provider itself.
+      // Unsplash search lives in ai-provider (not DB).
       const toolHandlers = {
         get_current_metrics: async () => {
           if (metricsSnapshot) return metricsSnapshot;
@@ -429,6 +431,8 @@ async function handleCoachApi(req, res) {
           }),
         get_recent_alerts: async (args = {}) =>
           dbProvider.getRecentAlerts(uid, { limit: args.limit ?? 10 }),
+        search_reference_image: async (args = {}) =>
+          aiProvider.searchReferenceImage({ query: args.query }),
       };
 
       const reply = await aiProvider.generateCoachReply({
@@ -441,14 +445,40 @@ async function handleCoachApi(req, res) {
         sessionId,
       });
 
+      const toolCalls = Array.isArray(reply.toolCalls) ? reply.toolCalls : [];
+      const attachments = [];
+      for (const call of toolCalls) {
+        if (call?.name !== 'search_reference_image') continue;
+        const result = call.result;
+        if (result && typeof result.imageUrl === 'string' && result.imageUrl) {
+          attachments.push({
+            type: 'image',
+            imageUrl: result.imageUrl,
+            photographerName:
+              typeof result.photographerName === 'string'
+                ? result.photographerName
+                : 'Unknown',
+            photographerProfileUrl:
+              typeof result.photographerProfileUrl === 'string'
+                ? result.photographerProfileUrl
+                : 'https://unsplash.com',
+          });
+        }
+      }
+
       await dbProvider.appendMessage(uid, sessionId, {
         role: 'model',
         text: reply.text,
         metricsSnapshot: null,
-        toolCalls: Array.isArray(reply.toolCalls) ? reply.toolCalls : [],
+        toolCalls,
+        attachments,
       });
 
-      sendJson(req, res, 200, { sessionId, reply: reply.text });
+      sendJson(req, res, 200, {
+        sessionId,
+        reply: reply.text,
+        attachments,
+      });
       return true;
     } catch (err) {
       console.error('[coach/message] error:', err?.stack || err);

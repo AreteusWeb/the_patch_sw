@@ -1,13 +1,13 @@
 /**
  * useVoiceInput — wraps the browser SpeechRecognition API (Chrome / Edge).
  * - End-of-turn: final result + ~1200ms silence → onFinalTranscript
- * - Idle mic off: ~10s with no speech activity → stop + onIdleTimeout
+ * - Idle mic off: ~8s with no speech activity → stop + onIdleTimeout
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SILENCE_MS = 1200;
-const IDLE_MS = 10_000;
+const IDLE_MS = 8_000;
 
 type SpeechRecognitionResultLike = {
   isFinal: boolean;
@@ -186,7 +186,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     rec.lang = lang;
 
     rec.onresult = (event: SpeechRecognitionEventLike) => {
-      // Any audio activity resets the 10s idle mic-off timer.
+      // Any audio activity resets the 8s idle mic-off timer.
       scheduleIdleTimeout();
 
       let interim = '';

@@ -70,16 +70,8 @@ const DesktopPatientBar: React.FC = () => {
         ? 'text-amber-400'
         : 'text-rose-400';
 
-  const aiConfidence = patchLive ? 94 : null;
-
   const patchLabel = patchLive ? 'Patch Connected' : 'Patch Disconnected';
   const patchColor = patchLive ? 'text-emerald-400' : 'text-rose-400';
-
-  const sessionStart = React.useMemo(() => {
-    const d = new Date();
-    d.setHours(9, 15, 0, 0);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }, []);
 
   const sessionElapsed = useFitnessSessionElapsed();
   const sessionActive =
@@ -162,7 +154,7 @@ const DesktopPatientBar: React.FC = () => {
                   )}
                 </span>
               ) : (
-                <span>Monitoring: Day 1 of 7 • Started {sessionStart}</span>
+                <span>Monitoring: Day — of — • Started —</span>
               )}
             </div>
           </div>
@@ -322,11 +314,9 @@ const DesktopPatientBar: React.FC = () => {
               <span className="text-slate-500 font-normal"> • {batteryLevel}% Battery</span>
             )}
           </span>
-          {aiConfidence != null && (
-            <span className="text-[10px] text-slate-500 mt-0.5">
-              AI Confidence: {aiConfidence}%
+          <span className="text-[10px] text-slate-500 mt-0.5">
+              AI Confidence: —
             </span>
-          )}
         </div>
       </div>
     </header>

@@ -166,7 +166,7 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
             {intensity.label} • {activity.steps.toLocaleString()} steps
           </div>
           <div className="text-[10px] text-slate-500 mt-0.5">
-            {activity.activityType} • Posture: Upright
+            {activity.activityType} • Posture: Pending
           </div>
           <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
             <div

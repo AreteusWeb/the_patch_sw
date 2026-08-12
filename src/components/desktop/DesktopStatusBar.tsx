@@ -58,7 +58,7 @@ const DesktopStatusBar: React.FC = () => {
               Calories Est: {fitnessSessionStatus !== 'idle' ? `~${calories.toLocaleString()}` : '—'}
             </span>
             <span className="text-slate-700">•</span>
-            <span>AI Analysis: {fitnessSessionStatus === 'recording' ? 'Real-time' : '—'}</span>
+            <span>AI Analysis: —</span>
             <span className="text-slate-700">•</span>
             <button
               type="button"
@@ -75,7 +75,7 @@ const DesktopStatusBar: React.FC = () => {
             <span className="text-slate-700">•</span>
             <span>Total Data: —</span>
             <span className="text-slate-700">•</span>
-            <span>AI Last Analyzed: {isConnected ? '2 min ago' : '—'}</span>
+            <span>AI Last Analyzed: —</span>
             <span className="text-slate-700">•</span>
             <button
               type="button"

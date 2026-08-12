@@ -215,8 +215,10 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
   };
 
   // ── Input shared styles ─────────────────────────────────────────────────────
-  const inputCls = "w-full bg-slate-950/60 border border-slate-800 text-slate-200 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition-all placeholder:text-slate-700 disabled:opacity-50 font-mono";
-  const saveBtnCls = "w-full mt-3 bg-teal-400 hover:bg-teal-300 text-black text-xs font-bold py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest";
+  const inputCls =
+    'w-full bg-slate-900/80 border border-slate-700/80 text-[#F5F5F5] text-[13px] rounded-2xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 transition-all placeholder:text-[#6B7280] disabled:opacity-50 font-mono leading-[1.45]';
+  const saveBtnCls =
+    'w-full mt-3 bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 text-[10px] font-bold py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-widest';
 
   const upToDate = currentFwVersion && latestFwVersion && currentFwVersion === latestFwVersion;
 
@@ -225,7 +227,7 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
     { key: 'email',    label: 'Email',         icon: Mail,      value: currentUser?.email ?? '—' },
     { key: 'password', label: 'Password',      icon: Lock,      value: '••••••••' },
     { key: 'mac',      label: 'Device MAC',    icon: Cpu,       value: deviceMac ?? 'Not set' },
-    { key: 'ota',      label: 'Firmware',      icon: RefreshCw, value: currentFwVersion ?? 'Unknown' },
+    { key: 'ota',      label: 'Firmware',      icon: RefreshCw, value: currentFwVersion ?? '—' },
   ];
 
   return (
@@ -244,69 +246,79 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
 
           <motion.div
             key="profile-drawer"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={{ x: '100%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-72 z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
+            className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-500/15 text-teal-400 border border-teal-500/20">
-                  <User size={15} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Profile</p>
-                  <p className="text-[9px] text-slate-500 uppercase tracking-widest">Account settings</p>
-                </div>
+            {/* Header — same family as AI Coach */}
+            <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
+                  Account
+                </p>
+                <p className="text-base font-bold text-[#F5F5F5] mt-0.5 truncate leading-tight">
+                  Profile
+                </p>
               </div>
-              <button
-                onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
-              >
-                <X size={15} />
-              </button>
+
+              <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] hover:bg-slate-800/80 transition-colors"
+                  aria-label="Close profile"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
-            {/* Global success */}
             <AnimatePresence>
               {success && (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 bg-teal-500/10 border border-teal-500/20 rounded-xl"
+                  className="mx-5 mt-4 flex items-center gap-2 px-3.5 py-2.5 bg-teal-500/10 border border-teal-500/25 rounded-xl"
                 >
                   <Check size={13} className="text-teal-400 flex-shrink-0" />
-                  <p className="text-[11px] text-teal-400">{success}</p>
+                  <p className="text-[12px] text-teal-400 leading-[1.45]">{success}</p>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Sections */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+            <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-5 space-y-2">
               {rows.map(({ key, label, icon: Icon, value }) => (
-                <div key={key} className="rounded-xl border border-slate-800/80 bg-slate-900/40 overflow-hidden">
-                  {/* Row header */}
+                <div
+                  key={key}
+                  className="rounded-2xl border border-slate-700/60 bg-slate-800/40 overflow-hidden"
+                >
                   <button
+                    type="button"
                     onClick={() => toggle(key)}
-                    className="flex items-center gap-3 w-full px-3 py-3 hover:bg-slate-900/60 border border-transparent hover:border-slate-800/80 transition-all group"
+                    className="flex items-center gap-3 w-full px-3.5 py-3 hover:bg-slate-800/60 transition-colors group"
                   >
-                    <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-900/60 text-slate-400 border border-slate-800 group-hover:text-teal-400 group-hover:bg-teal-500/15 group-hover:border-teal-500/20 transition-all flex-shrink-0">
-                      <Icon size={13} />
+                    <div className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900/60 text-[#A0A0A8] border border-slate-700/50 group-hover:text-teal-400 transition-colors flex-shrink-0">
+                      <Icon size={14} />
                     </div>
                     <div className="flex-1 text-left min-w-0">
-                      <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{label}</p>
-                      <p className="text-xs text-slate-300 truncate mt-0.5">{value}</p>
+                      <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest">
+                        {label}
+                      </p>
+                      <p className="text-[13px] text-[#F5F5F5] truncate mt-0.5 leading-[1.45]">
+                        {value}
+                      </p>
                     </div>
                     <ChevronRight
-                      size={13}
-                      className={`text-slate-600 transition-transform flex-shrink-0 ${activeSection === key ? 'rotate-90' : ''}`}
+                      size={14}
+                      className={`text-[#6B7280] transition-transform flex-shrink-0 ${
+                        activeSection === key ? 'rotate-90' : ''
+                      }`}
                     />
                   </button>
 
-                  {/* Expanded edit form */}
                   <AnimatePresence>
                     {activeSection === key && (
                       <motion.div
@@ -316,100 +328,94 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-3 pb-3 pt-1 border-t border-slate-800/80 space-y-2">
-
-                          {/* Error */}
+                        <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-700/50 space-y-2">
                           {error && activeSection === key && (
-                            <p className="text-[10px] text-rose-400 px-1">{error}</p>
+                            <p className="text-[11px] text-rose-400 px-1 leading-[1.45]">{error}</p>
                           )}
 
-                          {/* Name */}
                           {key === 'name' && (
                             <>
                               <div className="relative">
-                                <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <User size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Full name" disabled={loading} className={inputCls} />
                               </div>
-                              <button onClick={saveName} disabled={loading || !name.trim()} className={saveBtnCls}>
+                              <button type="button" onClick={saveName} disabled={loading || !name.trim()} className={saveBtnCls}>
                                 {loading ? 'Saving…' : 'Save name'}
                               </button>
                             </>
                           )}
 
-                          {/* Email */}
                           {key === 'email' && (
                             <>
                               <div className="relative">
-                                <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <Mail size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="New email" disabled={loading} className={inputCls} />
                               </div>
                               <div className="relative">
-                                <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <Lock size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="password" value={currentPass} onChange={e => setCurrentPass(e.target.value)} placeholder="Current password" disabled={loading} className={inputCls} />
                               </div>
-                              <button onClick={saveEmail} disabled={loading || !email.trim() || !currentPass} className={saveBtnCls}>
+                              <button type="button" onClick={saveEmail} disabled={loading || !email.trim() || !currentPass} className={saveBtnCls}>
                                 {loading ? 'Saving…' : 'Save email'}
                               </button>
                             </>
                           )}
 
-                          {/* Password */}
                           {key === 'password' && (
                             <>
                               <div className="relative">
-                                <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <Lock size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="password" value={currentPass} onChange={e => setCurrentPass(e.target.value)} placeholder="Current password" disabled={loading} className={inputCls} />
                               </div>
                               <div className="relative">
-                                <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <Lock size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New password" disabled={loading} className={inputCls} />
                               </div>
-                              <button onClick={savePassword} disabled={loading || !currentPass || !newPassword} className={saveBtnCls}>
+                              <button type="button" onClick={savePassword} disabled={loading || !currentPass || !newPassword} className={saveBtnCls}>
                                 {loading ? 'Saving…' : 'Save password'}
                               </button>
                             </>
                           )}
 
-                          {/* MAC */}
                           {key === 'mac' && (
                             <>
                               <div className="relative">
-                                <Cpu size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+                                <Cpu size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B7280]" />
                                 <input type="text" value={mac} onChange={e => setMac(e.target.value)} placeholder="58:8C:81:56:41:78" disabled={loading} spellCheck={false} className={inputCls} />
                               </div>
-                              <p className="text-[9px] text-slate-600 px-1">Found on the label of your device</p>
-                              <button onClick={saveMac} disabled={loading || !mac} className={saveBtnCls}>
+                              <p className="text-[10px] text-[#6B7280] px-1 leading-[1.45]">Found on the label of your device</p>
+                              <button type="button" onClick={saveMac} disabled={loading || !mac} className={saveBtnCls}>
                                 {loading ? 'Saving…' : 'Save MAC'}
                               </button>
                             </>
                           )}
 
-                          {/* OTA / Firmware */}
                           {key === 'ota' && (
                             <>
                               {!deviceMac && (
-                                <p className="text-[10px] text-slate-500 px-1">Link a device MAC first to update its firmware.</p>
+                                <p className="text-[11px] text-[#6B7280] px-1 leading-[1.45]">Link a device MAC first to update its firmware.</p>
                               )}
 
                               {deviceMac && (
                                 <>
-                                  <div className="flex items-center justify-between px-1 text-[10px]">
-                                    <span className="text-slate-500">Current version</span>
-                                    <span className="text-slate-300 font-mono">{currentFwVersion ?? 'Unknown'}</span>
+                                  <div className="flex items-center justify-between px-1 text-[11px]">
+                                    <span className="text-[#6B7280]">Current version</span>
+                                    <span className="text-[#A0A0A8] font-mono">{currentFwVersion ?? '—'}</span>
                                   </div>
-                                  <div className="flex items-center justify-between px-1 text-[10px]">
-                                    <span className="text-slate-500">Latest available</span>
-                                    <span className="text-slate-300 font-mono">{latestFwVersion ?? '—'}</span>
+                                  <div className="flex items-center justify-between px-1 text-[11px]">
+                                    <span className="text-[#6B7280]">Latest available</span>
+                                    <span className="text-[#A0A0A8] font-mono">{latestFwVersion ?? '—'}</span>
                                   </div>
 
                                   {otaError && (
-                                    <p className="text-[10px] text-rose-400 px-1">{otaError}</p>
+                                    <p className="text-[11px] text-rose-400 px-1 leading-[1.45]">{otaError}</p>
                                   )}
                                   {otaStatus === 'sent' && (
-                                    <p className="text-[10px] text-teal-400 px-1">Update sent to your device. It will install shortly.</p>
+                                    <p className="text-[11px] text-teal-400 px-1 leading-[1.45]">Update sent to your device. It will install shortly.</p>
                                   )}
 
                                   <button
+                                    type="button"
                                     onClick={triggerOta}
                                     disabled={otaStatus === 'triggering' || !latestFwVersion || !!upToDate}
                                     className={saveBtnCls}

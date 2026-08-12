@@ -1,10 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Send, MessageSquarePlus, Loader2 } from 'lucide-react';
+import {
+  X,
+  Send,
+  MessageSquarePlus,
+  Loader2,
+  Mic,
+  Volume2,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
 import { getHrvProxyMs, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { cn } from '../../utils/cn';
+import { useVoiceInput } from '../../hooks/useVoiceInput';
+import { useVoiceOutput } from '../../hooks/useVoiceOutput';
 
 interface AiCoachPanelProps {
   open: boolean;
@@ -134,9 +143,38 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceDraft, setVoiceDraft] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const voiceModeRef = useRef(false);
+  const loadingRef = useRef(false);
+  const prevSpeakingRef = useRef(false);
+  const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
+
+  voiceModeRef.current = voiceMode;
+  loadingRef.current = loading;
+
+  const { speak, isSpeaking, cancel: cancelSpeech, isSupported: ttsSupported } =
+    useVoiceOutput();
+
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported: sttSupported,
+  } = useVoiceInput({
+    onFinalTranscript: (text) => {
+      stopListening();
+      setVoiceDraft(false);
+      setInput('');
+      void sendMessageRef.current(text);
+    },
+  });
+
+  const voiceSupported = sttSupported && ttsSupported;
 
   const resizeComposer = () => {
     const el = inputRef.current;
@@ -164,6 +202,38 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, loading, open]);
 
+  // Live interim transcript into the composer while listening.
+  useEffect(() => {
+    if (!voiceMode || !isListening) return;
+    setInput(transcript);
+    setVoiceDraft(true);
+  }, [transcript, isListening, voiceMode]);
+
+  // Tear down voice when the drawer closes.
+  useEffect(() => {
+    if (open) return;
+    setVoiceMode(false);
+    voiceModeRef.current = false;
+    stopListening();
+    cancelSpeech();
+    setVoiceDraft(false);
+  }, [open, stopListening, cancelSpeech]);
+
+  // After coach finishes speaking, resume listening if voice mode is still on.
+  useEffect(() => {
+    const wasSpeaking = prevSpeakingRef.current;
+    prevSpeakingRef.current = isSpeaking;
+    if (
+      wasSpeaking &&
+      !isSpeaking &&
+      voiceModeRef.current &&
+      !loadingRef.current &&
+      !sessionLimitReached
+    ) {
+      startListening();
+    }
+  }, [isSpeaking, sessionLimitReached, startListening]);
+
   const buildMetricsSnapshot = () => {
     const recovery = getRecoveryScore(vitals, hasRealData);
     return {
@@ -177,6 +247,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
     };
   };
 
+  const resumeVoiceListening = () => {
+    if (!voiceModeRef.current || sessionLimitReached) return;
+    window.setTimeout(() => startListening(), 80);
+  };
+
   const startNewConversation = async () => {
     if (startingNew || loading) return;
 
@@ -187,6 +262,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
 
     setStartingNew(true);
     setError(null);
+    stopListening();
+    cancelSpeech();
 
     try {
       const token = await currentUser.getIdToken();
@@ -213,6 +290,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
       setMessages([]);
       setSessionLimitReached(false);
       setInput('');
+      setVoiceDraft(false);
       window.setTimeout(() => resizeComposer(), 0);
       if (typeof data.sessionId === 'string') {
         setSessionId(data.sessionId);
@@ -220,6 +298,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
         setSessionId(null);
       }
       window.setTimeout(() => inputRef.current?.focus(), 100);
+      resumeVoiceListening();
     } catch {
       setError('Network error — could not start a new conversation.');
     } finally {
@@ -227,8 +306,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
     }
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
+  const sendMessage = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text || loading || startingNew || sessionLimitReached) return;
 
     if (!currentUser || typeof currentUser.getIdToken !== 'function') {
@@ -236,6 +315,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
       return;
     }
 
+    // Never listen while waiting for the coach reply.
+    stopListening();
+    setVoiceDraft(false);
     setError(null);
     setInput('');
     window.setTimeout(() => resizeComposer(), 0);
@@ -271,6 +353,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
             data.message ||
               'This coaching session has reached its message limit. Please start a new conversation.'
           );
+          setVoiceMode(false);
+          voiceModeRef.current = false;
           return;
         }
 
@@ -280,6 +364,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
           data?.error === 'coach_failed' ? 'Coach could not reply. Try again.' :
           'Could not reach the AI Coach.';
         setError(msg);
+        resumeVoiceListening();
         return;
       }
 
@@ -327,11 +412,48 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
           attachments,
         },
       ]);
+
+      if (voiceModeRef.current) {
+        const started = speak(replyText);
+        if (!started) resumeVoiceListening();
+      }
     } catch {
       setError('Network error — could not reach the coach server.');
+      resumeVoiceListening();
     } finally {
       setLoading(false);
     }
+  };
+
+  sendMessageRef.current = sendMessage;
+
+  const handleVoiceToggle = () => {
+    if (!voiceSupported || sessionLimitReached) return;
+
+    // Interrupt coach speech → listen immediately.
+    if (isSpeaking) {
+      cancelSpeech();
+      setVoiceMode(true);
+      voiceModeRef.current = true;
+      startListening();
+      return;
+    }
+
+    // Deactivate voice mode.
+    if (voiceMode) {
+      setVoiceMode(false);
+      voiceModeRef.current = false;
+      stopListening();
+      cancelSpeech();
+      setVoiceDraft(false);
+      return;
+    }
+
+    // Activate voice mode.
+    setVoiceMode(true);
+    voiceModeRef.current = true;
+    setError(null);
+    startListening();
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -342,6 +464,14 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
   };
 
   const busy = loading || startingNew;
+  const voiceState: 'idle' | 'listening' | 'speaking' | 'waiting' =
+    isSpeaking
+      ? 'speaking'
+      : voiceMode && isListening
+        ? 'listening'
+        : voiceMode
+          ? 'waiting'
+          : 'idle';
 
   return (
     <AnimatePresence>
@@ -377,6 +507,46 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
+                <button
+                  type="button"
+                  onClick={handleVoiceToggle}
+                  disabled={!voiceSupported || sessionLimitReached}
+                  className={cn(
+                    'relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors disabled:opacity-35',
+                    voiceState === 'listening' &&
+                      'text-teal-400 bg-teal-500/15',
+                    voiceState === 'speaking' &&
+                      'text-teal-400 bg-teal-500/10',
+                    voiceState === 'waiting' && 'text-teal-400/80',
+                    voiceState === 'idle' &&
+                      'text-[#A0A0A8] hover:text-teal-400 hover:bg-teal-500/10'
+                  )}
+                  title={
+                    !voiceSupported
+                      ? 'Voice mode not supported in this browser'
+                      : voiceState === 'speaking'
+                        ? 'Tap to interrupt'
+                        : voiceMode
+                          ? 'Stop voice mode'
+                          : 'Start voice mode'
+                  }
+                  aria-label={
+                    !voiceSupported
+                      ? 'Voice mode not supported'
+                      : voiceMode
+                        ? 'Stop voice mode'
+                        : 'Start voice mode'
+                  }
+                >
+                  {voiceState === 'speaking' ? (
+                    <Volume2 size={15} className="relative z-10" />
+                  ) : (
+                    <Mic size={15} className="relative z-10" />
+                  )}
+                  {voiceState === 'listening' && (
+                    <span className="absolute inset-1 rounded-lg bg-teal-400/20 animate-ping pointer-events-none" />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => void startNewConversation()}
@@ -420,6 +590,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                 <p className="text-[12px] text-[#6B7280] leading-[1.5] px-0.5">
                   Ask about training, recovery, hydration, or effort. This is
                   performance coaching — not medical advice.
+                  {voiceSupported && (
+                    <>
+                      {' '}
+                      Tap the mic for hands-free voice mode.
+                    </>
+                  )}
                 </p>
               )}
 
@@ -494,25 +670,47 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                   Session {sessionId}
                 </p>
               )}
+              {voiceMode && (
+                <p className="text-[9px] text-teal-400/80 mb-2 tracking-wide">
+                  {voiceState === 'listening' && 'Listening…'}
+                  {voiceState === 'speaking' && 'Coach speaking — tap mic to interrupt'}
+                  {voiceState === 'waiting' && 'Waiting for coach…'}
+                </p>
+              )}
               <div className="flex items-end gap-2.5">
                 <textarea
                   ref={inputRef}
                   rows={1}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setVoiceDraft(false);
+                    setInput(e.target.value);
+                  }}
                   onKeyDown={onKeyDown}
-                  disabled={busy || sessionLimitReached}
+                  disabled={
+                    busy ||
+                    sessionLimitReached ||
+                    (voiceMode && isListening) ||
+                    isSpeaking
+                  }
                   placeholder={
                     sessionLimitReached
                       ? 'Start a new conversation to continue…'
-                      : 'Ask your coach…'
+                      : voiceState === 'listening'
+                        ? 'Listening…'
+                        : 'Ask your coach…'
                   }
-                  className="flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 text-[#F5F5F5] text-[13px] rounded-2xl px-3.5 py-3 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] max-h-[6.25rem] transition-[border-color,box-shadow]"
+                  className={cn(
+                    'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 text-[13px] rounded-2xl px-3.5 py-3 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] max-h-[6.25rem] transition-[border-color,box-shadow]',
+                    voiceDraft
+                      ? 'text-[#A0A0A8] italic'
+                      : 'text-[#F5F5F5]'
+                  )}
                 />
                 <button
                   type="button"
                   onClick={() => void sendMessage()}
-                  disabled={busy || sessionLimitReached || !input.trim()}
+                  disabled={busy || sessionLimitReached || !input.trim() || voiceDraft}
                   className="w-11 h-11 flex items-center justify-center rounded-2xl bg-teal-500 text-slate-950 hover:bg-teal-400 active:bg-teal-600 active:scale-[0.97] transition-all disabled:opacity-35 disabled:hover:bg-teal-500 disabled:active:scale-100 shrink-0"
                   aria-label="Send message"
                 >

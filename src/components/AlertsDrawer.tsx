@@ -98,9 +98,9 @@ const VitalsRow: React.FC<{ vitals?: VitalsSnap }> = ({ vitals }) => {
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {items.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/60 border border-slate-800/80">
-          <span className="text-teal-400/70">{item.icon}</span>
-          <span className="text-[10px] font-medium text-slate-400 tabular-nums">{item.value}</span>
+        <div key={idx} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/60 border border-slate-700/50">
+          <span className="text-[#A0A0A8]">{item.icon}</span>
+          <span className="text-[10px] font-medium text-[#A0A0A8] tabular-nums">{item.value}</span>
         </div>
       ))}
     </div>
@@ -121,7 +121,7 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        'relative flex flex-col gap-1 px-3 py-3 rounded-xl border bg-slate-900/40 hover:bg-slate-900/60 transition-colors',
+        'relative flex flex-col gap-1 px-3.5 py-3 rounded-2xl border bg-slate-800/40 hover:bg-slate-800/60 transition-colors',
         styles.border
       )}
     >
@@ -129,11 +129,12 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5', styles.dot)} />
           <span className={cn('flex-shrink-0', styles.label)}>{icon}</span>
-          <span className="text-[12px] font-semibold text-white truncate">{event.label}</span>
+          <span className="text-[13px] font-semibold text-[#F5F5F5] truncate leading-[1.45]">{event.label}</span>
         </div>
         <button
+          type="button"
           onClick={() => onJump(event)}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-400 transition-all flex-shrink-0"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-transparent hover:bg-teal-500/10 border border-teal-500/35 text-teal-400 transition-colors flex-shrink-0"
           title="Jump to this moment"
         >
           <ArrowLeft size={11} />
@@ -141,8 +142,8 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
         </button>
       </div>
       <div className="flex items-center gap-1 ml-[18px]">
-        <Clock size={10} className="text-slate-600" />
-        <span className="text-[10px] text-slate-500 tabular-nums">{formatTime(event.timestampEpoch)}</span>
+        <Clock size={10} className="text-[#6B7280]" />
+        <span className="text-[10px] text-[#6B7280] tabular-nums">{formatTime(event.timestampEpoch)}</span>
       </div>
       <div className="ml-[18px]">
         <VitalsRow vitals={(event as ChestEvent & { vitals?: VitalsSnap }).vitals} />
@@ -153,8 +154,8 @@ const EventCard: React.FC<EventCardProps> = ({ event, onJump }) => {
 
 const DayHeader: React.FC<{ label: string; count: number }> = ({ label, count }) => (
   <div className="flex items-center gap-2 pt-2 pb-1">
-    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">{label}</span>
-    <span className="text-[9px] font-bold text-slate-500 bg-slate-900/60 border border-slate-800/80 px-1.5 py-0.5 rounded-md">{count}</span>
+    <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.2em]">{label}</span>
+    <span className="text-[10px] font-semibold text-[#A0A0A8] bg-slate-900/60 border border-slate-700/50 px-1.5 py-0.5 rounded-md">{count}</span>
     <div className="flex-1 h-px bg-slate-800/80" />
   </div>
 );
@@ -225,30 +226,31 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed right-0 top-0 h-full w-80 z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
+            className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
-            {/* Header */}
-            <div className="relative flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0">
-              <div>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.25em]">
+            {/* Header — same family as AI Coach */}
+            <div className="relative flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
                   Clinical history
                 </p>
-                <p className="text-sm font-semibold text-white mt-0.5">
+                <p className="text-base font-bold text-[#F5F5F5] mt-0.5 leading-tight">
                   Events
                   {totalShown > 0 && (
-                    <span className="ml-2 text-[10px] font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-1.5 py-0.5 rounded-md">
+                    <span className="ml-2 align-middle text-[10px] font-semibold text-[#A0A0A8] bg-slate-900/60 border border-slate-700/50 px-1.5 py-0.5 rounded-md">
                       {totalShown}
                     </span>
                   )}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
                 {totalShown > 0 && (
                   <button
+                    type="button"
                     onClick={() => setShowConfirmClear(true)}
                     disabled={clearing}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/30 hover:bg-rose-500/10 transition-all disabled:opacity-40"
+                    className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-40"
                     title="Clear all events"
                   >
                     <Trash2 size={14} />
@@ -256,14 +258,15 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
                 )}
 
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] hover:bg-slate-800/80 transition-colors"
+                  aria-label="Close alerts"
                 >
                   <X size={15} />
                 </button>
               </div>
 
-              {/* Confirm clear dialog */}
               <AnimatePresence>
                 {showConfirmClear && (
                   <motion.div
@@ -271,16 +274,16 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-4 right-4 top-full mt-2 z-10 p-3 rounded-xl border border-slate-800 bg-slate-950 shadow-xl"
+                    className="absolute left-5 right-5 top-full mt-2 z-10 p-3.5 rounded-2xl border border-slate-700/60 bg-slate-950 shadow-xl"
                   >
-                    <p className="text-[11px] text-slate-300 leading-snug mb-3">
+                    <p className="text-[12px] text-[#A0A0A8] leading-[1.45] mb-3">
                       Do you want to delete all events?
                     </p>
                     <div className="flex items-center justify-end gap-2">
                       <button
                         type="button"
                         onClick={() => setShowConfirmClear(false)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[10px] font-medium uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+                        className="px-3 py-1.5 rounded-lg border border-slate-700/60 bg-slate-900/60 text-[10px] font-medium uppercase tracking-wider text-[#A0A0A8] hover:text-[#F5F5F5] transition-colors"
                       >
                         No
                       </button>
@@ -298,22 +301,21 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
               </AnimatePresence>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-5">
               {grouped.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-center">
-                    <Activity size={18} className="text-slate-600" />
+                  <div className="w-10 h-10 rounded-xl bg-slate-900/60 border border-slate-700/50 flex items-center justify-center">
+                    <Activity size={18} className="text-[#6B7280]" />
                   </div>
-                  <p className="text-[11px] text-slate-600 text-center">
-                    No clinical events in the last 7 days.<br />They'll appear here in real time.
+                  <p className="text-[12px] text-[#6B7280] text-center leading-[1.5]">
+                    No clinical events in the last 7 days.<br />They&apos;ll appear here in real time.
                   </p>
                 </div>
               ) : (
                 grouped.map(({ label, events: dayEvents }) => (
                   <div key={label}>
                     <DayHeader label={label} count={dayEvents.length} />
-                    <div className="flex flex-col gap-2 mb-2">
+                    <div className="flex flex-col gap-2.5 mb-3">
                       {dayEvents.map(event => (
                         <EventCard key={event.id} event={event} onJump={handleJump} />
                       ))}
@@ -325,7 +327,7 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
 
             {grouped.length > 0 && (
               <div className="px-5 py-4 border-t border-slate-800/80 flex-shrink-0">
-                <p className="text-[9px] text-slate-600 text-center uppercase tracking-widest">
+                <p className="text-[9px] text-[#6B7280] text-center uppercase tracking-widest">
                   Tap View to jump to that moment in history
                 </p>
               </div>

@@ -172,6 +172,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
       setInput('');
       void sendMessageRef.current(text);
     },
+    onIdleTimeout: () => {
+      setVoiceMode(false);
+      voiceModeRef.current = false;
+      setVoiceDraft(false);
+      setInput('');
+    },
   });
 
   const voiceSupported = sttSupported && ttsSupported;
@@ -597,7 +603,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                 <div className="flex justify-start">
                   <div className="bg-slate-800/70 border border-slate-700/60 text-[#A0A0A8] text-[12px] px-3.5 py-3 rounded-[16px] rounded-bl-[4px] italic flex items-center gap-2 leading-[1.45]">
                     <Loader2 size={13} className="animate-spin text-[#A0A0A8]" />
-                    Coach is typing…
+                    Coach thinking…
                   </div>
                 </div>
               )}

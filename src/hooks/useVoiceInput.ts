@@ -1,11 +1,13 @@
 /**
  * useVoiceInput — wraps the browser SpeechRecognition API (Chrome / Edge).
- * Detects end-of-turn after a final result + ~1200ms of silence.
+ * - End-of-turn: final result + ~1200ms silence → onFinalTranscript
+ * - Idle mic off: ~10s with no speech activity → stop + onIdleTimeout
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SILENCE_MS = 1200;
+const IDLE_MS = 10_000;
 
 type SpeechRecognitionResultLike = {
   isFinal: boolean;
@@ -47,6 +49,8 @@ function detectLang(): string {
 
 export interface UseVoiceInputOptions {
   onFinalTranscript?: (text: string) => void;
+  /** Fired when the mic auto-stops after IDLE_MS with no speech. */
+  onIdleTimeout?: () => void;
   lang?: string;
 }
 
@@ -57,11 +61,14 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const silenceTimerRef = useRef<number | null>(null);
+  const idleTimerRef = useRef<number | null>(null);
   const finalBufferRef = useRef('');
   const interimRef = useRef('');
   const wantListeningRef = useRef(false);
   const onFinalRef = useRef(options.onFinalTranscript);
+  const onIdleRef = useRef(options.onIdleTimeout);
   onFinalRef.current = options.onFinalTranscript;
+  onIdleRef.current = options.onIdleTimeout;
 
   const lang = options.lang ?? detectLang();
 
@@ -71,6 +78,36 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       silenceTimerRef.current = null;
     }
   }, []);
+
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current != null) {
+      window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    wantListeningRef.current = false;
+    clearSilenceTimer();
+    clearIdleTimer();
+    const rec = recognitionRef.current;
+    if (rec) {
+      try {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        rec.stop();
+      } catch {
+        try {
+          rec.abort();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    recognitionRef.current = null;
+    setIsListening(false);
+  }, [clearSilenceTimer, clearIdleTimer]);
 
   const emitFinalIfReady = useCallback(() => {
     const text = finalBufferRef.current.trim();
@@ -90,27 +127,37 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     }, SILENCE_MS);
   }, [clearSilenceTimer, emitFinalIfReady]);
 
-  const stopListening = useCallback(() => {
-    wantListeningRef.current = false;
-    clearSilenceTimer();
-    const rec = recognitionRef.current;
-    if (rec) {
-      try {
-        rec.onresult = null;
-        rec.onerror = null;
-        rec.onend = null;
-        rec.stop();
-      } catch {
+  const scheduleIdleTimeout = useCallback(() => {
+    clearIdleTimer();
+    idleTimerRef.current = window.setTimeout(() => {
+      idleTimerRef.current = null;
+      if (!wantListeningRef.current) return;
+      // No speech for IDLE_MS — turn mic off.
+      wantListeningRef.current = false;
+      clearSilenceTimer();
+      const rec = recognitionRef.current;
+      if (rec) {
         try {
-          rec.abort();
+          rec.onresult = null;
+          rec.onerror = null;
+          rec.onend = null;
+          rec.stop();
         } catch {
-          /* ignore */
+          try {
+            rec.abort();
+          } catch {
+            /* ignore */
+          }
         }
       }
-    }
-    recognitionRef.current = null;
-    setIsListening(false);
-  }, [clearSilenceTimer]);
+      recognitionRef.current = null;
+      finalBufferRef.current = '';
+      interimRef.current = '';
+      setTranscript('');
+      setIsListening(false);
+      onIdleRef.current?.();
+    }, IDLE_MS);
+  }, [clearIdleTimer, clearSilenceTimer]);
 
   const startListening = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
@@ -131,6 +178,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     finalBufferRef.current = '';
     interimRef.current = '';
     setTranscript('');
+    scheduleIdleTimeout();
 
     const rec = new Ctor();
     rec.continuous = true;
@@ -138,6 +186,9 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     rec.lang = lang;
 
     rec.onresult = (event: SpeechRecognitionEventLike) => {
+      // Any audio activity resets the 10s idle mic-off timer.
+      scheduleIdleTimeout();
+
       let interim = '';
       let gotFinal = false;
 
@@ -182,6 +233,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         } catch {
           setIsListening(false);
           wantListeningRef.current = false;
+          clearIdleTimer();
         }
       } else {
         setIsListening(false);
@@ -196,13 +248,15 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       console.warn('[useVoiceInput] start failed:', err);
       setIsListening(false);
       wantListeningRef.current = false;
+      clearIdleTimer();
     }
-  }, [lang, scheduleSilenceCommit]);
+  }, [lang, scheduleSilenceCommit, scheduleIdleTimeout, clearIdleTimer]);
 
   useEffect(() => {
     return () => {
       wantListeningRef.current = false;
       clearSilenceTimer();
+      clearIdleTimer();
       const rec = recognitionRef.current;
       if (rec) {
         try {
@@ -213,7 +267,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
         }
       }
     };
-  }, [clearSilenceTimer]);
+  }, [clearSilenceTimer, clearIdleTimer]);
 
   return {
     isListening,

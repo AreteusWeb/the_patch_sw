@@ -509,46 +509,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
               <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
                 <button
                   type="button"
-                  onClick={handleVoiceToggle}
-                  disabled={!voiceSupported || sessionLimitReached}
-                  className={cn(
-                    'relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors disabled:opacity-35',
-                    voiceState === 'listening' &&
-                      'text-teal-400 bg-teal-500/15',
-                    voiceState === 'speaking' &&
-                      'text-teal-400 bg-teal-500/10',
-                    voiceState === 'waiting' && 'text-teal-400/80',
-                    voiceState === 'idle' &&
-                      'text-[#A0A0A8] hover:text-teal-400 hover:bg-teal-500/10'
-                  )}
-                  title={
-                    !voiceSupported
-                      ? 'Voice mode not supported in this browser'
-                      : voiceState === 'speaking'
-                        ? 'Tap to interrupt'
-                        : voiceMode
-                          ? 'Stop voice mode'
-                          : 'Start voice mode'
-                  }
-                  aria-label={
-                    !voiceSupported
-                      ? 'Voice mode not supported'
-                      : voiceMode
-                        ? 'Stop voice mode'
-                        : 'Start voice mode'
-                  }
-                >
-                  {voiceState === 'speaking' ? (
-                    <Volume2 size={15} className="relative z-10" />
-                  ) : (
-                    <Mic size={15} className="relative z-10" />
-                  )}
-                  {voiceState === 'listening' && (
-                    <span className="absolute inset-1 rounded-lg bg-teal-400/20 animate-ping pointer-events-none" />
-                  )}
-                </button>
-                <button
-                  type="button"
                   onClick={() => void startNewConversation()}
                   disabled={busy}
                   className="flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400 transition-colors disabled:opacity-40"
@@ -707,6 +667,47 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({ open, onClose }) => {
                       : 'text-[#F5F5F5]'
                   )}
                 />
+                <button
+                  type="button"
+                  onClick={handleVoiceToggle}
+                  disabled={!voiceSupported || sessionLimitReached}
+                  className={cn(
+                    'relative w-11 h-11 flex items-center justify-center rounded-2xl shrink-0 transition-all disabled:opacity-35',
+                    voiceState === 'listening' &&
+                      'bg-teal-500 text-slate-950 shadow-[0_0_0_3px_rgba(45,212,191,0.25)]',
+                    voiceState === 'speaking' &&
+                      'bg-teal-500 text-slate-950',
+                    voiceState === 'waiting' &&
+                      'bg-teal-500/80 text-slate-950',
+                    voiceState === 'idle' &&
+                      'bg-teal-500 text-slate-950 hover:bg-teal-400 active:bg-teal-600 active:scale-[0.97]'
+                  )}
+                  title={
+                    !voiceSupported
+                      ? 'Voice mode not supported in this browser'
+                      : voiceState === 'speaking'
+                        ? 'Tap to interrupt'
+                        : voiceMode
+                          ? 'Stop voice mode'
+                          : 'Start voice mode'
+                  }
+                  aria-label={
+                    !voiceSupported
+                      ? 'Voice mode not supported'
+                      : voiceMode
+                        ? 'Stop voice mode'
+                        : 'Start voice mode'
+                  }
+                >
+                  {voiceState === 'speaking' ? (
+                    <Volume2 size={16} className="relative z-10" strokeWidth={2.5} />
+                  ) : (
+                    <Mic size={16} className="relative z-10" strokeWidth={2.5} />
+                  )}
+                  {voiceState === 'listening' && (
+                    <span className="absolute inset-0 rounded-2xl bg-teal-300/40 animate-ping pointer-events-none" />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => void sendMessage()}

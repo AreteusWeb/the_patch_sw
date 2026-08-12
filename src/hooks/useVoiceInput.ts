@@ -41,10 +41,8 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
 }
 
 function detectLang(): string {
-  if (typeof navigator === 'undefined') return 'en-US';
-  const lang = navigator.language || 'en-US';
-  // Prefer full BCP-47 tag when available (e.g. es-MX, en-US).
-  return lang;
+  // Default American English for STT — OS locale (e.g. es-MX) confuses English speech.
+  return 'en-US';
 }
 
 export interface UseVoiceInputOptions {

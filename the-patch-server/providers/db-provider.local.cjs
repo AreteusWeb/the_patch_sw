@@ -254,7 +254,7 @@ function trendDirection(values) {
  */
 async function getMetricTrend(uid, { metric, days = 7 } = {}) {
   if (!TREND_METRICS.has(metric)) {
-    return { metric, values: [], average: null, direction: 'stable' };
+    return { metric, values: [], sampleCount: 0, average: null, direction: 'stable' };
   }
 
   const since = Date.now() - Math.max(1, Number(days) || 7) * 24 * 60 * 60 * 1000;
@@ -287,6 +287,7 @@ async function getMetricTrend(uid, { metric, days = 7 } = {}) {
   return {
     metric,
     values,
+    sampleCount: values.length,
     average,
     direction: trendDirection(values),
   };

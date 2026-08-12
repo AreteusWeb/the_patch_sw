@@ -63,7 +63,9 @@ const COACH_FUNCTION_DECLARATIONS = [
   {
     name: 'get_trend',
     description:
-      'Get a simple trend for one metric across the last N days from stored metrics snapshots.',
+      'Get a simple trend for one metric across the last N days from stored metrics snapshots. ' +
+      'Returns values[], sampleCount, average (null if no data), and direction. ' +
+      'If sampleCount < 2, do not invent a weekly story — say history is insufficient.',
     parameters: {
       type: 'object',
       properties: {

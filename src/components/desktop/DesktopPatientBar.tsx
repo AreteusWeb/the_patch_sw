@@ -13,13 +13,21 @@ import { cn } from '../../utils/cn';
 import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
-import AiCoachPanel from './AiCoachPanel';
+
+interface DesktopPatientBarProps {
+  coachOpen: boolean;
+  onToggleCoach: () => void;
+}
 
 /**
  * DesktopPatientBar
- * Barra superior: identidad + toggle fijo junto al nombre, acciones a la derecha.
+ * Responsive top bar: collapses labels / center status when the window narrows
+ * so controls never overlap.
  */
-const DesktopPatientBar: React.FC = () => {
+const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
+  coachOpen,
+  onToggleCoach,
+}) => {
   const {
     currentUser,
     isConnected,
@@ -42,8 +50,6 @@ const DesktopPatientBar: React.FC = () => {
     endFitnessSession,
   } = useStore();
 
-  const [coachOpen, setCoachOpen] = React.useState(false);
-
   const displayName =
     currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'Patient';
 
@@ -51,7 +57,6 @@ const DesktopPatientBar: React.FC = () => {
   const isViewingPast = historyOffset > 0;
   const isFitness = desktopLayout === 'fitness';
 
-  /** True only when the physical patch is streaming live samples. */
   const patchLive = isConnected && hasRealData;
 
   const statusLabel = isViewingPast
@@ -103,33 +108,47 @@ const DesktopPatientBar: React.FC = () => {
   };
 
   const actionBtnClass =
-    'flex items-center gap-1.5 h-10 px-3.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[11px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-slate-700 transition-colors';
+    'flex items-center justify-center gap-1.5 h-9 xl:h-10 px-2.5 xl:px-3.5 rounded-lg border border-slate-800 bg-slate-900/60 text-[10px] xl:text-[11px] font-bold uppercase tracking-wider text-slate-300 hover:text-white hover:border-slate-700 transition-colors';
 
   const iconBtnClass =
-    'h-10 w-10 flex items-center justify-center rounded-lg border transition-all';
+    'h-9 w-9 xl:h-10 xl:w-10 flex items-center justify-center rounded-lg border transition-all shrink-0';
+
+  const pauseLabel = isFitness
+    ? (fitnessSessionStatus === 'recording' ? 'Pause' : 'Resume')
+    : (isLive ? 'Pause Recording' : 'Resume');
+
+  const exportLabel = isFitness ? 'Export' : 'Export Data';
 
   return (
-    <>
-    <header className="relative flex-shrink-0 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md">
-      <div className="px-6 py-3 flex items-start justify-between gap-6 min-h-[56px]">
-        {/* Left: identity + toggle */}
-        <div className="flex items-start gap-5 min-w-0 z-10">
-          <div className="flex flex-col gap-1.5 min-w-0">
-            <div className="flex items-center gap-3 text-sm flex-wrap">
-              <span className="font-semibold text-white truncate">
+    <header className="relative flex-shrink-0 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md z-20">
+      <div className="px-3 xl:px-6 py-2.5 xl:py-3 flex items-center justify-between gap-2 xl:gap-4 min-h-[52px] xl:min-h-[56px]">
+        {/* Left: identity + mode toggle */}
+        <div className="flex items-center gap-2 xl:gap-5 min-w-0 z-10">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex items-center gap-2 xl:gap-3 text-sm flex-wrap">
+              <span className="font-semibold text-white truncate max-w-[9rem] sm:max-w-[14rem] xl:max-w-none">
                 {isFitness ? `Athlete: ${displayName}` : `Patient: ${displayName}`}
               </span>
               {!isFitness && (
-                <>
-                  <span className="text-slate-600">|</span>
-                  <span className="text-slate-400 tabular-nums">ID: {patientId}</span>
-                </>
+                <span className="hidden 2xl:inline text-slate-400 tabular-nums text-sm">
+                  <span className="text-slate-600 mr-2">|</span>
+                  ID: {patientId}
+                </span>
               )}
             </div>
 
-            <div className="min-h-[18px] text-[11px] text-slate-500">
+            {/* Compact status — shown when center status is hidden */}
+            <div className="2xl:hidden flex items-center gap-1.5 min-w-0">
+              <span className={cn('text-[10px] font-bold uppercase tracking-wider truncate', statusColor)}>
+                {statusLabel}
+              </span>
+              <span className="text-slate-700">·</span>
+              <span className={cn('text-[10px] truncate', patchColor)}>{patchLabel}</span>
+            </div>
+
+            <div className="hidden xl:block min-h-[18px] text-[11px] text-slate-500">
               {isFitness ? (
-                <span>
+                <span className="truncate">
                   Session:{' '}
                   <span className={cn(
                     'font-semibold',
@@ -140,7 +159,6 @@ const DesktopPatientBar: React.FC = () => {
                     {sessionStatusLabel}
                   </span>
                   {' • '}
-                  Duration:{' '}
                   <span className="text-white font-semibold tabular-nums">
                     {formatSessionClock(sessionElapsed)}
                   </span>
@@ -149,9 +167,6 @@ const DesktopPatientBar: React.FC = () => {
                   <span className="text-teal-400 font-semibold tabular-nums">
                     {patchLive ? `${recovery.score}/100` : '--'}
                   </span>
-                  {patchLive && (
-                    <span className="text-teal-400/80"> ({recovery.label})</span>
-                  )}
                 </span>
               ) : (
                 <span>Monitoring: Day — of — • Started —</span>
@@ -160,7 +175,7 @@ const DesktopPatientBar: React.FC = () => {
           </div>
 
           <div
-            className="flex-shrink-0 flex bg-slate-900/60 backdrop-blur-md p-1 rounded-full border border-slate-800/50 gap-1"
+            className="flex-shrink-0 flex bg-slate-900/60 backdrop-blur-md p-0.5 xl:p-1 rounded-full border border-slate-800/50 gap-0.5 xl:gap-1"
             role="group"
             aria-label="Desktop layout mode"
           >
@@ -168,7 +183,7 @@ const DesktopPatientBar: React.FC = () => {
               type="button"
               onClick={() => setDesktopLayout('normal')}
               className={cn(
-                'px-5 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.12em] transition-all',
+                'px-2.5 xl:px-5 py-1.5 xl:py-2 rounded-full text-[10px] xl:text-xs font-semibold uppercase tracking-[0.12em] transition-all',
                 !isFitness
                   ? 'bg-slate-700 text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-300'
@@ -180,7 +195,7 @@ const DesktopPatientBar: React.FC = () => {
               type="button"
               onClick={() => setDesktopLayout('fitness')}
               className={cn(
-                'px-5 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.12em] transition-all',
+                'px-2.5 xl:px-5 py-1.5 xl:py-2 rounded-full text-[10px] xl:text-xs font-semibold uppercase tracking-[0.12em] transition-all',
                 isFitness
                   ? 'bg-slate-700 text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-300'
@@ -191,8 +206,8 @@ const DesktopPatientBar: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: actions — same height as Normal/Fitness toggle */}
-        <div className="flex items-center gap-2 flex-shrink-0 z-10 ml-auto self-center">
+        {/* Right: actions — labels collapse to icons when narrow */}
+        <div className="flex items-center gap-1 xl:gap-2 flex-shrink-0 z-10">
           {isFitness && (
             <button
               type="button"
@@ -210,11 +225,13 @@ const DesktopPatientBar: React.FC = () => {
               }
             >
               {sessionActive ? <Square size={14} /> : <Play size={14} />}
-              {sessionActive
-                ? 'End Session'
-                : fitnessSessionStatus === 'ended'
-                  ? 'New Session'
-                  : 'Start Session'}
+              <span className="hidden xl:inline">
+                {sessionActive
+                  ? 'End Session'
+                  : fitnessSessionStatus === 'ended'
+                    ? 'New Session'
+                    : 'Start Session'}
+              </span>
             </button>
           )}
 
@@ -227,45 +244,36 @@ const DesktopPatientBar: React.FC = () => {
               isFitness && (fitnessSessionStatus === 'idle' || fitnessSessionStatus === 'ended')
                 && 'opacity-40 cursor-not-allowed hover:text-slate-300 hover:border-slate-800'
             )}
-            title={
-              isFitness
-                ? (fitnessSessionStatus === 'recording'
-                  ? 'Pause session timer'
-                  : fitnessSessionStatus === 'paused'
-                    ? 'Resume session timer'
-                    : 'Start a session first')
-                : (isLive ? 'Pause live view' : 'Resume live view')
-            }
+            title={pauseLabel}
           >
             {isFitness
               ? (fitnessSessionStatus === 'recording' ? <Pause size={14} /> : <Play size={14} />)
               : (isLive ? <Pause size={14} /> : <Play size={14} />)}
-            {isFitness
-              ? (fitnessSessionStatus === 'recording' ? 'Pause' : 'Resume')
-              : (isLive ? 'Pause Recording' : 'Resume')}
+            <span className="hidden xl:inline">{pauseLabel}</span>
           </button>
 
           <button
             type="button"
             onClick={() => exportSessionJson(isFitness ? 'fitness' : 'clinical')}
             className={actionBtnClass}
-            title="Download session snapshot as JSON"
+            title={exportLabel}
           >
             <Download size={14} />
-            {isFitness ? 'Export' : 'Export Data'}
+            <span className="hidden xl:inline">{exportLabel}</span>
           </button>
 
-          {isFitness && (
-            <button
-              type="button"
-              onClick={() => setCoachOpen(true)}
-              className={actionBtnClass}
-              title="AI Coach Insights"
-            >
-              <Sparkles size={14} />
-              AI Coach
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onToggleCoach}
+            className={cn(
+              actionBtnClass,
+              coachOpen && 'border-teal-500/40 text-teal-300 hover:text-teal-200'
+            )}
+            title="AI Coach"
+          >
+            <Sparkles size={14} />
+            <span className="hidden lg:inline">AI Coach</span>
+          </button>
 
           <button
             onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
@@ -297,8 +305,8 @@ const DesktopPatientBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Center: status — true vertical + horizontal center of the bar */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 px-4">
+      {/* Center status — only when there is real room (avoids overlap) */}
+      <div className="hidden 2xl:flex absolute inset-0 items-center justify-center pointer-events-none z-0 px-4">
         <div className="flex flex-col items-center text-center gap-0.5">
           <span
             className={cn(
@@ -315,14 +323,11 @@ const DesktopPatientBar: React.FC = () => {
             )}
           </span>
           <span className="text-[10px] text-slate-500 mt-0.5">
-              AI Confidence: —
-            </span>
+            AI Confidence: —
+          </span>
         </div>
       </div>
     </header>
-
-      <AiCoachPanel open={coachOpen} onClose={() => setCoachOpen(false)} />
-    </>
   );
 };
 

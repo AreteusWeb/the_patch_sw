@@ -12,6 +12,7 @@ import LoginScreen from './components/LoginScreen';
 import MobileApp from './components/mobile/MobileApp';
 import DesktopApp from './components/desktop/DesktopApp';
 import DeviceSelectionScreen from './components/DeviceSelectionScreen';
+import LiveCoachPOC from './pages/LiveCoachPOC';
 import { DEV_SHOW_ANY_DEVICE } from './lib/appConfig';
 
 /**
@@ -21,6 +22,8 @@ import { DEV_SHOW_ANY_DEVICE } from './lib/appConfig';
  * consume the same data hooks (useWebSocket, useStore, useFirestore), so
  * business logic lives in one place and is never duplicated across the two
  * visual layers.
+ *
+ * Special URL: /live-coach-poc → isolated Gemini Live POC (no dashboard).
  */
 export default function App() {
   useAuth();   // mounts the Firebase Auth listener (once)
@@ -30,6 +33,9 @@ export default function App() {
   useFirestore();
 
   const isDesktop = useIsDesktop();
+  const isLivePoc =
+    typeof window !== 'undefined' &&
+    window.location.pathname.replace(/\/$/, '') === '/live-coach-poc';
 
   // ── While Firebase verifies the session (same on mobile and desktop) ───────
   if (authLoading) {
@@ -51,6 +57,11 @@ export default function App() {
 
   if (currentUser === null) {
     return <LoginScreen />;
+  }
+
+  // Isolated Live POC — skip device selection / dashboard entirely.
+  if (isLivePoc) {
+    return <LiveCoachPOC />;
   }
 
   if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {

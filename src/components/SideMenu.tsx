@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
-import { Bell, User, LogOut, X, ChevronRight, Cpu } from 'lucide-react';
+import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
 import AlertsDrawer from './AlertsDrawer';
 import ProfileDrawer from './ProfileDrawer';
+import { backdropMotion, drawerMotion } from '../utils/motionPresets';
+
+interface SideMenuProps {
+  /** Mobile: open AI Coach as full-screen sheet. Omit on desktop (bar button). */
+  onOpenAiCoach?: () => void;
+}
 
 /**
  * SideMenu Component.
@@ -12,7 +18,7 @@ import ProfileDrawer from './ProfileDrawer';
  * dashboard, the alerts logs drawer, profile settings drawer, and sign out of the system.
  * Visual system aligned with AiCoachPanel (width, header, text palette).
  */
-const SideMenu: React.FC = () => {
+const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
   const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser, setIsDeviceSelected } = useStore();
   const [activeDrawer, setActiveDrawer] = useState<'alerts' | 'profile' | null>(null);
 
@@ -39,20 +45,20 @@ const SideMenu: React.FC = () => {
           <>
             <motion.div
               key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+              initial={backdropMotion.initial}
+              animate={backdropMotion.animate}
+              exit={backdropMotion.exit}
+              transition={backdropMotion.transition}
+              className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-md"
               onClick={() => setIsAdvancedMenuOpen(false)}
             />
 
             <motion.div
               key="panel"
-              initial={{ x: '100%', opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              initial={drawerMotion.initial}
+              animate={drawerMotion.animate}
+              exit={drawerMotion.exit}
+              transition={drawerMotion.transition}
               className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
             >
               {/* Header — same family as AI Coach */}
@@ -85,6 +91,21 @@ const SideMenu: React.FC = () => {
                     Navigation
                   </p>
                   <div className="flex flex-col gap-1">
+                    {onOpenAiCoach && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenAiCoach();
+                          setIsAdvancedMenuOpen(false);
+                        }}
+                        className={navItemClass}
+                      >
+                        <Sparkles size={16} className="shrink-0 text-[#A0A0A8] group-hover:text-teal-400 transition-colors" />
+                        <span className="text-[13px] font-medium">AI Coach</span>
+                        <ChevronRight size={14} className="ml-auto text-[#6B7280] group-hover:text-[#A0A0A8] transition-colors" />
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => openDrawer('alerts')}

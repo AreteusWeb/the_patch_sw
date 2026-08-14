@@ -489,6 +489,89 @@ async function handleCoachApi(req, res) {
     }
   }
 
+  // ── Gemini Live API ephemeral token (POC only — no Firestore) ────────────
+  if (req.method === 'POST' && url.pathname === '/api/coach/live-token') {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      sendJson(req, res, 503, {
+        error: 'live_token_unavailable',
+        message: 'GEMINI_API_KEY is not configured on the server.',
+      });
+      return true;
+    }
+
+    try {
+      const { GoogleGenAI } = require('@google/genai');
+      const client = new GoogleGenAI({
+        apiKey,
+        httpOptions: { apiVersion: 'v1alpha' },
+      });
+
+      const now = Date.now();
+      const newSessionExpireTime = new Date(now + 2 * 60 * 1000).toISOString();
+      const expireTime = new Date(now + 3 * 60 * 1000).toISOString();
+      // Developer API Live models (legacy gemini-2.0-flash-live-001 is retired).
+      const liveModel =
+        process.env.GEMINI_LIVE_MODEL ||
+        'gemini-2.5-flash-native-audio-preview-12-2025';
+      const systemInstruction =
+        'You are a friendly fitness coach in a live voice+camera session. ' +
+        'Always reply out loud with short spoken answers. ' +
+        'Watch the camera feed and comment on form when the user asks or when you see an exercise. ' +
+        'If form looks okay, say so clearly; if not, give one concrete correction. ' +
+        'Keep each reply under two sentences.';
+
+      const tokenRes = await client.authTokens.create({
+        config: {
+          uses: 1,
+          newSessionExpireTime,
+          expireTime,
+          liveConnectConstraints: {
+            model: liveModel,
+            config: {
+              responseModalities: ['AUDIO'],
+              systemInstruction,
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+            },
+          },
+          lockAdditionalFields: [],
+          httpOptions: { apiVersion: 'v1alpha' },
+        },
+      });
+
+      const token =
+        (typeof tokenRes?.name === 'string' && tokenRes.name) ||
+        (typeof tokenRes?.token === 'string' && tokenRes.token) ||
+        null;
+
+      if (!token) {
+        console.error('[coach/live-token] unexpected token response:', tokenRes);
+        sendJson(req, res, 500, { error: 'live_token_failed' });
+        return true;
+      }
+
+      console.log(
+        JSON.stringify({
+          event: 'live_token_issued',
+          uid,
+          expiresAt: expireTime,
+          newSessionExpireTime,
+        })
+      );
+
+      sendJson(req, res, 200, { token, expiresAt: expireTime });
+      return true;
+    } catch (err) {
+      console.error('[coach/live-token] error:', err?.stack || err);
+      sendJson(req, res, 500, {
+        error: 'live_token_failed',
+        message: err?.message || 'Could not create ephemeral token.',
+      });
+      return true;
+    }
+  }
+
   sendJson(req, res, 404, { error: 'not_found' });
   return true;
 }

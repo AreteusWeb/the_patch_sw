@@ -16,7 +16,6 @@ const Header: React.FC = () => {
     connectionStatus,
     viewMode,
     setViewMode,
-    isAdvancedMenuOpen,
     setIsAdvancedMenuOpen,
     notchFilterEnabled,
     setNotchFilterEnabled,
@@ -35,17 +34,17 @@ const Header: React.FC = () => {
       : 'Disconnected';
 
   return (
-    <header className="flex justify-between items-center gap-2 px-4 py-3 bg-transparent relative z-50">
-      <div className="flex items-center gap-1 min-w-0 flex-1 text-[10px] font-light text-slate-400 uppercase tracking-tighter">
-        <span className="truncate flex-shrink-0">{displayName}</span>
-        <span className="flex-shrink-0">•</span>
+    <header className="flex justify-between items-center gap-2 px-4 py-3 bg-black relative z-50">
+      <div className="flex items-center gap-1 min-w-0 flex-1 text-[10px] font-medium text-slate-300 uppercase tracking-tighter">
+        <span className="truncate flex-shrink-0 text-slate-200">{displayName}</span>
+        <span className="flex-shrink-0 text-slate-600">•</span>
         <span className={cn(
           'truncate',
           !isConnected
-            ? 'text-rose-500'
+            ? 'text-rose-400'
             : connectionStatus === 'Connecting'
-              ? 'text-yellow-500'
-              : 'text-emerald-500'
+              ? 'text-amber-400'
+              : 'text-emerald-400'
         )}>
           {statusLabel}
         </span>
@@ -54,6 +53,7 @@ const Header: React.FC = () => {
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* 60Hz notch filter — removes power-line hum from the ECG */}
         <button
+          type="button"
           onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
           title={
             notchFilterEnabled
@@ -61,38 +61,42 @@ const Header: React.FC = () => {
               : '60 Hz notch filter OFF — click to cut electrical hum from the ECG (not the 250 Hz sample rate)'
           }
           className={cn(
-            'w-6 h-6 flex items-center justify-center rounded-full transition-all shadow-lg border flex-shrink-0',
+            'w-7 h-7 flex items-center justify-center rounded-full transition-all border flex-shrink-0',
             notchFilterEnabled
-              ? 'bg-teal-500 text-white border-teal-400 shadow-teal-500/20'
-              : 'bg-slate-800/60 text-slate-400 border-white/5 hover:bg-slate-700 hover:text-white'
+              ? 'bg-teal-500 text-white border-teal-400'
+              : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
           )}
         >
           <Zap size={12} />
         </button>
 
-        <div className="flex bg-slate-900/60 backdrop-blur-md p-0.5 rounded-full border border-slate-800/50">
+        <div className="flex bg-slate-900 p-0.5 rounded-full border border-slate-700/80">
           <button
+            type="button"
             onClick={() => setViewMode('Advanced')}
             className={cn(
-              'px-3 py-1.5 rounded-full text-[11px] font-medium uppercase tracking-tight transition-all',
-              viewMode === 'Advanced' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+              'px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-[11px] font-medium uppercase tracking-tight transition-all',
+              viewMode === 'Advanced' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
             )}
           >
             Advanced
           </button>
           <button
+            type="button"
             onClick={() => setViewMode('Normal')}
             className={cn(
-              'px-3 py-1.5 rounded-full text-[11px] font-medium uppercase tracking-tight transition-all',
-              viewMode === 'Normal' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+              'px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-[11px] font-medium uppercase tracking-tight transition-all',
+              viewMode === 'Normal' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
             )}
           >
             Normal
           </button>
         </div>
         <button
+          type="button"
           onClick={() => setIsAdvancedMenuOpen(true)}
-          className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white transition-all shadow-lg border border-white/5"
+          className="w-7 h-7 flex items-center justify-center rounded-full bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white transition-all border border-slate-700"
+          aria-label="Open menu"
         >
           <MoreVertical size={14} />
         </button>

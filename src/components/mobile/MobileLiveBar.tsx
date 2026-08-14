@@ -47,7 +47,7 @@ const MobileLiveBar: React.FC<MobileLiveBarProps> = ({ bufferedSeconds }) => {
     : `${clampedOffset}s ago`;
 
   return (
-    <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/80 px-3 py-2.5">
+    <div className="flex-shrink-0 bg-black px-3 py-2.5">
       <div className="flex items-center gap-3">
         <div className="flex-1 flex flex-col gap-1 min-w-0">
           <input
@@ -89,7 +89,7 @@ const MobileLiveBar: React.FC<MobileLiveBarProps> = ({ bufferedSeconds }) => {
             'px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex-shrink-0',
             isLive
               ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30'
-              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
+              : 'bg-black text-slate-400 border border-slate-800 hover:text-white'
           )}
         >
           Live

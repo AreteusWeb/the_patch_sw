@@ -106,7 +106,7 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) 
   const recoveryTrend = waveforms[1]?.slice(-48) ?? [];
 
   return (
-    <aside className="w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
+    <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
       <div className="px-4 py-3">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
           Recovery Insights

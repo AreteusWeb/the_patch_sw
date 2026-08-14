@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Activity, Droplets, Thermometer, Wind, Heart, Clock, ArrowLeft, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { backdropMotion, drawerMotion } from '../utils/motionPresets';
 import { collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import useStore from '../store/useStore';
@@ -212,20 +213,20 @@ const AlertsDrawer: React.FC<AlertsDrawerProps> = ({ open, onClose }) => {
         <>
           <motion.div
             key="drawer-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm"
+            initial={backdropMotion.initial}
+            animate={backdropMotion.animate}
+            exit={backdropMotion.exit}
+            transition={backdropMotion.transition}
+            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-md"
             onClick={onClose}
           />
 
           <motion.div
             key="drawer-panel"
-            initial={{ x: '100%', opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            initial={drawerMotion.initial}
+            animate={drawerMotion.animate}
+            exit={drawerMotion.exit}
+            transition={drawerMotion.transition}
             className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
           >
             {/* Header — same family as AI Coach */}

@@ -58,7 +58,7 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
   const spo2Percent = typeof vitals.spo2.value === 'number' ? vitals.spo2.value : 0;
 
   return (
-    <aside className="w-56 flex-shrink-0 border-r border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
+    <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-r border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
       <div className="px-4 py-3">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
           Key Metrics

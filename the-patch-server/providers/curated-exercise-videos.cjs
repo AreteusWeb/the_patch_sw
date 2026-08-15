@@ -1,25 +1,54 @@
 /**
  * Hand-picked Pexels clips for common exercises.
  * Prefer these over live search when the coach query matches a key
- * (exact or substring). Fill placeholders with direct MP4 URLs from pexels.com.
+ * (exact or substring). videoUrl must be a direct MP4 hotlink.
  *
  * Keys should be lowercase exercise names / phrases.
  */
 const CURATED_EXERCISE_VIDEOS = {
   squat: {
-    videoUrl: 'https://videos.pexels.com/video-files/PLACEHOLDER_SQUAT/PLACEHOLDER_SQUAT.mp4',
-    photographerName: 'TODO — replace after picking clip',
-    photographerProfileUrl: 'https://www.pexels.com/@todo',
+    // https://www.pexels.com/video/woman-doing-squats-in-the-gym-6980032/
+    videoUrl:
+      'https://videos.pexels.com/video-files/6980032/6980032-sd_338_640_30fps.mp4',
+    photographerName: 'Monstera Production',
+    photographerProfileUrl: 'https://www.pexels.com/@gabby-k',
   },
   'kettlebell swing': {
+    // https://www.pexels.com/video/man-wearing-face-mask-working-out-at-the-gym-10336282/
     videoUrl:
-      'https://videos.pexels.com/video-files/PLACEHOLDER_KB_SWING/PLACEHOLDER_KB_SWING.mp4',
+      'https://videos.pexels.com/video-files/10336282/10336282-sd_960_540_30fps.mp4',
+    photographerName: 'shaand jiafitness',
+    photographerProfileUrl: 'https://www.pexels.com/@shaand-jiafitness-32886884',
+  },
+  'bicep curl': {
+    // https://www.pexels.com/video/man-using-dumbbells-5837657/
+    videoUrl:
+      'https://videos.pexels.com/video-files/5837657/5837657-sd_640_360_24fps.mp4',
+    photographerName: 'RDNE Stock project',
+    photographerProfileUrl: 'https://www.pexels.com/@rdne',
+  },
+  deadlift: {
+    // https://www.pexels.com/video/a-woman-lifting-a-barbell-7674502/
+    videoUrl:
+      'https://videos.pexels.com/video-files/7674502/7674502-sd_426_226_25fps.mp4',
+    photographerName: 'cottonbro studio',
+    photographerProfileUrl: 'https://www.pexels.com/@cottonbro',
+  },
+  'push up': {
+    videoUrl:
+      'https://videos.pexels.com/video-files/PLACEHOLDER_PUSH_UP/PLACEHOLDER_PUSH_UP.mp4',
     photographerName: 'TODO — replace after picking clip',
     photographerProfileUrl: 'https://www.pexels.com/@todo',
   },
-  'deadlift': {
+  'push-up': {
     videoUrl:
-      'https://videos.pexels.com/video-files/PLACEHOLDER_DEADLIFT/PLACEHOLDER_DEADLIFT.mp4',
+      'https://videos.pexels.com/video-files/PLACEHOLDER_PUSH_UP/PLACEHOLDER_PUSH_UP.mp4',
+    photographerName: 'TODO — replace after picking clip',
+    photographerProfileUrl: 'https://www.pexels.com/@todo',
+  },
+  pushup: {
+    videoUrl:
+      'https://videos.pexels.com/video-files/PLACEHOLDER_PUSH_UP/PLACEHOLDER_PUSH_UP.mp4',
     photographerName: 'TODO — replace after picking clip',
     photographerProfileUrl: 'https://www.pexels.com/@todo',
   },
@@ -48,6 +77,11 @@ function findCuratedExerciseVideo(normalizedQuery) {
   matches.sort((a, b) => b[0].length - a[0].length);
   const entry = matches[0][1];
   if (!entry || typeof entry.videoUrl !== 'string' || !entry.videoUrl) {
+    return null;
+  }
+
+  // Skip unfinished placeholders so live Pexels search can still run.
+  if (entry.videoUrl.includes('PLACEHOLDER')) {
     return null;
   }
 

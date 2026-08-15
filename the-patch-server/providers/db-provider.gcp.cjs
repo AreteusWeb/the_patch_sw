@@ -194,6 +194,11 @@ async function getRecentSessionSummaries(uid, excludeSessionId, limit = 3) {
  *     imageUrl: string,
  *     photographerName: string,
  *     photographerProfileUrl: string,
+ *   } | {
+ *     type: 'video',
+ *     videoUrl: string,
+ *     photographerName: string,
+ *     photographerProfileUrl: string,
  *   }>,
  * }} msg
  */

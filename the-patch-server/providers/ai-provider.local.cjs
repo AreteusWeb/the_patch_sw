@@ -34,6 +34,28 @@ function getCoachTools() {
           required: ['query'],
         },
       },
+      {
+        name: 'search_reference_video',
+        description:
+          'Search for a short INSTRUCTIONAL reference video showing proper exercise ' +
+          'form or movement technique (e.g. kettlebell swing proper form, squat technique ' +
+          'tutorial). Prefer serious coaching/demo clips — never entertainment, tricks, ' +
+          'juggling, freestyle, or viral stunt videos. Use when the athlete needs to see ' +
+          'correct movement in motion rather than a static image.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description:
+                'Exact exercise name first in English (e.g. "kettlebell swing" or ' +
+                '"kettlebell swing proper form"). Keep it short and specific to the ' +
+                'movement — do not use vague queries like only "kettlebell".',
+            },
+          },
+          required: ['query'],
+        },
+      },
     ],
   }];
 }
@@ -64,6 +86,21 @@ async function searchReferenceImage({ query: _query } = {}) {
   }
 
   return payload;
+}
+
+/**
+ * Local mock Pexels video search — fixed placeholder clip + example photographer.
+ *
+ * @param {{ query?: string }} _args
+ */
+async function searchReferenceVideo({ query: _query } = {}) {
+  return {
+    // Public sample MP4 suitable for <video> preview in local mode.
+    videoUrl:
+      'https://videos.pexels.com/video-files/4753989/4753989-sd_640_360_30fps.mp4',
+    photographerName: 'Example Videographer',
+    photographerProfileUrl: 'https://www.pexels.com/@example',
+  };
 }
 
 /**
@@ -123,12 +160,35 @@ async function generateCoachReply({
     });
   }
 
+  // Optionally exercise video search when the user asks for form/demo movement.
+  const wantsVideo =
+    /\b(video|form|technique|demo|demonstrate|swing|squat|movement)\b/i.test(
+      String(userMessage || '')
+    );
+  if (wantsVideo && typeof toolHandlers?.search_reference_video === 'function') {
+    const videoArgs = { query: 'kettlebell swing proper form' };
+    let videoResult = { videoUrl: null };
+    try {
+      videoResult = await toolHandlers.search_reference_video(videoArgs);
+    } catch (err) {
+      videoResult = { error: err.message || 'tool_failed' };
+    }
+    toolCalls.push({
+      name: 'search_reference_video',
+      args: videoArgs,
+      result: videoResult,
+    });
+  }
+
   const sessionCount = Array.isArray(historyResult) ? historyResult.length : 0;
   const text =
     `[local coach mock] Got your message (${turns} prior turn(s)): "${preview || '(empty)'}". ` +
     `Looked up session history via tool (${sessionCount} closed session(s)). ` +
     (wantsVisual
       ? 'Attached a reference photo when a visual helps. '
+      : '') +
+    (wantsVideo
+      ? 'Attached a reference video when form/movement helps. '
       : '') +
     `Keep training smart — hydrate, watch recovery score trends, and ease off if HR stays elevated at rest. ` +
     `This is performance coaching only, not medical advice.`;
@@ -150,4 +210,5 @@ module.exports = {
   generateSessionSummary,
   getCoachTools,
   searchReferenceImage,
+  searchReferenceVideo,
 };

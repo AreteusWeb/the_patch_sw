@@ -82,7 +82,7 @@ export default function DesktopApp() {
               defaultSize="30%"
               minSize="20%"
               maxSize="60%"
-              className="min-w-0"
+              className="min-w-0 overflow-hidden"
             >
               <AiCoachPanel onClose={() => setCoachOpen(false)} />
             </Panel>

@@ -177,6 +177,7 @@ async function getRecentSessionSummaries(uid, excludeSessionId, limit = 3) {
 
 /**
  * Appends a message and bumps the session's lastMessageAt.
+ * attachments may include { type: 'image', ... } and/or { type: 'video', ... }.
  */
 async function appendMessage(uid, sessionId, msg) {
   const now = Date.now();

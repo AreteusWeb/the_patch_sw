@@ -1,14 +1,19 @@
 @import "tailwindcss";
 
-@layer utilities {
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  .scrollbar-hide {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
-  }
+/* Outside @layer so it always wins over browser / Tailwind defaults.
+   Classic Windows scrollbars are white and were still flashing on the coach chat. */
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
 
+@layer utilities {
   /* Teal track + thumb for desktop/mobile timeline scrubbers */
   .timeline-scrubber {
     -webkit-appearance: none;

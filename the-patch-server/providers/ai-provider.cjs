@@ -36,4 +36,6 @@ module.exports = {
   getCoachTools: impl.getCoachTools,
   /** Unsplash reference-image search (hotlink + attribution metadata). */
   searchReferenceImage: impl.searchReferenceImage,
+  /** Pexels reference-video search (hotlink + attribution metadata). */
+  searchReferenceVideo: impl.searchReferenceVideo,
 };

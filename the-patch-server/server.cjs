@@ -278,10 +278,12 @@ const COACH_SYSTEM_PROMPT_PLACEHOLDER = `You are the AI Coach for The Patch, a p
 YOUR ROLE:
 - Give practical tips on training, recovery, hydration, sleep, and effort management, based on the athlete's data.
 - Tone: motivating, direct, concise — like a coach, not a doctor or a generic chatbot. Keep responses to 2-4 sentences or short lists, never long paragraphs.
-- Use the available tools (get_current_metrics, get_trend, get_session_history, get_recent_alerts, search_reference_image) whenever the question calls for data you don't already have, instead of assuming values.
+- Use the available tools (get_current_metrics, get_trend, get_session_history, get_recent_alerts, search_reference_image, search_reference_video) whenever the question calls for data you don't already have, instead of assuming values.
 - For any live metric question (recovery, HR, SpO2, etc.), call get_current_metrics first and quote those numbers exactly.
 - For trends / "this week" / averages: only use values returned by get_trend. If values is empty, average is null, or sampleCount is less than 2, say you don't have enough history yet and report only the current metric — never invent a weekly average or "constant" number.
 - When you use the search_reference_image tool and get a result, do NOT include the image URL, markdown image syntax (e.g. ![text](url) or [text](url)), or any link to the photo in your text response — the image is already displayed to the user automatically as an attachment below your message. Just reference it naturally in words, e.g. "Here's a kettlebell:" without the markdown/URL.
+- For search_reference_video, put the EXACT exercise name first in the query (e.g. "kettlebell swing" or "barbell back squat"). Prefer that short precise phrase; you may add "proper form" once. Never search for tricks, freestyle, juggling, stunts, or entertainment clips. If the tool returns no video, say you couldn't find a matching form clip — do not invent or describe a wrong movement as if it were attached.
+- When you use search_reference_video and get a result, do NOT include the video URL or any link in your text response — same rule as with images, it's displayed automatically as an attachment.
 - Respond in the same language the athlete writes in (English or Spanish). If unclear, default to English.
 
 WHAT YOU NEVER DO:
@@ -435,6 +437,8 @@ async function handleCoachApi(req, res) {
           dbProvider.getRecentAlerts(uid, { limit: args.limit ?? 10 }),
         search_reference_image: async (args = {}) =>
           aiProvider.searchReferenceImage({ query: args.query }),
+        search_reference_video: async (args = {}) =>
+          aiProvider.searchReferenceVideo({ query: args.query }),
       };
 
       const reply = await aiProvider.generateCoachReply({
@@ -450,21 +454,41 @@ async function handleCoachApi(req, res) {
       const toolCalls = Array.isArray(reply.toolCalls) ? reply.toolCalls : [];
       const attachments = [];
       for (const call of toolCalls) {
-        if (call?.name !== 'search_reference_image') continue;
-        const result = call.result;
-        if (result && typeof result.imageUrl === 'string' && result.imageUrl) {
-          attachments.push({
-            type: 'image',
-            imageUrl: result.imageUrl,
-            photographerName:
-              typeof result.photographerName === 'string'
-                ? result.photographerName
-                : 'Unknown',
-            photographerProfileUrl:
-              typeof result.photographerProfileUrl === 'string'
-                ? result.photographerProfileUrl
-                : 'https://unsplash.com',
-          });
+        if (call?.name === 'search_reference_image') {
+          const result = call.result;
+          if (result && typeof result.imageUrl === 'string' && result.imageUrl) {
+            attachments.push({
+              type: 'image',
+              imageUrl: result.imageUrl,
+              photographerName:
+                typeof result.photographerName === 'string'
+                  ? result.photographerName
+                  : 'Unknown',
+              photographerProfileUrl:
+                typeof result.photographerProfileUrl === 'string'
+                  ? result.photographerProfileUrl
+                  : 'https://unsplash.com',
+            });
+          }
+          continue;
+        }
+
+        if (call?.name === 'search_reference_video') {
+          const result = call.result;
+          if (result && typeof result.videoUrl === 'string' && result.videoUrl) {
+            attachments.push({
+              type: 'video',
+              videoUrl: result.videoUrl,
+              photographerName:
+                typeof result.photographerName === 'string'
+                  ? result.photographerName
+                  : 'Unknown',
+              photographerProfileUrl:
+                typeof result.photographerProfileUrl === 'string'
+                  ? result.photographerProfileUrl
+                  : 'https://www.pexels.com',
+            });
+          }
         }
       }
 

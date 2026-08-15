@@ -13,6 +13,7 @@
  */
 
 const { VertexAI } = require('@google-cloud/vertexai');
+const { findCuratedExerciseVideo } = require('./curated-exercise-videos.cjs');
 
 const project =
   process.env.GOOGLE_CLOUD_PROJECT ||
@@ -115,6 +116,28 @@ const COACH_FUNCTION_DECLARATIONS = [
       required: ['query'],
     },
   },
+  {
+    name: 'search_reference_video',
+    description:
+      'Search for a short INSTRUCTIONAL reference video showing proper exercise ' +
+      'form or movement technique (e.g. kettlebell swing proper form, squat technique ' +
+      'tutorial). Prefer serious coaching/demo clips — never entertainment, tricks, ' +
+      'juggling, freestyle, or viral stunt videos. Use when the athlete needs to see ' +
+      'correct movement in motion rather than a static image.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Exact exercise name first in English (e.g. "kettlebell swing" or ' +
+            '"kettlebell swing proper form"). Keep it short and specific to the ' +
+            'movement — do not use vague queries like only "kettlebell".',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 function getCoachTools() {
@@ -197,6 +220,131 @@ async function searchReferenceImage({ query } = {}) {
   }
 
   return payload;
+}
+
+/**
+ * Pick a lightweight Pexels video file: prefer quality "sd", else smallest width.
+ * @param {Array<{ quality?: string, width?: number, link?: string }>|undefined} files
+ * @returns {string|null}
+ */
+function pickPexelsVideoUrl(files) {
+  if (!Array.isArray(files) || files.length === 0) return null;
+
+  const withLink = files.filter(
+    (f) => f && typeof f.link === 'string' && f.link
+  );
+  if (withLink.length === 0) return null;
+
+  const sd = withLink.find(
+    (f) => String(f.quality || '').toLowerCase() === 'sd'
+  );
+  if (sd) return sd.link;
+
+  const sorted = [...withLink].sort((a, b) => {
+    const wa = typeof a.width === 'number' ? a.width : Number.MAX_SAFE_INTEGER;
+    const wb = typeof b.width === 'number' ? b.width : Number.MAX_SAFE_INTEGER;
+    return wa - wb;
+  });
+  return sorted[0]?.link || null;
+}
+
+/**
+ * Light cleanup before hitting Pexels (keep exercise name intact).
+ * @param {string} raw
+ * @returns {string}
+ */
+function normalizeVideoSearchQuery(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/\b(trick|tricks|freestyle|juggling|juggle|stunt|viral|funny|fail)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Prefer mid-length demo clips (4–40s); else first result.
+ * @param {Array<object>|undefined} videos
+ * @returns {object|null}
+ */
+function pickPexelsVideoByDuration(videos) {
+  if (!Array.isArray(videos) || videos.length === 0) return null;
+
+  const inRange = videos.filter((v) => {
+    const dur = typeof v?.duration === 'number' ? v.duration : null;
+    return dur != null && dur >= 4 && dur <= 40;
+  });
+
+  return inRange[0] || videos[0] || null;
+}
+
+/**
+ * Pexels Videos search (hotlink URLs only — never download/rehost).
+ * Curated map first; live search is a duration-filtered fallback.
+ *
+ * @param {{ query?: string }} args
+ * @returns {Promise<{
+ *   videoUrl: string|null,
+ *   photographerName?: string,
+ *   photographerProfileUrl?: string,
+ * }>}
+ */
+async function searchReferenceVideo({ query } = {}) {
+  const normalized = String(typeof query === 'string' ? query : '')
+    .toLowerCase()
+    .trim();
+  if (!normalized) return { videoUrl: null };
+
+  const curated = findCuratedExerciseVideo(normalized);
+  if (curated) {
+    return curated;
+  }
+
+  const apiKey = process.env.PEXELS_API_KEY;
+  if (!apiKey) {
+    console.warn('[ai-provider.gcp] PEXELS_API_KEY is not set');
+    return { videoUrl: null };
+  }
+
+  const base = normalizeVideoSearchQuery(query);
+  if (!base) return { videoUrl: null };
+
+  const searchQuery = `${base} exercise tutorial gym`;
+  let video = null;
+  try {
+    const url =
+      'https://api.pexels.com/v1/videos/search' +
+      `?query=${encodeURIComponent(searchQuery)}&per_page=5`;
+    const res = await fetch(url, {
+      headers: { Authorization: apiKey },
+    });
+    if (!res.ok) {
+      console.warn(
+        `[ai-provider.gcp] Pexels video search failed: HTTP ${res.status}`
+      );
+      return { videoUrl: null };
+    }
+    const data = await res.json();
+    video = pickPexelsVideoByDuration(
+      Array.isArray(data?.videos) ? data.videos : []
+    );
+  } catch (err) {
+    console.warn(
+      '[ai-provider.gcp] Pexels video search error:',
+      err?.message || err
+    );
+    return { videoUrl: null };
+  }
+
+  const videoUrl = pickPexelsVideoUrl(video?.video_files);
+  if (!videoUrl) {
+    return { videoUrl: null };
+  }
+
+  return {
+    videoUrl,
+    photographerName: video.user?.name || 'Unknown',
+    photographerProfileUrl: video.user?.url || 'https://www.pexels.com',
+  };
 }
 
 /**
@@ -454,6 +602,7 @@ module.exports = {
   generateSessionSummary,
   getCoachTools,
   searchReferenceImage,
+  searchReferenceVideo,
   COACH_FUNCTION_DECLARATIONS,
   MAX_TOOL_ROUNDS,
 };

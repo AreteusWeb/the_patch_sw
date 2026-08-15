@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   X,
   Send,
@@ -32,11 +32,20 @@ interface CoachImageAttachment {
   photographerProfileUrl: string;
 }
 
+interface CoachVideoAttachment {
+  type: 'video';
+  videoUrl: string;
+  photographerName: string;
+  photographerProfileUrl: string;
+}
+
+type CoachAttachment = CoachImageAttachment | CoachVideoAttachment;
+
 interface CoachChatMessage {
   id: string;
   role: CoachRole;
   text: string;
-  attachments?: CoachImageAttachment[];
+  attachments?: CoachAttachment[];
 }
 
 /** Break "1. … 2. …" into lines when the model dumps a list in one paragraph. */
@@ -81,8 +90,10 @@ function CoachMessageBody({ text }: { text: string }) {
 /** Unsplash attribution (required by Unsplash API guidelines). */
 function CoachImageAttachmentView({
   attachment,
+  onMediaReady,
 }: {
   attachment: CoachImageAttachment;
+  onMediaReady?: () => void;
 }) {
   const [broken, setBroken] = useState(false);
   const profileUrl =
@@ -98,6 +109,7 @@ function CoachImageAttachmentView({
             alt=""
             loading="lazy"
             className="block w-full max-w-full h-auto rounded-[12px]"
+            onLoad={() => onMediaReady?.()}
             onError={() => setBroken(true)}
           />
         ) : (
@@ -127,6 +139,86 @@ function CoachImageAttachmentView({
         </a>
       </p>
     </div>
+  );
+}
+
+/** Pexels video attribution. */
+function CoachVideoAttachmentView({
+  attachment,
+  onMediaReady,
+}: {
+  attachment: CoachVideoAttachment;
+  onMediaReady?: () => void;
+}) {
+  const [broken, setBroken] = useState(false);
+  const profileUrl =
+    attachment.photographerProfileUrl || 'https://www.pexels.com';
+  const name = attachment.photographerName || 'Unknown';
+
+  return (
+    <div className="mt-3 w-full min-w-0">
+      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-1.5 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.5)]">
+        {!broken ? (
+          <video
+            src={attachment.videoUrl}
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            className="block w-full max-w-full h-auto rounded-[12px] bg-black"
+            onLoadedData={() => onMediaReady?.()}
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <div className="w-full h-28 rounded-[12px] bg-slate-900/80 flex items-center justify-center text-[10px] text-[#6B7280]">
+            Video unavailable
+          </div>
+        )}
+      </div>
+      <p className="mt-1.5 text-[8px] leading-normal text-[#6B7280]">
+        Video by{' '}
+        <a
+          href={profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-[#6B7280]/60 text-[#A0A0A8] hover:text-teal-400"
+        >
+          {name}
+        </a>{' '}
+        on{' '}
+        <a
+          href="https://www.pexels.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-[#6B7280]/60 text-[#A0A0A8] hover:text-teal-400"
+        >
+          Pexels
+        </a>
+      </p>
+    </div>
+  );
+}
+
+function CoachAttachmentView({
+  attachment,
+  onMediaReady,
+}: {
+  attachment: CoachAttachment;
+  onMediaReady?: () => void;
+}) {
+  if (attachment.type === 'video') {
+    return (
+      <CoachVideoAttachmentView
+        attachment={attachment}
+        onMediaReady={onMediaReady}
+      />
+    );
+  }
+  return (
+    <CoachImageAttachmentView
+      attachment={attachment}
+      onMediaReady={onMediaReady}
+    />
   );
 }
 
@@ -160,10 +252,26 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const voiceModeRef = useRef(false);
   const loadingRef = useRef(false);
   const prevSpeakingRef = useRef(false);
+  /** Keep chat pinned to latest messages unless the user scrolls up to read history. */
+  const stickToBottomRef = useRef(true);
   const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
 
   voiceModeRef.current = voiceMode;
   loadingRef.current = loading;
+
+  const scrollChatToBottom = () => {
+    const el = listRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  const onChatListScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceFromBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 120;
+  };
 
   const { speak, isSpeaking, cancel: cancelSpeech, isSupported: ttsSupported } =
     useVoiceOutput();
@@ -195,7 +303,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const maxPx = 5 * 20; // ~5 lines
+    // Match max-h-[6.25rem] so typed + spoken drafts grow the same way.
+    const maxPx = 6.25 * 16;
     el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
   };
 
@@ -209,12 +318,20 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   }, [interactionMode]);
 
   useEffect(() => {
+    // Grow for typing and live STT the same way (scrollbar stays hidden via CSS).
     resizeComposer();
-  }, [input]);
+    if (voiceMode && stickToBottomRef.current) {
+      scrollChatToBottom();
+    }
+  }, [input, voiceMode, isListening]);
 
-  useEffect(() => {
-    if (!listRef.current) return;
-    listRef.current.scrollTop = listRef.current.scrollHeight;
+  useLayoutEffect(() => {
+    if (interactionMode !== 'text') return;
+    // Follow new Q&A / thinking indicator. Stick ref is true after send /
+    // while near bottom; measuring after content grows used to skip scroll.
+    scrollChatToBottom();
+    const id = requestAnimationFrame(() => scrollChatToBottom());
+    return () => cancelAnimationFrame(id);
   }, [messages, loading, interactionMode]);
 
   // Live interim transcript into the composer while listening.
@@ -258,6 +375,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       !loadingRef.current &&
       !sessionLimitReached
     ) {
+      inputRef.current?.blur();
       startListening();
     }
   }, [isSpeaking, sessionLimitReached, startListening]);
@@ -277,6 +395,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
   const resumeVoiceListening = () => {
     if (!voiceModeRef.current || sessionLimitReached) return;
+    inputRef.current?.blur();
     window.setTimeout(() => startListening(), 80);
   };
 
@@ -319,13 +438,18 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       setSessionLimitReached(false);
       setInput('');
       setVoiceDraft(false);
+      stickToBottomRef.current = true;
       window.setTimeout(() => resizeComposer(), 0);
       if (typeof data.sessionId === 'string') {
         setSessionId(data.sessionId);
       } else {
         setSessionId(null);
       }
-      window.setTimeout(() => inputRef.current?.focus(), 100);
+      // Don't focus the composer in voice mode — that opens the soft keyboard
+      // and makes the chat pane jump while listening.
+      if (!voiceModeRef.current) {
+        window.setTimeout(() => inputRef.current?.focus(), 100);
+      }
       resumeVoiceListening();
     } catch {
       setError('Network error — could not start a new conversation.');
@@ -348,6 +472,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     setVoiceDraft(false);
     setError(null);
     setInput('');
+    stickToBottomRef.current = true;
     window.setTimeout(() => resizeComposer(), 0);
 
     const userMsg: CoachChatMessage = {
@@ -407,28 +532,51 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           ? data.reply.trim()
           : 'No reply from coach.';
 
-      const attachments: CoachImageAttachment[] = Array.isArray(data.attachments)
+      const attachments: CoachAttachment[] = Array.isArray(data.attachments)
         ? data.attachments
-            .filter(
-              (a: unknown): a is CoachImageAttachment =>
-                !!a &&
-                typeof a === 'object' &&
-                (a as CoachImageAttachment).type === 'image' &&
-                typeof (a as CoachImageAttachment).imageUrl === 'string' &&
-                !!(a as CoachImageAttachment).imageUrl
-            )
-            .map((a: CoachImageAttachment) => ({
-              type: 'image' as const,
-              imageUrl: a.imageUrl,
-              photographerName:
-                typeof a.photographerName === 'string'
-                  ? a.photographerName
-                  : 'Unknown',
-              photographerProfileUrl:
-                typeof a.photographerProfileUrl === 'string'
-                  ? a.photographerProfileUrl
-                  : 'https://unsplash.com',
-            }))
+            .filter((a: unknown): a is CoachAttachment => {
+              if (!a || typeof a !== 'object') return false;
+              const att = a as CoachAttachment;
+              if (att.type === 'image') {
+                return (
+                  typeof att.imageUrl === 'string' && !!att.imageUrl
+                );
+              }
+              if (att.type === 'video') {
+                return (
+                  typeof att.videoUrl === 'string' && !!att.videoUrl
+                );
+              }
+              return false;
+            })
+            .map((a: CoachAttachment) => {
+              if (a.type === 'video') {
+                return {
+                  type: 'video' as const,
+                  videoUrl: a.videoUrl,
+                  photographerName:
+                    typeof a.photographerName === 'string'
+                      ? a.photographerName
+                      : 'Unknown',
+                  photographerProfileUrl:
+                    typeof a.photographerProfileUrl === 'string'
+                      ? a.photographerProfileUrl
+                      : 'https://www.pexels.com',
+                };
+              }
+              return {
+                type: 'image' as const,
+                imageUrl: a.imageUrl,
+                photographerName:
+                  typeof a.photographerName === 'string'
+                    ? a.photographerName
+                    : 'Unknown',
+                photographerProfileUrl:
+                  typeof a.photographerProfileUrl === 'string'
+                    ? a.photographerProfileUrl
+                    : 'https://unsplash.com',
+              };
+            })
         : [];
 
       setMessages(prev => [
@@ -463,6 +611,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       cancelSpeech();
       setVoiceMode(true);
       voiceModeRef.current = true;
+      inputRef.current?.blur();
       startListening();
       return;
     }
@@ -481,10 +630,13 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     setVoiceMode(true);
     voiceModeRef.current = true;
     setError(null);
+    // Blur so the soft keyboard / viewport chrome doesn't fight STT updates.
+    inputRef.current?.blur();
     startListening();
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (voiceMode && (isListening || isSpeaking)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void sendMessage();
@@ -504,7 +656,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   return (
     <div
       className={cn(
-        'h-full min-h-0 flex flex-col',
+        'h-full min-h-0 flex flex-col overflow-hidden',
         isFullscreen ? 'bg-black pt-[env(safe-area-inset-top)]' : 'bg-slate-950/95'
       )}
     >
@@ -587,7 +739,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         <>
           <div
             ref={listRef}
-            className="relative flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 sm:px-5 py-4 flex flex-col gap-3.5"
+            onScroll={onChatListScroll}
+            className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide px-4 sm:px-5 py-4 flex flex-col gap-3.5"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {startingNew && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
@@ -636,9 +790,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   {msg.role === 'model' &&
                     Array.isArray(msg.attachments) &&
                     msg.attachments.map((att, idx) => (
-                      <CoachImageAttachmentView
-                        key={`${msg.id}_img_${idx}`}
+                      <CoachAttachmentView
+                        key={`${msg.id}_att_${idx}`}
                         attachment={att}
+                        onMediaReady={scrollChatToBottom}
                       />
                     ))}
                 </div>
@@ -681,13 +836,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 Session {sessionId}
               </p>
             )}
-            {voiceMode && (
-              <p className="text-[9px] text-teal-400/80 mb-2 tracking-wide">
-                {voiceState === 'listening' && 'Listening…'}
-                {voiceState === 'speaking' && 'Coach speaking — tap mic to interrupt'}
-                {voiceState === 'waiting' && 'Waiting for coach…'}
-              </p>
-            )}
+            {/* Fixed-height status slot — never grow/wrap or the chat scrollbar flashes */}
+            <div className="h-4 mb-2 overflow-hidden">
+              {voiceMode && (
+                <p className="text-[9px] text-teal-400/80 tracking-wide truncate leading-4">
+                  {voiceState === 'listening' && 'Listening…'}
+                  {voiceState === 'speaking' && 'Coach speaking — tap mic to interrupt'}
+                  {voiceState === 'waiting' && 'Waiting for coach…'}
+                </p>
+              )}
+            </div>
             <div className="flex items-end gap-2.5">
               <textarea
                 ref={inputRef}
@@ -698,12 +856,13 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   setInput(e.target.value);
                 }}
                 onKeyDown={onKeyDown}
-                disabled={
+                readOnly={
                   busy ||
                   sessionLimitReached ||
                   (voiceMode && isListening) ||
                   isSpeaking
                 }
+                disabled={busy || sessionLimitReached}
                 placeholder={
                   sessionLimitReached
                     ? 'Start a new conversation to continue…'
@@ -715,17 +874,21 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 rounded-2xl px-3.5 py-3 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] max-h-[6.25rem] transition-[border-color,box-shadow]',
                   // 16px on fullscreen avoids iOS input zoom
                   isFullscreen ? 'text-base' : 'text-[13px]',
+                  // readOnly (not disabled) while listening so the box can grow with STT text
+                  ((voiceMode && isListening) || isSpeaking) &&
+                    'cursor-default opacity-90',
                   voiceDraft
                     ? 'text-[#A0A0A8] italic'
                     : 'text-[#F5F5F5]'
                 )}
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               />
               <button
                 type="button"
                 onClick={handleVoiceToggle}
                 disabled={!voiceSupported || sessionLimitReached}
                 className={cn(
-                  'relative w-11 h-11 flex items-center justify-center rounded-2xl shrink-0 transition-all disabled:opacity-35',
+                  'relative w-11 h-11 flex items-center justify-center rounded-2xl shrink-0 overflow-hidden transition-all disabled:opacity-35',
                   voiceState === 'listening' &&
                     'bg-teal-500 text-slate-950 shadow-[0_0_0_3px_rgba(45,212,191,0.25)]',
                   voiceState === 'speaking' &&

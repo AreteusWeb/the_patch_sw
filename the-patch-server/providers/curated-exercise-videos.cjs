@@ -17,12 +17,6 @@ const CURATED_EXERCISE_VIDEOS = {
     photographerName: 'TODO — replace after picking clip',
     photographerProfileUrl: 'https://www.pexels.com/@todo',
   },
-  'bicep curl': {
-    videoUrl:
-      'https://videos.pexels.com/video-files/PLACEHOLDER_BICEP_CURL/PLACEHOLDER_BICEP_CURL.mp4',
-    photographerName: 'TODO — replace after picking clip',
-    photographerProfileUrl: 'https://www.pexels.com/@todo',
-  },
   'deadlift': {
     videoUrl:
       'https://videos.pexels.com/video-files/PLACEHOLDER_DEADLIFT/PLACEHOLDER_DEADLIFT.mp4',

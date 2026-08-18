@@ -6,6 +6,7 @@ import {
   Loader2,
   Mic,
   Volume2,
+  Search,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
@@ -32,6 +33,7 @@ interface CoachImageAttachment {
   photographerProfileUrl: string;
 }
 
+/** Curated / legacy Pexels file hotlink. */
 interface CoachVideoAttachment {
   type: 'video';
   videoUrl: string;
@@ -39,7 +41,25 @@ interface CoachVideoAttachment {
   photographerProfileUrl: string;
 }
 
-type CoachAttachment = CoachImageAttachment | CoachVideoAttachment;
+interface CoachYouTubeAttachment {
+  type: 'video_youtube';
+  videoId: string;
+  title: string;
+  channelTitle: string;
+}
+
+interface CoachShoppingLinkAttachment {
+  type: 'shopping_link';
+  url: string;
+  retailer: string;
+  searchQuery: string;
+}
+
+type CoachAttachment =
+  | CoachImageAttachment
+  | CoachVideoAttachment
+  | CoachYouTubeAttachment
+  | CoachShoppingLinkAttachment;
 
 interface CoachChatMessage {
   id: string;
@@ -142,7 +162,7 @@ function CoachImageAttachmentView({
   );
 }
 
-/** Pexels video attribution. */
+/** Pexels video attribution (curated clips). */
 function CoachVideoAttachmentView({
   attachment,
   onMediaReady,
@@ -199,6 +219,78 @@ function CoachVideoAttachmentView({
   );
 }
 
+/** Official YouTube embed + title/channel attribution. */
+function CoachYouTubeAttachmentView({
+  attachment,
+  onMediaReady,
+}: {
+  attachment: CoachYouTubeAttachment;
+  onMediaReady?: () => void;
+}) {
+  const title = attachment.title || 'YouTube video';
+  const channel = attachment.channelTitle || 'YouTube';
+  const embedSrc = `https://www.youtube.com/embed/${encodeURIComponent(attachment.videoId)}`;
+
+  return (
+    <div className="mt-3 w-full min-w-0">
+      <div className="rounded-2xl border border-slate-700/70 bg-slate-950/80 p-1.5 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.5)] overflow-hidden">
+        <div className="relative w-full aspect-video rounded-[12px] overflow-hidden bg-black">
+          <iframe
+            src={embedSrc}
+            title={title}
+            className="absolute inset-0 w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            loading="lazy"
+            onLoad={() => onMediaReady?.()}
+          />
+        </div>
+      </div>
+      <p className="mt-1.5 text-[8px] leading-normal text-[#6B7280] line-clamp-2">
+        <span className="text-[#A0A0A8]">{title}</span>
+        {' · '}
+        {channel} on{' '}
+        <a
+          href={`https://www.youtube.com/watch?v=${encodeURIComponent(attachment.videoId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-[#6B7280]/60 text-[#A0A0A8] hover:text-teal-400"
+        >
+          YouTube
+        </a>
+      </p>
+    </div>
+  );
+}
+
+/** Safe Amazon search chip (URL always built server-side as /s?k=). */
+function CoachShoppingLinkAttachmentView({
+  attachment,
+}: {
+  attachment: CoachShoppingLinkAttachment;
+}) {
+  const query = attachment.searchQuery?.trim() || 'gear';
+  const retailer = attachment.retailer || 'Amazon';
+  const label = `Search ${query} on ${retailer}`;
+
+  return (
+    <div className="mt-3 w-full min-w-0">
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex max-w-full items-center gap-2 rounded-xl border border-teal-500/35 bg-teal-500/10 px-3.5 py-2.5 text-[12px] font-semibold text-teal-300 hover:bg-teal-500/20 hover:text-teal-200 transition-colors"
+      >
+        <Search size={14} className="shrink-0 opacity-90" strokeWidth={2.5} />
+        <span className="truncate">{label}</span>
+      </a>
+      <p className="mt-1.5 text-[8px] leading-normal text-[#6B7280]">
+        Opens Amazon search results — not a specific product recommendation.
+      </p>
+    </div>
+  );
+}
+
 function CoachAttachmentView({
   attachment,
   onMediaReady,
@@ -206,6 +298,14 @@ function CoachAttachmentView({
   attachment: CoachAttachment;
   onMediaReady?: () => void;
 }) {
+  if (attachment.type === 'video_youtube') {
+    return (
+      <CoachYouTubeAttachmentView
+        attachment={attachment}
+        onMediaReady={onMediaReady}
+      />
+    );
+  }
   if (attachment.type === 'video') {
     return (
       <CoachVideoAttachmentView
@@ -213,6 +313,9 @@ function CoachAttachmentView({
         onMediaReady={onMediaReady}
       />
     );
+  }
+  if (attachment.type === 'shopping_link') {
+    return <CoachShoppingLinkAttachmentView attachment={attachment} />;
   }
   return (
     <CoachImageAttachmentView
@@ -474,6 +577,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     setInput('');
     stickToBottomRef.current = true;
     window.setTimeout(() => resizeComposer(), 0);
+    // Keep caret in the composer after send (Enter or click) — unless voice mode.
+    if (!voiceModeRef.current) {
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }
 
     const userMsg: CoachChatMessage = {
       id: `u_${Date.now()}`,
@@ -547,9 +654,34 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   typeof att.videoUrl === 'string' && !!att.videoUrl
                 );
               }
+              if (att.type === 'video_youtube') {
+                return (
+                  typeof att.videoId === 'string' && !!att.videoId
+                );
+              }
+              if (att.type === 'shopping_link') {
+                return (
+                  typeof att.url === 'string' &&
+                  /^https:\/\/www\.amazon\.(com|com\.mx|ca|co\.uk)\/s\?k=/.test(
+                    att.url
+                  )
+                );
+              }
               return false;
             })
             .map((a: CoachAttachment) => {
+              if (a.type === 'video_youtube') {
+                return {
+                  type: 'video_youtube' as const,
+                  videoId: a.videoId,
+                  title:
+                    typeof a.title === 'string' ? a.title : 'YouTube video',
+                  channelTitle:
+                    typeof a.channelTitle === 'string'
+                      ? a.channelTitle
+                      : 'YouTube',
+                };
+              }
               if (a.type === 'video') {
                 return {
                   type: 'video' as const,
@@ -562,6 +694,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                     typeof a.photographerProfileUrl === 'string'
                       ? a.photographerProfileUrl
                       : 'https://www.pexels.com',
+                };
+              }
+              if (a.type === 'shopping_link') {
+                return {
+                  type: 'shopping_link' as const,
+                  url: a.url,
+                  retailer:
+                    typeof a.retailer === 'string' ? a.retailer : 'Amazon',
+                  searchQuery:
+                    typeof a.searchQuery === 'string' ? a.searchQuery : '',
                 };
               }
               return {
@@ -598,6 +740,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       resumeVoiceListening();
     } finally {
       setLoading(false);
+      if (!voiceModeRef.current) {
+        window.setTimeout(() => inputRef.current?.focus(), 0);
+      }
     }
   };
 
@@ -857,12 +1002,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 }}
                 onKeyDown={onKeyDown}
                 readOnly={
-                  busy ||
+                  startingNew ||
                   sessionLimitReached ||
                   (voiceMode && isListening) ||
                   isSpeaking
                 }
-                disabled={busy || sessionLimitReached}
+                disabled={sessionLimitReached || startingNew}
                 placeholder={
                   sessionLimitReached
                     ? 'Start a new conversation to continue…'

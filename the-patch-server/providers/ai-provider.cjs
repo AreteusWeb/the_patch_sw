@@ -36,6 +36,15 @@ module.exports = {
   getCoachTools: impl.getCoachTools,
   /** Unsplash reference-image search (hotlink + attribution metadata). */
   searchReferenceImage: impl.searchReferenceImage,
-  /** Pexels reference-video search (hotlink + attribution metadata). */
+  /**
+   * Exercise video lookup (curated Pexels and/or YouTube).
+   * Live search uses YouTube Data API when curated does not match.
+   */
   searchReferenceVideo: impl.searchReferenceVideo,
+  /** YouTube Data API exercise tutorial search. */
+  searchYouTubeExerciseVideo: impl.searchYouTubeExerciseVideo,
+  /**
+   * Deterministic Amazon search URL builder (never invents /dp/ASINs).
+   */
+  getProductSearchLink: impl.getProductSearchLink,
 };

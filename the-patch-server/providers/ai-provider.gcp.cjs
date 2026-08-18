@@ -119,11 +119,10 @@ const COACH_FUNCTION_DECLARATIONS = [
   {
     name: 'search_reference_video',
     description:
-      'Search for a short INSTRUCTIONAL reference video showing proper exercise ' +
-      'form or movement technique (e.g. kettlebell swing proper form, squat technique ' +
-      'tutorial). Prefer serious coaching/demo clips — never entertainment, tricks, ' +
-      'juggling, freestyle, or viral stunt videos. Use when the athlete needs to see ' +
-      'correct movement in motion rather than a static image.',
+      'Search YouTube for an INSTRUCTIONAL exercise tutorial showing proper form ' +
+      'or movement technique (e.g. kettlebell swing proper form, squat technique). ' +
+      'Prefer coaching/demo clips — never entertainment, tricks, juggling, freestyle, ' +
+      'or viral stunt videos. Use when the athlete needs to see correct movement in motion.',
     parameters: {
       type: 'object',
       properties: {
@@ -133,6 +132,24 @@ const COACH_FUNCTION_DECLARATIONS = [
             'Exact exercise name first in English (e.g. "kettlebell swing" or ' +
             '"kettlebell swing proper form"). Keep it short and specific to the ' +
             'movement — do not use vague queries like only "kettlebell".',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_product_search_link',
+    description:
+      'Get a link to search for fitness equipment or gear on Amazon when the athlete ' +
+      'wants to know where to buy something. This returns a search results link, not a ' +
+      'specific product — never claim it\'s a specific recommended product, just a place to look.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description:
+            'Short product search phrase in English (e.g. "kettlebell 20lb", "foam roller").',
         },
       },
       required: ['query'],
@@ -223,33 +240,7 @@ async function searchReferenceImage({ query } = {}) {
 }
 
 /**
- * Pick a lightweight Pexels video file: prefer quality "sd", else smallest width.
- * @param {Array<{ quality?: string, width?: number, link?: string }>|undefined} files
- * @returns {string|null}
- */
-function pickPexelsVideoUrl(files) {
-  if (!Array.isArray(files) || files.length === 0) return null;
-
-  const withLink = files.filter(
-    (f) => f && typeof f.link === 'string' && f.link
-  );
-  if (withLink.length === 0) return null;
-
-  const sd = withLink.find(
-    (f) => String(f.quality || '').toLowerCase() === 'sd'
-  );
-  if (sd) return sd.link;
-
-  const sorted = [...withLink].sort((a, b) => {
-    const wa = typeof a.width === 'number' ? a.width : Number.MAX_SAFE_INTEGER;
-    const wb = typeof b.width === 'number' ? b.width : Number.MAX_SAFE_INTEGER;
-    return wa - wb;
-  });
-  return sorted[0]?.link || null;
-}
-
-/**
- * Light cleanup before hitting Pexels (keep exercise name intact).
+ * Light cleanup before video search (keep exercise name intact).
  * @param {string} raw
  * @returns {string}
  */
@@ -262,88 +253,118 @@ function normalizeVideoSearchQuery(raw) {
 }
 
 /**
- * Prefer mid-length demo clips (4–40s); else first result.
- * @param {Array<object>|undefined} videos
- * @returns {object|null}
+ * YouTube Data API search for exercise tutorials.
+ * @param {{ query?: string }} args
+ * @returns {Promise<{ videoId: string|null, title?: string, channelTitle?: string }>}
  */
-function pickPexelsVideoByDuration(videos) {
-  if (!Array.isArray(videos) || videos.length === 0) return null;
+async function searchYouTubeExerciseVideo({ query } = {}) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    console.warn('[ai-provider.gcp] YOUTUBE_API_KEY is not set');
+    return { videoId: null };
+  }
 
-  const inRange = videos.filter((v) => {
-    const dur = typeof v?.duration === 'number' ? v.duration : null;
-    return dur != null && dur >= 4 && dur <= 40;
-  });
+  const base = normalizeVideoSearchQuery(
+    typeof query === 'string' ? query : ''
+  );
+  if (!base) return { videoId: null };
 
-  return inRange[0] || videos[0] || null;
+  const q = `${base} exercise tutorial proper form`;
+  try {
+    const url =
+      'https://www.googleapis.com/youtube/v3/search' +
+      `?part=snippet&type=video&maxResults=3` +
+      `&q=${encodeURIComponent(q)}` +
+      `&key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(
+        `[ai-provider.gcp] YouTube search failed: HTTP ${res.status}`
+      );
+      return { videoId: null };
+    }
+    const data = await res.json();
+    const item = Array.isArray(data?.items) ? data.items[0] : null;
+    const videoId =
+      item && typeof item.id?.videoId === 'string' ? item.id.videoId : null;
+    if (!videoId) return { videoId: null };
+
+    return {
+      videoId,
+      title:
+        typeof item.snippet?.title === 'string'
+          ? item.snippet.title
+          : 'YouTube video',
+      channelTitle:
+        typeof item.snippet?.channelTitle === 'string'
+          ? item.snippet.channelTitle
+          : 'YouTube',
+    };
+  } catch (err) {
+    console.warn(
+      '[ai-provider.gcp] YouTube search error:',
+      err?.message || err
+    );
+    return { videoId: null };
+  }
 }
 
 /**
- * Pexels Videos search (hotlink URLs only — never download/rehost).
- * Curated map first; live search is a duration-filtered fallback.
+ * Exercise video lookup: curated Pexels clips first, then YouTube search.
+ * Curated hits return { videoUrl, photographerName, photographerProfileUrl }.
+ * Live hits return { videoId, title, channelTitle }.
  *
  * @param {{ query?: string }} args
- * @returns {Promise<{
- *   videoUrl: string|null,
- *   photographerName?: string,
- *   photographerProfileUrl?: string,
- * }>}
  */
 async function searchReferenceVideo({ query } = {}) {
   const normalized = String(typeof query === 'string' ? query : '')
     .toLowerCase()
     .trim();
-  if (!normalized) return { videoUrl: null };
+  if (!normalized) return { videoId: null };
 
   const curated = findCuratedExerciseVideo(normalized);
   if (curated) {
     return curated;
   }
 
-  const apiKey = process.env.PEXELS_API_KEY;
-  if (!apiKey) {
-    console.warn('[ai-provider.gcp] PEXELS_API_KEY is not set');
-    return { videoUrl: null };
+  return searchYouTubeExerciseVideo({ query });
+}
+
+/**
+ * Deterministic Amazon search URL — NEVER a product /dp/ASIN link.
+ * Bare `?k=` alone is flaky in some regions; include ref + normalized keywords.
+ * Optional AMAZON_SEARCH_HOST (allowlisted), e.g. www.amazon.com.mx for Mexico.
+ *
+ * @param {{ query?: string }} args
+ * @returns {{ url: string|null, retailer: string, searchQuery: string }}
+ */
+function getProductSearchLink({ query } = {}) {
+  const searchQuery = String(typeof query === 'string' ? query : '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!searchQuery) {
+    return { url: null, retailer: 'Amazon', searchQuery: '' };
   }
 
-  const base = normalizeVideoSearchQuery(query);
-  if (!base) return { videoUrl: null };
+  const allowedHosts = new Set([
+    'www.amazon.com',
+    'www.amazon.com.mx',
+    'www.amazon.ca',
+    'www.amazon.co.uk',
+  ]);
+  const rawHost = String(process.env.AMAZON_SEARCH_HOST || 'www.amazon.com.mx')
+    .trim()
+    .toLowerCase();
+  const host = allowedHosts.has(rawHost) ? rawHost : 'www.amazon.com.mx';
 
-  const searchQuery = `${base} exercise tutorial gym`;
-  let video = null;
-  try {
-    const url =
-      'https://api.pexels.com/v1/videos/search' +
-      `?query=${encodeURIComponent(searchQuery)}&per_page=5`;
-    const res = await fetch(url, {
-      headers: { Authorization: apiKey },
-    });
-    if (!res.ok) {
-      console.warn(
-        `[ai-provider.gcp] Pexels video search failed: HTTP ${res.status}`
-      );
-      return { videoUrl: null };
-    }
-    const data = await res.json();
-    video = pickPexelsVideoByDuration(
-      Array.isArray(data?.videos) ? data.videos : []
-    );
-  } catch (err) {
-    console.warn(
-      '[ai-provider.gcp] Pexels video search error:',
-      err?.message || err
-    );
-    return { videoUrl: null };
-  }
-
-  const videoUrl = pickPexelsVideoUrl(video?.video_files);
-  if (!videoUrl) {
-    return { videoUrl: null };
-  }
+  // Amazon prefers + for spaces in search keywords (not raw spaces).
+  const keywords = encodeURIComponent(searchQuery).replace(/%20/g, '+');
+  const url = `https://${host}/s?k=${keywords}&ref=nb_sb_noss`;
 
   return {
-    videoUrl,
-    photographerName: video.user?.name || 'Unknown',
-    photographerProfileUrl: video.user?.url || 'https://www.pexels.com',
+    url,
+    retailer: 'Amazon',
+    searchQuery,
   };
 }
 
@@ -603,6 +624,8 @@ module.exports = {
   getCoachTools,
   searchReferenceImage,
   searchReferenceVideo,
+  searchYouTubeExerciseVideo,
+  getProductSearchLink,
   COACH_FUNCTION_DECLARATIONS,
   MAX_TOOL_ROUNDS,
 };

@@ -42,7 +42,9 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
       <div
         className={cn(
           'relative rounded-2xl overflow-hidden border border-slate-700/60 bg-slate-900',
-          embedded ? 'aspect-video max-h-[40%] min-h-[140px] flex-shrink-0' : 'aspect-video'
+          embedded
+            ? 'flex-[1.8] min-h-[240px] max-h-[72%] flex-shrink-0'
+            : 'aspect-video'
         )}
       >
         <video
@@ -68,8 +70,8 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
 
       <div
         className={cn(
-          'rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-2',
-          embedded && 'flex-1 min-h-0 overflow-y-auto scrollbar-hide'
+          'rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-3 space-y-2 flex-shrink-0',
+          embedded && 'min-h-0 max-h-[28%] overflow-y-auto scrollbar-hide'
         )}
       >
         <p className="text-[12px] text-[#A0A0A8] leading-[1.45]">{status}</p>

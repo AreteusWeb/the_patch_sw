@@ -37,20 +37,33 @@ function getCoachTools() {
       {
         name: 'search_reference_video',
         description:
-          'Search for a short INSTRUCTIONAL reference video showing proper exercise ' +
-          'form or movement technique (e.g. kettlebell swing proper form, squat technique ' +
-          'tutorial). Prefer serious coaching/demo clips — never entertainment, tricks, ' +
-          'juggling, freestyle, or viral stunt videos. Use when the athlete needs to see ' +
-          'correct movement in motion rather than a static image.',
+          'Search YouTube for an INSTRUCTIONAL exercise tutorial showing proper form ' +
+          'or movement technique. Prefer coaching/demo clips — never entertainment or stunts.',
         parameters: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
               description:
-                'Exact exercise name first in English (e.g. "kettlebell swing" or ' +
-                '"kettlebell swing proper form"). Keep it short and specific to the ' +
-                'movement — do not use vague queries like only "kettlebell".',
+                'Exact exercise name first in English (e.g. "kettlebell swing").',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'get_product_search_link',
+        description:
+          'Get a link to search for fitness equipment or gear on Amazon when the athlete ' +
+          'wants to know where to buy something. This returns a search results link, not a ' +
+          'specific product — never claim it\'s a specific recommended product, just a place to look.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description:
+                'Short product search phrase in English (e.g. "kettlebell 20lb").',
             },
           },
           required: ['query'],
@@ -89,17 +102,56 @@ async function searchReferenceImage({ query: _query } = {}) {
 }
 
 /**
- * Local mock Pexels video search — fixed placeholder clip + example photographer.
- *
+ * Local mock YouTube search — fixed example videoId.
  * @param {{ query?: string }} _args
  */
-async function searchReferenceVideo({ query: _query } = {}) {
+async function searchYouTubeExerciseVideo({ query: _query } = {}) {
   return {
-    // Public sample MP4 suitable for <video> preview in local mode.
-    videoUrl:
-      'https://videos.pexels.com/video-files/4753989/4753989-sd_640_360_30fps.mp4',
-    photographerName: 'Example Videographer',
-    photographerProfileUrl: 'https://www.pexels.com/@example',
+    videoId: 'IODxDxX7oi4',
+    title: 'Example: How To Do A Proper Push-Up (local mock)',
+    channelTitle: 'Local Mock Channel',
+  };
+}
+
+/**
+ * Local reference video — same YouTube mock as cloud live path.
+ * @param {{ query?: string }} args
+ */
+async function searchReferenceVideo(args = {}) {
+  return searchYouTubeExerciseVideo(args);
+}
+
+/**
+ * Deterministic Amazon search URL — NEVER a product /dp/ASIN link.
+ * @param {{ query?: string }} args
+ * @returns {{ url: string|null, retailer: string, searchQuery: string }}
+ */
+function getProductSearchLink({ query } = {}) {
+  const searchQuery = String(typeof query === 'string' ? query : '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!searchQuery) {
+    return { url: null, retailer: 'Amazon', searchQuery: '' };
+  }
+
+  const allowedHosts = new Set([
+    'www.amazon.com',
+    'www.amazon.com.mx',
+    'www.amazon.ca',
+    'www.amazon.co.uk',
+  ]);
+  const rawHost = String(process.env.AMAZON_SEARCH_HOST || 'www.amazon.com.mx')
+    .trim()
+    .toLowerCase();
+  const host = allowedHosts.has(rawHost) ? rawHost : 'www.amazon.com.mx';
+
+  const keywords = encodeURIComponent(searchQuery).replace(/%20/g, '+');
+  const url = `https://${host}/s?k=${keywords}&ref=nb_sb_noss`;
+
+  return {
+    url,
+    retailer: 'Amazon',
+    searchQuery,
   };
 }
 
@@ -167,7 +219,7 @@ async function generateCoachReply({
     );
   if (wantsVideo && typeof toolHandlers?.search_reference_video === 'function') {
     const videoArgs = { query: 'kettlebell swing proper form' };
-    let videoResult = { videoUrl: null };
+    let videoResult = { videoId: null };
     try {
       videoResult = await toolHandlers.search_reference_video(videoArgs);
     } catch (err) {
@@ -180,6 +232,25 @@ async function generateCoachReply({
     });
   }
 
+  const wantsBuy =
+    /\b(buy|purchase|amazon|shop|where\s+to\s+(get|buy)|equip(ment)?|gear)\b/i.test(
+      String(userMessage || '')
+    );
+  if (wantsBuy && typeof toolHandlers?.get_product_search_link === 'function') {
+    const shopArgs = { query: 'kettlebell 20lb' };
+    let shopResult = { url: null };
+    try {
+      shopResult = await toolHandlers.get_product_search_link(shopArgs);
+    } catch (err) {
+      shopResult = { error: err.message || 'tool_failed' };
+    }
+    toolCalls.push({
+      name: 'get_product_search_link',
+      args: shopArgs,
+      result: shopResult,
+    });
+  }
+
   const sessionCount = Array.isArray(historyResult) ? historyResult.length : 0;
   const text =
     `[local coach mock] Got your message (${turns} prior turn(s)): "${preview || '(empty)'}". ` +
@@ -189,6 +260,9 @@ async function generateCoachReply({
       : '') +
     (wantsVideo
       ? 'Attached a reference video when form/movement helps. '
+      : '') +
+    (wantsBuy
+      ? 'Attached an Amazon search link for gear. '
       : '') +
     `Keep training smart — hydrate, watch recovery score trends, and ease off if HR stays elevated at rest. ` +
     `This is performance coaching only, not medical advice.`;
@@ -211,4 +285,6 @@ module.exports = {
   getCoachTools,
   searchReferenceImage,
   searchReferenceVideo,
+  searchYouTubeExerciseVideo,
+  getProductSearchLink,
 };

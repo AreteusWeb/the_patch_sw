@@ -37,8 +37,7 @@ module.exports = {
   /** Unsplash reference-image search (hotlink + attribution metadata). */
   searchReferenceImage: impl.searchReferenceImage,
   /**
-   * Exercise video lookup (curated Pexels and/or YouTube).
-   * Live search uses YouTube Data API when curated does not match.
+   * Exercise tutorial video lookup (YouTube Data API).
    */
   searchReferenceVideo: impl.searchReferenceVideo,
   /** YouTube Data API exercise tutorial search. */

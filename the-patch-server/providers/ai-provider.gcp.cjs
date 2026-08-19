@@ -13,7 +13,6 @@
  */
 
 const { VertexAI } = require('@google-cloud/vertexai');
-const { findCuratedExerciseVideo } = require('./curated-exercise-videos.cjs');
 
 const project =
   process.env.GOOGLE_CLOUD_PROJECT ||
@@ -310,23 +309,11 @@ async function searchYouTubeExerciseVideo({ query } = {}) {
 }
 
 /**
- * Exercise video lookup: curated Pexels clips first, then YouTube search.
- * Curated hits return { videoUrl, photographerName, photographerProfileUrl }.
- * Live hits return { videoId, title, channelTitle }.
- *
+ * Exercise video lookup via YouTube Data API.
  * @param {{ query?: string }} args
+ * @returns {Promise<{ videoId: string|null, title?: string, channelTitle?: string }>}
  */
 async function searchReferenceVideo({ query } = {}) {
-  const normalized = String(typeof query === 'string' ? query : '')
-    .toLowerCase()
-    .trim();
-  if (!normalized) return { videoId: null };
-
-  const curated = findCuratedExerciseVideo(normalized);
-  if (curated) {
-    return curated;
-  }
-
   return searchYouTubeExerciseVideo({ query });
 }
 

@@ -489,24 +489,6 @@ async function handleCoachApi(req, res) {
                   ? result.channelTitle
                   : 'YouTube',
             });
-          } else if (
-            result &&
-            typeof result.videoUrl === 'string' &&
-            result.videoUrl
-          ) {
-            // Curated Pexels (or legacy) file hotlink.
-            attachments.push({
-              type: 'video',
-              videoUrl: result.videoUrl,
-              photographerName:
-                typeof result.photographerName === 'string'
-                  ? result.photographerName
-                  : 'Unknown',
-              photographerProfileUrl:
-                typeof result.photographerProfileUrl === 'string'
-                  ? result.photographerProfileUrl
-                  : 'https://www.pexels.com',
-            });
           }
           continue;
         }

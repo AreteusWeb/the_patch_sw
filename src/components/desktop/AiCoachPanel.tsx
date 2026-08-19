@@ -406,8 +406,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     const el = inputRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    // Match max-h-[6.25rem] so typed + spoken drafts grow the same way.
-    const maxPx = 6.25 * 16;
+    // Embedded (mobile split) stays short so the keyboard doesn't blow the pane.
+    const maxPx = isFullscreen ? 6.25 * 16 : 3.25 * 16;
     el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
   };
 
@@ -805,12 +805,22 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         isFullscreen ? 'bg-black pt-[env(safe-area-inset-top)]' : 'bg-slate-950/95'
       )}
     >
-      <div className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-slate-800/80 flex-shrink-0 gap-3">
+      <div
+        className={cn(
+          'flex items-center justify-between border-b border-slate-800/80 flex-shrink-0 gap-3',
+          isFullscreen ? 'px-4 sm:px-5 pt-4 sm:pt-5 pb-3' : 'px-3 pt-2.5 pb-2'
+        )}
+      >
         <div className="min-w-0">
           <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
             Performance
           </p>
-          <p className="text-base font-bold text-[#F5F5F5] mt-0.5 truncate leading-tight">
+          <p
+            className={cn(
+              'font-bold text-[#F5F5F5] mt-0.5 truncate leading-tight',
+              isFullscreen ? 'text-base' : 'text-[14px]'
+            )}
+          >
             AI Coach
           </p>
         </div>
@@ -843,7 +853,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         </div>
       </div>
 
-      <div className="px-4 sm:px-5 pt-3 pb-2 flex-shrink-0">
+      <div
+        className={cn(
+          'flex-shrink-0',
+          isFullscreen ? 'px-4 sm:px-5 pt-3 pb-2' : 'px-3 pt-2 pb-1.5'
+        )}
+      >
         <div
           className="flex bg-slate-900/60 p-1 rounded-full border border-slate-800/50 gap-1"
           role="group"
@@ -877,7 +892,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       </div>
 
       {interactionMode === 'live' ? (
-        <div className="flex-1 min-h-0 px-4 sm:px-5 pb-4 flex flex-col">
+        <div
+          className={cn(
+            'flex-1 min-h-0 flex flex-col overflow-hidden',
+            isFullscreen ? 'px-4 sm:px-5 pb-4' : 'px-3 pb-2.5'
+          )}
+        >
           <LiveCoachSessionView embedded />
         </div>
       ) : (
@@ -955,7 +975,14 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             )}
           </div>
 
-          <div className="flex-shrink-0 border-t border-slate-800/80 px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div
+            className={cn(
+              'flex-shrink-0 border-t border-slate-800/80',
+              isFullscreen
+                ? 'px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+                : 'px-3 py-2.5'
+            )}
+          >
             {error && (
               <div className="mb-3 space-y-2">
                 <p className="text-[11px] text-rose-400 leading-[1.45]">{error}</p>
@@ -1016,9 +1043,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                       : 'Ask your coach…'
                 }
                 className={cn(
-                  'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 rounded-2xl px-3.5 py-3 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] max-h-[6.25rem] transition-[border-color,box-shadow]',
-                  // 16px on fullscreen avoids iOS input zoom
-                  isFullscreen ? 'text-base' : 'text-[13px]',
+                  'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 rounded-2xl px-3.5 py-2.5 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] transition-[border-color,box-shadow]',
+                  // 16px always — avoids iOS zoom that blows up the mobile split layout
+                  'text-base',
+                  isFullscreen ? 'max-h-[6.25rem]' : 'max-h-[3.25rem]',
                   // readOnly (not disabled) while listening so the box can grow with STT text
                   ((voiceMode && isListening) || isSpeaking) &&
                     'cursor-default opacity-90',

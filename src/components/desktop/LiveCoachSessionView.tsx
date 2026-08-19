@@ -1,4 +1,5 @@
 import React from 'react';
+import { Circle } from 'lucide-react';
 import { useLiveCoachSession } from '../../hooks/useLiveCoachSession';
 import { cn } from '../../utils/cn';
 
@@ -29,28 +30,90 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
     startSession,
     stopSession,
     LIVE_MODEL,
+    recordingSupported,
+    isRecording,
+    recordingClock,
+    recordingNotice,
+    isSavingRecording,
+    toggleRecording,
   } = useLiveCoachSession();
 
+  const canRecord = phase === 'live' && recordingSupported && !isSavingRecording;
+
   const actions = (
-    <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
-      {(phase === 'idle' || phase === 'ended' || phase === 'error') && (
-        <button
-          type="button"
-          onClick={() => void startSession()}
-          className="h-11 px-5 rounded-2xl bg-teal-500 text-slate-950 text-[12px] font-bold uppercase tracking-wider hover:bg-teal-400 transition-colors"
+    <div className="flex flex-col gap-2 flex-shrink-0 w-full min-w-0">
+      <div className="flex items-center gap-2.5 flex-wrap">
+        {(phase === 'idle' || phase === 'ended' || phase === 'error') && (
+          <button
+            type="button"
+            onClick={() => void startSession()}
+            className="h-11 px-5 rounded-2xl bg-teal-500 text-slate-950 text-[12px] font-bold uppercase tracking-wider hover:bg-teal-400 transition-colors"
+          >
+            Start session
+          </button>
+        )}
+        {(phase === 'starting' || phase === 'live') && (
+          <button
+            type="button"
+            onClick={stopSession}
+            disabled={phase === 'starting'}
+            className="h-11 px-5 rounded-2xl border border-rose-500/40 text-rose-400 text-[12px] font-bold uppercase tracking-wider hover:bg-rose-500/10 transition-colors disabled:opacity-40"
+          >
+            {phase === 'starting' ? 'Starting…' : 'Stop'}
+          </button>
+        )}
+
+        {phase === 'live' && recordingSupported && (
+          <button
+            type="button"
+            onClick={toggleRecording}
+            disabled={!canRecord && !isRecording}
+            className={cn(
+              'h-11 px-4 rounded-2xl text-[12px] font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-2 disabled:opacity-40',
+              isRecording
+                ? 'bg-rose-500 text-white'
+                : 'border border-rose-500/50 text-rose-400 hover:bg-rose-500/10'
+            )}
+            aria-pressed={isRecording}
+            aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+            title={
+              isRecording ? 'Stop and save recording' : 'Record this session'
+            }
+          >
+            <Circle
+              size={12}
+              className={cn(isRecording ? 'fill-white text-white' : 'fill-rose-500 text-rose-500')}
+              strokeWidth={0}
+            />
+            {isRecording ? 'Recording' : 'Record'}
+            {isRecording && (
+              <span className="font-mono text-[11px] tracking-normal normal-case tabular-nums">
+                {recordingClock}
+              </span>
+            )}
+          </button>
+        )}
+
+        {isSavingRecording && (
+          <span className="text-[11px] text-[#A0A0A8]">Saving…</span>
+        )}
+      </div>
+
+      <p className="text-[10px] text-[#6B7280] leading-[1.45]">
+        Voice and video are not saved unless you tap Record.
+      </p>
+
+      {recordingNotice && (
+        <p
+          className={cn(
+            'text-[11px] leading-[1.45]',
+            recordingNotice === 'Recording saved'
+              ? 'text-teal-400'
+              : 'text-rose-400'
+          )}
         >
-          Start session
-        </button>
-      )}
-      {(phase === 'starting' || phase === 'live') && (
-        <button
-          type="button"
-          onClick={stopSession}
-          disabled={phase === 'starting'}
-          className="h-11 px-5 rounded-2xl border border-rose-500/40 text-rose-400 text-[12px] font-bold uppercase tracking-wider hover:bg-rose-500/10 transition-colors disabled:opacity-40"
-        >
-          {phase === 'starting' ? 'Starting…' : 'Stop'}
-        </button>
+          {recordingNotice}
+        </p>
       )}
     </div>
   );
@@ -63,7 +126,6 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
         className
       )}
     >
-      {/* Scrollable body — keeps Start/Stop pinned below in embedded mode */}
       <div
         className={cn(
           'flex flex-col min-h-0',
@@ -81,8 +143,7 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
           className={cn(
             'relative rounded-2xl overflow-hidden border border-slate-700/60 bg-slate-900',
             embedded
-              ? // Compact camera so half-height mobile panels still show Start session
-                'aspect-video w-full max-h-[140px] min-h-[96px] flex-shrink-0'
+              ? 'aspect-video w-full max-h-[140px] min-h-[96px] flex-shrink-0'
               : 'aspect-video'
           )}
         >
@@ -99,8 +160,16 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
             </div>
           )}
           {phase === 'live' && (
-            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-rose-500/90 text-[10px] font-bold uppercase tracking-wider">
-              Live · {secondsLeft}s
+            <div className="absolute top-2 left-2 flex items-center gap-1.5">
+              <div className="px-2 py-0.5 rounded-lg bg-rose-500/90 text-[10px] font-bold uppercase tracking-wider">
+                Live · {secondsLeft}s
+              </div>
+              {isRecording && (
+                <div className="px-2 py-0.5 rounded-lg bg-rose-600 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  Rec {recordingClock}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -151,7 +220,7 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
         {!embedded && actions}
 
         <p className="text-[11px] text-[#6B7280] leading-[1.5] flex-shrink-0">
-          Voice + video · nothing saved · 3 min limit
+          Voice + video · 3 min limit
           {!embedded && (
             <>
               {' '}
@@ -161,7 +230,6 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
         </p>
       </div>
 
-      {/* Always visible in split/embedded panes */}
       {embedded && (
         <div className="flex-shrink-0 pt-1 border-t border-slate-800/60">
           {actions}

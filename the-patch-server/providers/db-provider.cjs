@@ -33,6 +33,7 @@ module.exports = {
   getRecentMessages: impl.getRecentMessages,
   getRecentSessionSummaries: impl.getRecentSessionSummaries,
   appendMessage: impl.appendMessage,
+  appendCoachRecording: impl.appendCoachRecording,
   getLatestMetricsSnapshot: impl.getLatestMetricsSnapshot,
   getSessionHistory: impl.getSessionHistory,
   getMetricTrend: impl.getMetricTrend,

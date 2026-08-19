@@ -86,6 +86,91 @@ function readJsonBody(req) {
     req.on('error', reject);
   });
 }
+
+/**
+ * Minimal multipart/form-data reader (text fields + one file part).
+ * Enough for POST /api/coach/save-recording without adding busboy.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @returns {Promise<{ fields: Record<string, string>, file: { fieldName: string, filename: string, mimeType: string, buffer: Buffer }|null }>}
+ */
+function readMultipartForm(req) {
+  return new Promise((resolve, reject) => {
+    const ct = String(req.headers['content-type'] || '');
+    const boundaryMatch = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(ct);
+    if (!boundaryMatch) {
+      reject(new Error('missing_boundary'));
+      return;
+    }
+    const boundary = boundaryMatch[1] || boundaryMatch[2];
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('error', reject);
+    req.on('end', () => {
+      try {
+        resolve(parseMultipartBuffer(Buffer.concat(chunks), boundary));
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+/**
+ * @param {Buffer} buffer
+ * @param {string} boundary
+ */
+function parseMultipartBuffer(buffer, boundary) {
+  const fields = {};
+  let file = null;
+  const marker = Buffer.from(`--${boundary}`);
+  let start = buffer.indexOf(marker);
+  if (start < 0) throw new Error('invalid_multipart');
+
+  while (start >= 0) {
+    const afterMarker = start + marker.length;
+    if (buffer[afterMarker] === 45 && buffer[afterMarker + 1] === 45) break; // --
+    let partStart = afterMarker;
+    if (buffer[partStart] === 13 && buffer[partStart + 1] === 10) partStart += 2;
+
+    const next = buffer.indexOf(marker, partStart);
+    if (next < 0) break;
+    let partEnd = next;
+    if (partEnd >= 2 && buffer[partEnd - 2] === 13 && buffer[partEnd - 1] === 10) {
+      partEnd -= 2;
+    }
+
+    const part = buffer.subarray(partStart, partEnd);
+    const headerSep = part.indexOf(Buffer.from('\r\n\r\n'));
+    if (headerSep < 0) {
+      start = next;
+      continue;
+    }
+    const headerText = part.subarray(0, headerSep).toString('utf8');
+    const body = part.subarray(headerSep + 4);
+    const nameMatch = /name="([^"]+)"/i.exec(headerText);
+    if (!nameMatch) {
+      start = next;
+      continue;
+    }
+    const fieldName = nameMatch[1];
+    const filenameMatch = /filename="([^"]*)"/i.exec(headerText);
+    if (filenameMatch) {
+      const mimeMatch = /Content-Type:\s*([^\r\n]+)/i.exec(headerText);
+      file = {
+        fieldName,
+        filename: filenameMatch[1] || 'recording.webm',
+        mimeType: (mimeMatch && mimeMatch[1].trim()) || 'application/octet-stream',
+        buffer: Buffer.from(body),
+      };
+    } else {
+      fields[fieldName] = body.toString('utf8');
+    }
+    start = next;
+  }
+
+  return { fields, file };
+}
 // Verifies the session token from Authorization: Bearer <token>
 // (delegated to auth-provider — does not know whether Firebase or local is used)
 async function verifyAuthHeader(req) {
@@ -536,6 +621,72 @@ async function handleCoachApi(req, res) {
     } catch (err) {
       console.error('[coach/message] error:', err?.stack || err);
       sendJson(req, res, 500, { error: 'coach_failed' });
+      return true;
+    }
+  }
+
+  // ── Opt-in Voice & Video recording upload (GCS / local disk) ─────────────
+  if (req.method === 'POST' && url.pathname === '/api/coach/save-recording') {
+    try {
+      const { fields, file } = await readMultipartForm(req);
+      const sessionId =
+        typeof fields.sessionId === 'string' ? fields.sessionId.trim() : '';
+      if (!sessionId) {
+        sendJson(req, res, 400, { error: 'missing_session_id' });
+        return true;
+      }
+      if (!file || !file.buffer || file.buffer.length === 0) {
+        sendJson(req, res, 400, { error: 'missing_recording' });
+        return true;
+      }
+
+      // Cap ~80MB to avoid runaway uploads from the browser.
+      if (file.buffer.length > 80 * 1024 * 1024) {
+        sendJson(req, res, 413, { error: 'recording_too_large' });
+        return true;
+      }
+
+      const durationRaw = Number.parseFloat(fields.durationSeconds || '');
+      const durationSeconds =
+        Number.isFinite(durationRaw) && durationRaw >= 0
+          ? Math.round(durationRaw)
+          : 0;
+
+      const timestamp = Date.now();
+      const safeSession = sessionId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80);
+      if (!safeSession) {
+        sendJson(req, res, 400, { error: 'invalid_session_id' });
+        return true;
+      }
+
+      const storagePath = `users/${uid}/recordings/${safeSession}/${timestamp}.webm`;
+      const contentType =
+        file.mimeType && file.mimeType.startsWith('video/')
+          ? file.mimeType
+          : 'video/webm';
+
+      await storageProvider.saveBinaryFile(
+        storagePath,
+        file.buffer,
+        contentType
+      );
+
+      await dbProvider.appendCoachRecording(uid, safeSession, {
+        storagePath,
+        uploadedAt: timestamp,
+        durationSeconds,
+      });
+
+      sendJson(req, res, 200, { storagePath });
+      return true;
+    } catch (err) {
+      console.error('[coach/save-recording] error:', err?.stack || err);
+      const msg = String(err?.message || '');
+      if (msg === 'missing_boundary' || msg === 'invalid_multipart') {
+        sendJson(req, res, 400, { error: 'invalid_multipart' });
+        return true;
+      }
+      sendJson(req, res, 500, { error: 'save_recording_failed' });
       return true;
     }
   }

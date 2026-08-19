@@ -1,6 +1,6 @@
 /**
  * Gemini Live API session — mic + camera + PCM playback.
- * Nothing is persisted (no Firestore / coach message API).
+ * Nothing is persisted unless the user explicitly taps Record (opt-in).
  * 3-minute hard limit (POC rules).
  */
 
@@ -85,18 +85,41 @@ async function wsPayloadToText(data: unknown): Promise<string | null> {
   return null;
 }
 
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === 'undefined') return undefined;
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t));
+}
+
+function formatRecordingClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
 export type LiveSessionPhase = 'idle' | 'starting' | 'live' | 'ended' | 'error';
 
 export function useLiveCoachSession() {
   const currentUser = useStore(s => s.currentUser);
   const [phase, setPhase] = useState<LiveSessionPhase>('idle');
-  const [status, setStatus] = useState('Ready — nothing is saved.');
+  const [status, setStatus] = useState(
+    'Ready — voice and video are not saved unless you tap Record.'
+  );
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(LIVE_SESSION_LIMIT_MS / 1000);
   const [hasPreview, setHasPreview] = useState(false);
   const [youSaid, setYouSaid] = useState('');
   const [coachSaid, setCoachSaid] = useState('');
   const [micLevel, setMicLevel] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingNotice, setRecordingNotice] = useState<string | null>(null);
+  const [isSavingRecording, setIsSavingRecording] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -116,6 +139,16 @@ export function useLiveCoachSession() {
   const audioChunkLogRef = useRef(0);
   const micLevelTickRef = useRef(0);
 
+  const liveSessionIdRef = useRef<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordStartedAtRef = useRef<number | null>(null);
+  const recordTickerRef = useRef<number | null>(null);
+  const isRecordingRef = useRef(false);
+
+  const recordingSupported =
+    typeof MediaRecorder !== 'undefined' && !!pickRecorderMimeType();
+
   const unlockAudioContexts = () => {
     if (!playCtxRef.current) {
       playCtxRef.current = new AudioContext({ sampleRate: 24000 });
@@ -128,80 +161,273 @@ export function useLiveCoachSession() {
     void audioCtxRef.current.resume();
   };
 
+  const clearRecordTicker = () => {
+    if (recordTickerRef.current != null) {
+      window.clearInterval(recordTickerRef.current);
+      recordTickerRef.current = null;
+    }
+  };
+
+  const uploadRecordingBlob = async (blob: Blob, durationSeconds: number) => {
+    if (!currentUser || typeof currentUser.getIdToken !== 'function') {
+      setRecordingNotice('Sign in required to save recording.');
+      return;
+    }
+    const sessionId = liveSessionIdRef.current;
+    if (!sessionId) {
+      setRecordingNotice('Could not save recording (missing session).');
+      return;
+    }
+    if (!blob || blob.size === 0) {
+      setRecordingNotice('Recording was empty.');
+      return;
+    }
+
+    setIsSavingRecording(true);
+    setRecordingNotice(null);
+    try {
+      const token = await currentUser.getIdToken();
+      const form = new FormData();
+      form.append('sessionId', sessionId);
+      form.append(
+        'durationSeconds',
+        String(Math.max(0, Math.round(durationSeconds)))
+      );
+      form.append('recording', blob, 'session.webm');
+
+      const res = await fetch(`${API_BASE}/api/coach/save-recording`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : 'save_recording_failed'
+        );
+      }
+      setRecordingNotice('Recording saved');
+    } catch (err) {
+      console.warn('[LiveCoach] save recording failed:', err);
+      setRecordingNotice(
+        err instanceof Error
+          ? `Could not save recording: ${err.message}`
+          : 'Could not save recording.'
+      );
+    } finally {
+      setIsSavingRecording(false);
+    }
+  };
+
+  /** Stop MediaRecorder (if active), build blob, upload. Does not stop camera tracks. */
+  const finalizeRecording = async (): Promise<void> => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      clearRecordTicker();
+      return;
+    }
+
+    const durationSec =
+      recordStartedAtRef.current != null
+        ? (Date.now() - recordStartedAtRef.current) / 1000
+        : recordingSeconds;
+
+    const blob = await new Promise<Blob>((resolve) => {
+      const finish = () => {
+        const type = recorder.mimeType || 'video/webm';
+        resolve(new Blob(recordChunksRef.current, { type }));
+      };
+      recorder.onstop = finish;
+      try {
+        if (recorder.state === 'recording') recorder.requestData();
+        recorder.stop();
+      } catch {
+        finish();
+      }
+    });
+
+    mediaRecorderRef.current = null;
+    recordChunksRef.current = [];
+    recordStartedAtRef.current = null;
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    clearRecordTicker();
+    setRecordingSeconds(0);
+
+    await uploadRecordingBlob(blob, durationSec);
+  };
+
+  const startRecording = () => {
+    setRecordingNotice(null);
+    const stream = streamRef.current;
+    if (!stream || phase !== 'live') {
+      setRecordingNotice('Start the live session before recording.');
+      return;
+    }
+    if (typeof MediaRecorder === 'undefined') {
+      setRecordingNotice('Recording is not supported in this browser.');
+      return;
+    }
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== 'inactive'
+    ) {
+      return;
+    }
+
+    const mimeType = pickRecorderMimeType();
+    let recorder: MediaRecorder;
+    try {
+      recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+    } catch (err) {
+      console.warn('[LiveCoach] MediaRecorder start failed:', err);
+      setRecordingNotice('Could not start recording.');
+      return;
+    }
+
+    recordChunksRef.current = [];
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) recordChunksRef.current.push(ev.data);
+    };
+    recorder.onerror = () => {
+      setRecordingNotice('Recording error.');
+    };
+
+    mediaRecorderRef.current = recorder;
+    recordStartedAtRef.current = Date.now();
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setRecordingSeconds(0);
+    clearRecordTicker();
+    recordTickerRef.current = window.setInterval(() => {
+      if (recordStartedAtRef.current == null) return;
+      setRecordingSeconds(
+        Math.floor((Date.now() - recordStartedAtRef.current) / 1000)
+      );
+    }, 250);
+
+    try {
+      recorder.start(1000);
+    } catch (err) {
+      console.warn('[LiveCoach] MediaRecorder.start failed:', err);
+      mediaRecorderRef.current = null;
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      clearRecordTicker();
+      setRecordingNotice('Could not start recording.');
+    }
+  };
+
+  const stopRecording = () => {
+    void finalizeRecording();
+  };
+
+  const toggleRecording = () => {
+    if (isRecordingRef.current) stopRecording();
+    else startRecording();
+  };
+
   const cleanup = (endedReason?: string) => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
 
-    if (frameTimerRef.current != null) {
-      window.clearInterval(frameTimerRef.current);
-      frameTimerRef.current = null;
-    }
-    if (sessionTimerRef.current != null) {
-      window.clearTimeout(sessionTimerRef.current);
-      sessionTimerRef.current = null;
-    }
-    if (countdownRef.current != null) {
-      window.clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
+    const hadRecording =
+      isRecordingRef.current ||
+      (mediaRecorderRef.current != null &&
+        mediaRecorderRef.current.state !== 'inactive');
 
-    try {
-      processorRef.current?.disconnect();
-    } catch {
-      /* ignore */
-    }
-    processorRef.current = null;
+    const finishCleanup = () => {
+      if (frameTimerRef.current != null) {
+        window.clearInterval(frameTimerRef.current);
+        frameTimerRef.current = null;
+      }
+      if (sessionTimerRef.current != null) {
+        window.clearTimeout(sessionTimerRef.current);
+        sessionTimerRef.current = null;
+      }
+      if (countdownRef.current != null) {
+        window.clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
 
-    try {
-      void audioCtxRef.current?.close();
-    } catch {
-      /* ignore */
-    }
-    audioCtxRef.current = null;
-
-    try {
-      void playCtxRef.current?.close();
-    } catch {
-      /* ignore */
-    }
-    playCtxRef.current = null;
-    nextPlayTimeRef.current = 0;
-
-    if (wsRef.current) {
       try {
-        wsRef.current.onopen = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onclose = null;
-        if (
-          wsRef.current.readyState === WebSocket.OPEN ||
-          wsRef.current.readyState === WebSocket.CONNECTING
-        ) {
-          wsRef.current.close();
-        }
+        processorRef.current?.disconnect();
       } catch {
         /* ignore */
       }
-      wsRef.current = null;
+      processorRef.current = null;
+
+      try {
+        void audioCtxRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      audioCtxRef.current = null;
+
+      try {
+        void playCtxRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      playCtxRef.current = null;
+      nextPlayTimeRef.current = 0;
+
+      if (wsRef.current) {
+        try {
+          wsRef.current.onopen = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onclose = null;
+          if (
+            wsRef.current.readyState === WebSocket.OPEN ||
+            wsRef.current.readyState === WebSocket.CONNECTING
+          ) {
+            wsRef.current.close();
+          }
+        } catch {
+          /* ignore */
+        }
+        wsRef.current = null;
+      }
+
+      if (streamRef.current) {
+        for (const track of streamRef.current.getTracks()) track.stop();
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      setupDoneRef.current = false;
+      liveRef.current = false;
+      setHasPreview(false);
+      setMicLevel(0);
+      if (endedReason) {
+        setPhase('ended');
+        setStatus(endedReason);
+      }
+      stoppingRef.current = false;
+    };
+
+    if (hadRecording) {
+      void finalizeRecording()
+        .catch(() => undefined)
+        .finally(finishCleanup);
+      return;
     }
 
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    setupDoneRef.current = false;
-    liveRef.current = false;
-    setHasPreview(false);
-    setMicLevel(0);
-    if (endedReason) {
-      setPhase('ended');
-      setStatus(endedReason);
-    }
-    stoppingRef.current = false;
+    clearRecordTicker();
+    mediaRecorderRef.current = null;
+    recordChunksRef.current = [];
+    recordStartedAtRef.current = null;
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    finishCleanup();
   };
 
   useEffect(() => {
@@ -318,53 +544,65 @@ export function useLiveCoachSession() {
     try {
       const text = await wsPayloadToText(raw.data);
       if (!text) return;
-      const msg = JSON.parse(text);
-      if (!msg || typeof msg !== 'object') return;
+      const msg = JSON.parse(text) as {
+        setupComplete?: unknown;
+        serverContent?: {
+          interrupted?: boolean;
+          inputTranscription?: { text?: string };
+          outputTranscription?: { text?: string };
+          modelTurn?: {
+            parts?: Array<{
+              inlineData?: { data?: string; mimeType?: string };
+            }>;
+          };
+        };
+        error?: { message?: string } | string;
+      };
 
-      if (msg.error) {
-        const errMsg =
-          typeof msg.error === 'string'
-            ? msg.error
-            : msg.error?.message || JSON.stringify(msg.error);
-        lastServerErrorRef.current = errMsg;
-        console.error('[LiveCoach] server error:', msg.error);
-        setError(errMsg);
-        return;
-      }
-
-      if (msg.setupComplete) {
+      if (msg.setupComplete != null) {
         setupDoneRef.current = true;
-        setStatus(
-          'Live — speak out loud; coach replies by speaker.'
-        );
-        console.log('[LiveCoach] setupComplete');
+        setStatus('Live — speak or show your form.');
         if (wsRef.current) {
           sendJson(wsRef.current, {
-            realtimeInput: { text: KICKOFF_TEXT },
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ text: KICKOFF_TEXT }] }],
+              turnComplete: true,
+            },
           });
         }
         return;
       }
 
-      const sc = msg.serverContent;
-      if (sc?.inputTranscription?.text) {
-        setYouSaid(String(sc.inputTranscription.text));
-      }
-      if (sc?.outputTranscription?.text) {
-        setCoachSaid(String(sc.outputTranscription.text));
-        setStatus('Coach is speaking…');
-      }
-      if (sc?.interrupted) {
-        setStatus('Interrupted — keep talking when ready.');
-      }
-      if (sc?.turnComplete) {
-        setStatus('Your turn — speak or show the exercise.');
+      if (msg.error) {
+        const errText =
+          typeof msg.error === 'string'
+            ? msg.error
+            : msg.error?.message || JSON.stringify(msg.error);
+        lastServerErrorRef.current = errText;
+        console.warn('[LiveCoach] server error:', errText);
+        return;
       }
 
-      const parts = sc?.modelTurn?.parts;
+      const sc = msg.serverContent;
+      if (!sc) return;
+
+      if (sc.interrupted) {
+        nextPlayTimeRef.current = 0;
+      }
+
+      const inT = sc.inputTranscription?.text;
+      if (typeof inT === 'string' && inT) {
+        setYouSaid((prev) => (prev + inT).slice(-400));
+      }
+      const outT = sc.outputTranscription?.text;
+      if (typeof outT === 'string' && outT) {
+        setCoachSaid((prev) => (prev + outT).slice(-600));
+      }
+
+      const parts = sc.modelTurn?.parts;
       if (Array.isArray(parts)) {
         for (const part of parts) {
-          const inline = part?.inlineData;
+          const inline = part.inlineData;
           if (
             inline &&
             typeof inline.data === 'string' &&
@@ -386,11 +624,16 @@ export function useLiveCoachSession() {
     setYouSaid('');
     setCoachSaid('');
     setMicLevel(0);
+    setRecordingNotice(null);
     audioChunkLogRef.current = 0;
     setPhase('starting');
     setStatus('Requesting live token…');
     stoppingRef.current = false;
     setupDoneRef.current = false;
+    liveSessionIdRef.current =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `live_${Date.now()}`;
 
     unlockAudioContexts();
 
@@ -541,5 +784,12 @@ export function useLiveCoachSession() {
     startSession,
     stopSession,
     LIVE_MODEL,
+    recordingSupported,
+    isRecording,
+    recordingSeconds,
+    recordingClock: formatRecordingClock(recordingSeconds),
+    recordingNotice,
+    isSavingRecording,
+    toggleRecording,
   };
 }

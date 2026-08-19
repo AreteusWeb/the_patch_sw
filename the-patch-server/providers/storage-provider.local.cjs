@@ -28,6 +28,22 @@ async function saveChunk(relativePath, payload) {
   return { location: fullPath };
 }
 
+/**
+ * Save a binary blob (coach recording) under LOCAL_RECORDINGS_DIR.
+ * @param {string} storagePath relative path
+ * @param {Buffer} buffer
+ * @param {string} [_contentType]
+ */
+async function saveBinaryFile(storagePath, buffer, _contentType = 'application/octet-stream') {
+  const root =
+    process.env.LOCAL_RECORDINGS_DIR ||
+    path.join(__dirname, '..', 'local-data', 'coach-recordings');
+  const fullPath = path.join(root, storagePath);
+  ensureDirFor(fullPath);
+  fs.writeFileSync(fullPath, buffer);
+  return { storagePath, location: fullPath };
+}
+
 async function getFirmwareDownloadUrl(firmwarePath) {
   const fullPath = path.join(LOCAL_FIRMWARE_DIR, firmwarePath);
   if (!fs.existsSync(fullPath)) return { exists: false };
@@ -36,4 +52,4 @@ async function getFirmwareDownloadUrl(firmwarePath) {
   return { exists: true, url: `file://${fullPath}` };
 }
 
-module.exports = { saveChunk, getFirmwareDownloadUrl, LOCAL_STORAGE_DIR };
+module.exports = { saveChunk, saveBinaryFile, getFirmwareDownloadUrl, LOCAL_STORAGE_DIR };

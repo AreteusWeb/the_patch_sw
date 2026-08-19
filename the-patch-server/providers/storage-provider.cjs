@@ -20,6 +20,12 @@ module.exports = {
   /** Saves a data chunk (string payload) at `path`. */
   saveChunk: impl.saveChunk,
   /**
+   * Saves a binary file (Buffer) at `storagePath`.
+   * Cloud: COACH_RECORDINGS_BUCKET_NAME (or GCS_BUCKET_NAME fallback).
+   * Local: LOCAL_RECORDINGS_DIR (or local-data/coach-recordings).
+   */
+  saveBinaryFile: impl.saveBinaryFile,
+  /**
    * Returns a signed (or local) URL to download a firmware file.
    * @returns {Promise<{ exists: boolean, url?: string }>}
    */

@@ -203,6 +203,48 @@ async function appendMessage(uid, sessionId, msg) {
 }
 
 /**
+ * Append a Voice & Video recording metadata entry on a coach session.
+ * @param {string} uid
+ * @param {string} sessionId
+ * @param {{ storagePath: string, uploadedAt: number, durationSeconds: number }} recording
+ */
+async function appendCoachRecording(uid, sessionId, recording) {
+  const sessions = sessionsFor(uid);
+  let session = sessions.get(sessionId);
+  const entry = {
+    storagePath: recording.storagePath,
+    uploadedAt: recording.uploadedAt,
+    durationSeconds: recording.durationSeconds,
+  };
+
+  if (!session) {
+    const now = Date.now();
+    session = {
+      sessionId,
+      startedAt: now,
+      lastMessageAt: now,
+      closedAt: null,
+      summary: null,
+      metricsAtStart: null,
+      source: 'live_voice_video',
+      recordings: [entry],
+    };
+    sessions.set(sessionId, session);
+    return entry;
+  }
+
+  const recordings = Array.isArray(session.recordings)
+    ? [...session.recordings, entry]
+    : [entry];
+  sessions.set(sessionId, {
+    ...session,
+    recordings,
+    lastMessageAt: Date.now(),
+  });
+  return entry;
+}
+
+/**
  * Latest metricsSnapshot from any coach message that has one (newest first).
  */
 async function getLatestMetricsSnapshot(uid) {
@@ -323,6 +365,7 @@ module.exports = {
   getRecentMessages,
   getRecentSessionSummaries,
   appendMessage,
+  appendCoachRecording,
   getLatestMetricsSnapshot,
   getSessionHistory,
   getMetricTrend,

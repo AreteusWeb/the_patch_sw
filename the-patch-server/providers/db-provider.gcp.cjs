@@ -225,6 +225,47 @@ async function appendMessage(uid, sessionId, msg) {
 }
 
 /**
+ * Append a Voice & Video recording metadata entry on a coach session.
+ * Creates a lightweight session doc if the id does not exist yet (live-only).
+ *
+ * @param {string} uid
+ * @param {string} sessionId
+ * @param {{ storagePath: string, uploadedAt: number, durationSeconds: number }} recording
+ */
+async function appendCoachRecording(uid, sessionId, recording) {
+  const sessionRef = coachSessionsRef(uid).doc(sessionId);
+  const snap = await sessionRef.get();
+  const entry = {
+    storagePath: recording.storagePath,
+    uploadedAt: recording.uploadedAt,
+    durationSeconds: recording.durationSeconds,
+  };
+
+  if (!snap.exists) {
+    const now = Date.now();
+    await sessionRef.set({
+      startedAt: now,
+      lastMessageAt: now,
+      closedAt: null,
+      summary: null,
+      metricsAtStart: null,
+      source: 'live_voice_video',
+      recordings: [entry],
+    });
+    return entry;
+  }
+
+  await sessionRef.set(
+    {
+      recordings: admin.firestore.FieldValue.arrayUnion(entry),
+      lastMessageAt: Date.now(),
+    },
+    { merge: true }
+  );
+  return entry;
+}
+
+/**
  * Latest metricsSnapshot from any coach message that has one (newest first).
  * Never returns waveforms — only the allow-listed metrics object stored on messages.
  * @returns {Promise<object|null>}
@@ -401,6 +442,7 @@ module.exports = {
   getRecentMessages,
   getRecentSessionSummaries,
   appendMessage,
+  appendCoachRecording,
   getLatestMetricsSnapshot,
   getSessionHistory,
   getMetricTrend,

@@ -143,8 +143,7 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
           className={cn(
             'relative rounded-2xl overflow-hidden border border-slate-700/60 bg-slate-900',
             embedded
-              ? // Large enough to see the person; actions stay pinned below and body scrolls
-                'w-full aspect-video min-h-[200px] max-h-[min(52vh,420px)] flex-shrink-0'
+              ? 'w-full flex-[2] min-h-[280px] max-h-[min(72vh,620px)] aspect-video flex-shrink-0'
               : 'aspect-video'
           )}
         >

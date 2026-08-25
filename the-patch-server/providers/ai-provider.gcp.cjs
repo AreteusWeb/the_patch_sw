@@ -5,7 +5,7 @@
  * Env:
  *   GOOGLE_CLOUD_PROJECT   (required — already used by auth-provider)
  *   VERTEX_AI_LOCATION     (optional, default us-central1)
- *   VERTEX_AI_MODEL        (optional, default gemini-2.0-flash-001)
+ *   VERTEX_AI_MODEL        (optional, default gemini-3.6-flash)
  *
  * Function calling: tool *declarations* live here; tool *execution* is
  * injected via `toolHandlers` from server.cjs (db-provider functions),
@@ -26,11 +26,49 @@ if (!project) {
   );
 }
 
-const location = process.env.VERTEX_AI_LOCATION || 'us-central1';
-const modelName = process.env.VERTEX_AI_MODEL || 'gemini-2.0-flash-001';
+const modelName = process.env.VERTEX_AI_MODEL || 'gemini-3.6-flash';
+/**
+ * Gemini 3.x publisher models are served on `global` / multi-region `us`|`eu`,
+ * not single regions like us-central1 (404 NOT_FOUND if pinned regionally).
+ */
+function resolveVertexLocation(model, configured) {
+  const loc = (configured || 'global').trim().toLowerCase() || 'global';
+  const isGemini3 = /^gemini-3(\.|-)/i.test(String(model || ''));
+  const isMultiOrGlobal = loc === 'global' || loc === 'us' || loc === 'eu';
+  if (isGemini3 && !isMultiOrGlobal) {
+    console.warn(
+      `[ai-provider.gcp] ${model} is not available in "${loc}"; using "global" ` +
+        '(set VERTEX_AI_LOCATION=global|us|eu).'
+    );
+    return 'global';
+  }
+  return loc;
+}
+const location = resolveVertexLocation(
+  modelName,
+  process.env.VERTEX_AI_LOCATION
+);
 const MAX_TOOL_ROUNDS = 5;
 
-const vertexAI = new VertexAI({ project, location });
+/**
+ * Gemini 3.x rejects temperature / topP / topK / candidateCount when set.
+ * Prefer thinkingLevel over the legacy thinkingBudget.
+ * includeThoughts:false asks the API not to return thought summaries; we still
+ * filter part.thought client-side because Vertex may return them anyway.
+ */
+const COACH_GENERATION_CONFIG = {
+  thinkingConfig: {
+    thinkingLevel: 'medium',
+    includeThoughts: false,
+  },
+};
+
+// Deprecated VertexAI SDK builds `${location}-aiplatform.googleapis.com`.
+// For location=global the host is `aiplatform.googleapis.com` (no prefix).
+const apiEndpoint =
+  location === 'global' ? 'aiplatform.googleapis.com' : undefined;
+
+const vertexAI = new VertexAI({ project, location, apiEndpoint });
 
 /** Vertex AI functionDeclarations for the AI Coach. */
 const COACH_FUNCTION_DECLARATIONS = [
@@ -139,9 +177,10 @@ const COACH_FUNCTION_DECLARATIONS = [
   {
     name: 'get_product_search_link',
     description:
-      'Get a link to search for fitness equipment or gear on Amazon when the athlete ' +
-      'wants to know where to buy something. This returns a search results link, not a ' +
-      'specific product — never claim it\'s a specific recommended product, just a place to look.',
+      'Fallback only: get a generic Amazon search-results link for fitness gear when ' +
+      'web search (Google Search grounding) did not return useful specific sources. ' +
+      'Prefer grounding first for product recommendations. This returns a search results ' +
+      'link, not a specific product — never claim it\'s a specific recommended product.',
     parameters: {
       type: 'object',
       properties: {
@@ -157,7 +196,12 @@ const COACH_FUNCTION_DECLARATIONS = [
 ];
 
 function getCoachTools() {
-  return [{ functionDeclarations: COACH_FUNCTION_DECLARATIONS }];
+  // Native Google Search grounding alongside function-calling tools.
+  const groundingTool = { googleSearch: {} };
+  return [
+    groundingTool,
+    { functionDeclarations: COACH_FUNCTION_DECLARATIONS },
+  ];
 }
 
 /**
@@ -366,6 +410,7 @@ function logGeminiUsage({
   usageMetadata,
   toolCallRounds,
   toolRoundLimitHit,
+  groundingSearchCount,
 }) {
   console.log(JSON.stringify({
     event: 'gemini_usage',
@@ -378,11 +423,33 @@ function logGeminiUsage({
     totalTokens: usageMetadata?.totalTokenCount ?? null,
     toolCallRounds: toolCallRounds ?? 0,
     toolRoundLimitHit: Boolean(toolRoundLimitHit),
+    groundingSearchCount: groundingSearchCount ?? 0,
   }));
 }
 
 /**
+ * Gemini 3.x rejects contents that end on a 'model' turn without a following
+ * 'user' message. toGeminiContents always appends the new user turn; the
+ * tool loop always appends function responses as 'user' before the next call.
+ */
+function assertContentsEndWithUser(contents, context) {
+  if (!Array.isArray(contents) || contents.length === 0) {
+    throw new Error(
+      `[ai-provider.gcp] Gemini contents empty before generateContent (${context})`
+    );
+  }
+  const last = contents[contents.length - 1];
+  if (!last || last.role !== 'user') {
+    throw new Error(
+      `[ai-provider.gcp] Gemini 3.x rejects history ending in role ` +
+        `"${last?.role ?? 'undefined'}" without a following user turn (${context})`
+    );
+  }
+}
+
+/**
  * Map coach history roles onto Gemini content roles.
+ * Always ends with the new user message (never leaves a trailing model turn).
  */
 function toGeminiContents(history, userMessage) {
   const contents = [];
@@ -401,14 +468,82 @@ function toGeminiContents(history, userMessage) {
     parts: [{ text: String(userMessage || '') }],
   });
 
+  assertContentsEndWithUser(contents, 'toGeminiContents');
   return contents;
 }
 
+/**
+ * Pull citation sources from Google Search groundingMetadata.
+ * Dedupes by real site domain (titles like "walmart.com") because grounding
+ * redirect URIs are unique even when they point at the same publisher.
+ * @returns {{ sources: Array<{ title: string, url: string }>, groundingSearchCount: number }}
+ */
+function extractGroundingFromCandidate(candidate) {
+  const meta = candidate?.groundingMetadata;
+  if (!meta || typeof meta !== 'object') {
+    return { sources: [], groundingSearchCount: 0 };
+  }
+
+  const queries = Array.isArray(meta.webSearchQueries)
+    ? meta.webSearchQueries
+    : [];
+  const groundingSearchCount = queries.length;
+
+  const sources = [];
+  const seenKeys = new Set();
+
+  const dedupeKey = (title, url) => {
+    const t = String(title || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^www\./, '');
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+      // Vertex grounding redirects — prefer publisher title/domain for uniqueness.
+      if (
+        host.includes('vertexaisearch') ||
+        host.includes('grounding-api-redirect')
+      ) {
+        return t || url;
+      }
+      return host || t || url;
+    } catch {
+      return t || url;
+    }
+  };
+
+  for (const chunk of meta.groundingChunks || []) {
+    const web = chunk?.web;
+    const url = typeof web?.uri === 'string' ? web.uri.trim() : '';
+    if (!url) continue;
+    const title =
+      typeof web?.title === 'string' && web.title.trim()
+        ? web.title.trim()
+        : url;
+    const key = dedupeKey(title, url);
+    if (!key || seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    sources.push({ title, url });
+  }
+
+  return { sources, groundingSearchCount };
+}
+
+/**
+ * Extract user-facing text + function calls.
+ * Skip parts marked thought=true (Gemini 3 internal reasoning / summaries) —
+ * those must never be shown to the athlete.
+ */
 function extractTextAndCalls(parts) {
   let text = '';
   const functionCalls = [];
   for (const part of parts || []) {
-    if (part.text) text += part.text;
+    if (!part || typeof part !== 'object') continue;
+    // Thought summaries / scratchpad — not for the UI.
+    if (part.thought === true) continue;
+    if (typeof part.text === 'string' && part.text) {
+      text += part.text;
+    }
     if (part.functionCall) {
       functionCalls.push({
         name: part.functionCall.name,
@@ -434,7 +569,8 @@ async function runToolHandler(name, args, toolHandlers) {
 
 /**
  * Generate a coach reply with Gemini, running a function-calling loop when
- * the model requests tools.
+ * the model requests tools. Google Search grounding runs as a native tool
+ * alongside function declarations.
  *
  * @param {{
  *   systemPrompt: string,
@@ -445,7 +581,7 @@ async function runToolHandler(name, args, toolHandlers) {
  *   uid?: string,
  *   sessionId?: string,
  * }} args
- * @returns {Promise<{ text: string, toolCalls: array }>}
+ * @returns {Promise<{ text: string, toolCalls: array, sources: Array<{ title: string, url: string }> }>}
  */
 async function generateCoachReply({
   systemPrompt,
@@ -465,6 +601,8 @@ async function generateCoachReply({
       role: 'system',
       parts: [{ text: systemPrompt || '' }],
     },
+    // Gemini 3.x: thinkingLevel only — no temperature/topP/topK/candidateCount.
+    generationConfig: COACH_GENERATION_CONFIG,
     tools: modelTools,
   });
 
@@ -472,13 +610,21 @@ async function generateCoachReply({
   /** @type {Array<{ name: string, args: object, result?: any }>} */
   const executedToolCalls = [];
   let toolCallRounds = 0;
+  /** @type {Array<{ title: string, url: string }>} */
+  let latestSources = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    assertContentsEndWithUser(contents, `coach_reply_round_${round}`);
     const result = await generativeModel.generateContent({ contents });
     const response = result?.response;
     const candidate = response?.candidates?.[0];
     const parts = candidate?.content?.parts || [];
     const { text, functionCalls } = extractTextAndCalls(parts);
+    const { sources, groundingSearchCount } =
+      extractGroundingFromCandidate(candidate);
+    if (sources.length > 0) {
+      latestSources = sources;
+    }
 
     logGeminiUsage({
       kind: 'coach_reply',
@@ -487,12 +633,14 @@ async function generateCoachReply({
       usageMetadata: response?.usageMetadata,
       toolCallRounds,
       toolRoundLimitHit: false,
+      groundingSearchCount,
     });
 
     if (functionCalls.length === 0) {
       return {
         text: text || 'I could not generate a coaching tip right now. Try again in a moment.',
         toolCalls: executedToolCalls,
+        sources: latestSources,
       };
     }
 
@@ -517,6 +665,7 @@ async function generateCoachReply({
       });
     }
 
+    // Must end on 'user' before the next generateContent (Gemini 3.x).
     contents.push({ role: 'user', parts: responseParts });
   }
 
@@ -538,11 +687,13 @@ async function generateCoachReply({
     usageMetadata: null,
     toolCallRounds,
     toolRoundLimitHit: true,
+    groundingSearchCount: 0,
   });
 
   return {
     text: 'I hit a tool-call limit while gathering data. Please ask again with a shorter question.',
     toolCalls: executedToolCalls,
+    sources: latestSources,
   };
 }
 
@@ -574,15 +725,19 @@ async function generateSessionSummary({ messages, uid, sessionId }) {
       role: 'system',
       parts: [{ text: SESSION_SUMMARY_INSTRUCTION }],
     },
+    generationConfig: COACH_GENERATION_CONFIG,
   });
 
+  const summaryContents = [
+    {
+      role: 'user',
+      parts: [{ text: `Conversation:\n${lines}` }],
+    },
+  ];
+  assertContentsEndWithUser(summaryContents, 'session_summary');
+
   const result = await generativeModel.generateContent({
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: `Conversation:\n${lines}` }],
-      },
-    ],
+    contents: summaryContents,
   });
 
   const response = result?.response;
@@ -593,11 +748,13 @@ async function generateSessionSummary({ messages, uid, sessionId }) {
     usageMetadata: response?.usageMetadata,
     toolCallRounds: 0,
     toolRoundLimitHit: false,
+    groundingSearchCount: 0,
   });
 
   const parts = response?.candidates?.[0]?.content?.parts || [];
   let text = '';
   for (const part of parts) {
+    if (!part || part.thought === true) continue;
     if (part.text) text += part.text;
   }
 

@@ -55,11 +55,17 @@ interface CoachShoppingLinkAttachment {
   searchQuery: string;
 }
 
+interface CoachSourcesAttachment {
+  type: 'sources';
+  sources: Array<{ title: string; url: string }>;
+}
+
 type CoachAttachment =
   | CoachImageAttachment
   | CoachVideoAttachment
   | CoachYouTubeAttachment
-  | CoachShoppingLinkAttachment;
+  | CoachShoppingLinkAttachment
+  | CoachSourcesAttachment;
 
 interface CoachChatMessage {
   id: string;
@@ -74,36 +80,152 @@ function normalizeCoachText(text: string): string {
   return text.replace(/\s+(\d+)\.\s+/g, '\n$1. ');
 }
 
-/** Render light markdown: **bold** and line breaks (no HTML injection). */
-function CoachMessageBody({ text }: { text: string }) {
-  const normalized = normalizeCoachText(text);
-  const lines = normalized.split('\n');
+const SAFE_HREF_RE = /^https?:\/\//i;
 
-  return (
-    <span className="whitespace-pre-wrap">
-      {lines.map((line, lineIdx) => {
-        const parts = line.split(/(\*\*[^*]+\*\*)/g);
-        return (
-          <React.Fragment key={lineIdx}>
-            {lineIdx > 0 && '\n'}
-            {parts.map((part, partIdx) => {
-              const bold = /^\*\*([^*]+)\*\*$/.exec(part);
-              if (bold) {
-                return (
-                  <strong
-                    key={partIdx}
-                    className="font-semibold text-[#F5F5F5]"
-                  >
-                    {bold[1]}
-                  </strong>
-                );
-              }
-              return <React.Fragment key={partIdx}>{part}</React.Fragment>;
-            })}
+/** Render one text segment with **bold** and [label](url) markdown links. */
+function CoachTextSegment({ text, keyPrefix }: { text: string; keyPrefix: string }) {
+  // One capturing group = full [label](url) token (avoid splitting out the URL alone).
+  const chunks = text.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
+  const nodes: React.ReactNode[] = [];
+  chunks.forEach((chunk, i) => {
+    const linkMatch = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(chunk);
+    if (linkMatch && SAFE_HREF_RE.test(linkMatch[2])) {
+      nodes.push(
+        <a
+          key={`${keyPrefix}_a_${i}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-teal-500/50 text-teal-300 hover:text-teal-200"
+        >
+          {linkMatch[1]}
+        </a>
+      );
+      return;
+    }
+
+    const boldParts = chunk.split(/(\*\*[^*]+\*\*)/g);
+    boldParts.forEach((part, partIdx) => {
+      const bold = /^\*\*([^*]+)\*\*$/.exec(part);
+      if (bold) {
+        nodes.push(
+          <strong
+            key={`${keyPrefix}_b_${i}_${partIdx}`}
+            className="font-semibold text-[#F5F5F5]"
+          >
+            {bold[1]}
+          </strong>
+        );
+      } else if (part) {
+        nodes.push(
+          <React.Fragment key={`${keyPrefix}_t_${i}_${partIdx}`}>
+            {part}
           </React.Fragment>
         );
+      }
+    });
+  });
+  return <>{nodes}</>;
+}
+
+type CoachTextBlock =
+  | { type: 'paragraph'; lines: string[] }
+  | { type: 'bullets'; items: string[] };
+
+/** Group plain lines vs markdown-ish * / - bullet lists. */
+function parseCoachBlocks(text: string): CoachTextBlock[] {
+  const lines = normalizeCoachText(text).split('\n');
+  const blocks: CoachTextBlock[] = [];
+  let paragraph: string[] = [];
+  let bullets: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    blocks.push({ type: 'paragraph', lines: paragraph });
+    paragraph = [];
+  };
+  const flushBullets = () => {
+    if (bullets.length === 0) return;
+    blocks.push({ type: 'bullets', items: bullets });
+    bullets = [];
+  };
+
+  for (const raw of lines) {
+    const bullet = /^\s*[\*\-•]\s+(.+)$/.exec(raw);
+    if (bullet) {
+      flushParagraph();
+      bullets.push(bullet[1]);
+      continue;
+    }
+    if (raw.trim() === '') {
+      flushBullets();
+      flushParagraph();
+      continue;
+    }
+    flushBullets();
+    paragraph.push(raw);
+  }
+  flushBullets();
+  flushParagraph();
+  return blocks;
+}
+
+/** Render light markdown: lists, **bold**, [links](url) (no HTML injection). */
+function CoachMessageBody({ text }: { text: string }) {
+  const blocks = parseCoachBlocks(text);
+
+  return (
+    <div className="space-y-2.5">
+      {blocks.map((block, blockIdx) => {
+        if (block.type === 'bullets') {
+          return (
+            <ul
+              key={`b_${blockIdx}`}
+              className="m-0 pl-0 list-none space-y-1.5"
+            >
+              {block.items.map((item, itemIdx) => {
+                  // "Product Name: details" → bold the label for scannability.
+                  const labeled = /^([^:]{2,72}):\s+(.+)$/.exec(item);
+                  const display = labeled
+                    ? `**${labeled[1]}:** ${labeled[2]}`
+                    : item;
+                  return (
+                    <li
+                      key={`b_${blockIdx}_${itemIdx}`}
+                      className="flex gap-2 min-w-0"
+                    >
+                      <span
+                        className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-teal-400/80"
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <CoachTextSegment
+                          text={display}
+                          keyPrefix={`bi${blockIdx}_${itemIdx}`}
+                        />
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={`p_${blockIdx}`} className="m-0">
+            {block.lines.map((line, lineIdx) => (
+              <React.Fragment key={`p_${blockIdx}_${lineIdx}`}>
+                {lineIdx > 0 && <br />}
+                <CoachTextSegment
+                  text={line}
+                  keyPrefix={`pl${blockIdx}_${lineIdx}`}
+                />
+              </React.Fragment>
+            ))}
+          </p>
+        );
       })}
-    </span>
+    </div>
   );
 }
 
@@ -291,6 +413,54 @@ function CoachShoppingLinkAttachmentView({
   );
 }
 
+/** Google Search grounding citations (required attribution) — clearly clickable. */
+function CoachSourcesAttachmentView({
+  attachment,
+}: {
+  attachment: CoachSourcesAttachment;
+}) {
+  const seen = new Set<string>();
+  const sources = (Array.isArray(attachment.sources) ? attachment.sources : [])
+    .filter((s) => s && typeof s.url === 'string' && s.url.trim())
+    .filter((s) => {
+      const title = (
+        typeof s.title === 'string' && s.title.trim() ? s.title.trim() : s.url
+      )
+        .toLowerCase()
+        .replace(/^www\./, '');
+      if (!title || seen.has(title)) return false;
+      seen.add(title);
+      return true;
+    });
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="mt-2.5 w-full min-w-0">
+      <p className="text-[9px] leading-normal text-[#6B7280] mb-1">Sources:</p>
+      <ul className="space-y-1 list-none p-0 m-0">
+        {sources.map((s, idx) => {
+          const title =
+            typeof s.title === 'string' && s.title.trim()
+              ? s.title.trim()
+              : s.url;
+          return (
+            <li key={`${title}_${idx}`} className="min-w-0">
+              <a
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-baseline gap-1 text-[10px] leading-snug underline decoration-[#6B7280]/70 text-[#A0A0A8] hover:text-teal-400 break-all"
+              >
+                <span className="truncate">{title}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function CoachAttachmentView({
   attachment,
   onMediaReady,
@@ -316,6 +486,9 @@ function CoachAttachmentView({
   }
   if (attachment.type === 'shopping_link') {
     return <CoachShoppingLinkAttachmentView attachment={attachment} />;
+  }
+  if (attachment.type === 'sources') {
+    return <CoachSourcesAttachmentView attachment={attachment} />;
   }
   return (
     <CoachImageAttachmentView
@@ -667,6 +840,17 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   )
                 );
               }
+              if (att.type === 'sources') {
+                return (
+                  Array.isArray(att.sources) &&
+                  att.sources.some(
+                    (s) =>
+                      s &&
+                      typeof s.url === 'string' &&
+                      s.url.trim().length > 0
+                  )
+                );
+              }
               return false;
             })
             .map((a: CoachAttachment) => {
@@ -705,6 +889,23 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   searchQuery:
                     typeof a.searchQuery === 'string' ? a.searchQuery : '',
                 };
+              }
+              if (a.type === 'sources') {
+                const sources = (Array.isArray(a.sources) ? a.sources : [])
+                  .filter(
+                    (s): s is { title: string; url: string } =>
+                      !!s &&
+                      typeof s.url === 'string' &&
+                      s.url.trim().length > 0
+                  )
+                  .map((s) => ({
+                    title:
+                      typeof s.title === 'string' && s.title.trim()
+                        ? s.title.trim()
+                        : s.url,
+                    url: s.url.trim(),
+                  }));
+                return { type: 'sources' as const, sources };
               }
               return {
                 type: 'image' as const,

@@ -368,8 +368,9 @@ YOUR ROLE:
 - For trends / "this week" / averages: only use values returned by get_trend. If values is empty, average is null, or sampleCount is less than 2, say you don't have enough history yet and report only the current metric — never invent a weekly average or "constant" number.
 - When you use the search_reference_image tool and get a result, do NOT include the image URL, markdown image syntax (e.g. ![text](url) or [text](url)), or any link to the photo in your text response — the image is already displayed to the user automatically as an attachment below your message. Just reference it naturally in words, e.g. "Here's a kettlebell:" without the markdown/URL.
 - For search_reference_video, put the EXACT exercise name first in the query (e.g. "kettlebell swing" or "barbell back squat"). Prefer that short precise phrase; you may add "proper form" once. Never search for tricks, freestyle, juggling, stunts, or entertainment clips. If the tool returns no video, say you couldn't find a matching form clip — do not invent or describe a wrong movement as if it were attached.
-- When the athlete asks where to buy equipment or gear, call get_product_search_link with a short search phrase. The UI shows a search button — never claim it is a specific product recommendation, only a place to look.
-- Never write out image, video, or product URLs directly in your text response — those are always shown automatically as attachments/buttons by the tools. Never construct or guess a URL yourself in plain text, even if asked directly — always use the appropriate tool (search_reference_image, search_reference_video, get_product_search_link) instead.
+- When the athlete asks for product recommendations or where to buy something, ALWAYS use web search (grounding) first to find real, current, specific sources — articles, reviews, or product pages. Only fall back to get_product_search_link (a generic search results link) if web search genuinely returns nothing useful for that query. Do not default to the generic search link tool when grounding can give a real, specific answer. Never claim a generic search link is a specific product recommendation.
+- Never write out image, video, or product URLs directly in your text response — those are always shown automatically as attachments/buttons by the tools or as Sources from web search. Never construct or guess a URL yourself in plain text, even if asked directly — always use web search or the appropriate tool (search_reference_image, search_reference_video, get_product_search_link) instead.
+- You now have real web search available. When the athlete asks where to buy equipment or wants specific product options, use web search to find real, current options and cite them — never guess or construct a URL yourself. Stay scoped to fitness, training, and recovery topics; for clearly off-topic requests, politely redirect back to what you can help with as a performance coach.
 - Respond in the same language the athlete writes in (English or Spanish). If unclear, default to English.
 
 WHAT YOU NEVER DO:
@@ -601,6 +602,29 @@ async function handleCoachApi(req, res) {
                   : '',
             });
           }
+        }
+      }
+
+      // Google Search grounding citations (required attribution when present).
+      if (Array.isArray(reply.sources) && reply.sources.length > 0) {
+        const sources = [];
+        const seen = new Set();
+        for (const s of reply.sources) {
+          if (!s || typeof s.url !== 'string') continue;
+          const url = s.url.trim();
+          if (!url) continue;
+          const title =
+            typeof s.title === 'string' && s.title.trim()
+              ? s.title.trim()
+              : url;
+          // Dedupe by publisher label (e.g. walmart.com) — redirect URIs differ per chunk.
+          const key = title.toLowerCase().replace(/^www\./, '');
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          sources.push({ title, url });
+        }
+        if (sources.length > 0) {
+          attachments.push({ type: 'sources', sources });
         }
       }
 

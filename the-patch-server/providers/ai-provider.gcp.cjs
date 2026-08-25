@@ -51,6 +51,13 @@ const location = resolveVertexLocation(
 const MAX_TOOL_ROUNDS = 5;
 
 /**
+ * Gemini 3 thinking depth for coach replies.
+ * 'low' = faster conversational answers; bump to 'medium'|'high' if quality drops.
+ * Allowed: 'low' | 'medium' | 'high'
+ */
+const COACH_THINKING_LEVEL = 'low';
+
+/**
  * Gemini 3.x rejects temperature / topP / topK / candidateCount when set.
  * Prefer thinkingLevel over the legacy thinkingBudget.
  * includeThoughts:false asks the API not to return thought summaries; we still
@@ -58,7 +65,7 @@ const MAX_TOOL_ROUNDS = 5;
  */
 const COACH_GENERATION_CONFIG = {
   thinkingConfig: {
-    thinkingLevel: 'medium',
+    thinkingLevel: COACH_THINKING_LEVEL,
     includeThoughts: false,
   },
 };

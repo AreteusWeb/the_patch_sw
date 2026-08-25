@@ -130,9 +130,10 @@ function CoachTextSegment({ text, keyPrefix }: { text: string; keyPrefix: string
 
 type CoachTextBlock =
   | { type: 'paragraph'; lines: string[] }
-  | { type: 'bullets'; items: string[] };
+  | { type: 'bullets'; items: string[] }
+  | { type: 'heading'; text: string };
 
-/** Group plain lines vs markdown-ish * / - bullet lists. */
+/** Group plain lines vs markdown-ish headings / * / - bullet lists. */
 function parseCoachBlocks(text: string): CoachTextBlock[] {
   const lines = normalizeCoachText(text).split('\n');
   const blocks: CoachTextBlock[] = [];
@@ -151,6 +152,13 @@ function parseCoachBlocks(text: string): CoachTextBlock[] {
   };
 
   for (const raw of lines) {
+    const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(raw);
+    if (heading) {
+      flushBullets();
+      flushParagraph();
+      blocks.push({ type: 'heading', text: heading[1].trim() });
+      continue;
+    }
     const bullet = /^\s*[\*\-•]\s+(.+)$/.exec(raw);
     if (bullet) {
       flushParagraph();
@@ -170,13 +178,26 @@ function parseCoachBlocks(text: string): CoachTextBlock[] {
   return blocks;
 }
 
-/** Render light markdown: lists, **bold**, [links](url) (no HTML injection). */
+/** Render light markdown: headings, lists, **bold**, [links](url) (no HTML injection). */
 function CoachMessageBody({ text }: { text: string }) {
   const blocks = parseCoachBlocks(text);
 
   return (
     <div className="space-y-2.5">
       {blocks.map((block, blockIdx) => {
+        if (block.type === 'heading') {
+          return (
+            <p
+              key={`h_${blockIdx}`}
+              className="m-0 font-semibold text-[13px] text-[#F5F5F5] leading-[1.4]"
+            >
+              <CoachTextSegment
+                text={block.text}
+                keyPrefix={`h${blockIdx}`}
+              />
+            </p>
+          );
+        }
         if (block.type === 'bullets') {
           return (
             <ul
@@ -578,9 +599,17 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const resizeComposer = () => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    // Embedded (mobile split) stays short so the keyboard doesn't blow the pane.
-    const maxPx = isFullscreen ? 6.25 * 16 : 3.25 * 16;
+    // Force a reflow so scrollHeight is correct for live STT (readOnly + rapid updates).
+    el.style.height = '0px';
+    // Embedded stays shorter; while dictating allow more lines so text isn't clipped.
+    const dictating = voiceMode || voiceDraft;
+    const maxPx = isFullscreen
+      ? dictating
+        ? 10 * 16
+        : 6.25 * 16
+      : dictating
+        ? 7.5 * 16
+        : 3.25 * 16;
     el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
   };
 
@@ -593,9 +622,13 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     return () => window.clearTimeout(t);
   }, [interactionMode]);
 
-  useEffect(() => {
-    // Grow for typing and live STT the same way (scrollbar stays hidden via CSS).
+  // Sync height after React commits input (typing + live STT).
+  useLayoutEffect(() => {
+    if (interactionMode !== 'text') return;
     resizeComposer();
+  }, [input, voiceMode, voiceDraft, isListening, interactionMode, isFullscreen]);
+
+  useEffect(() => {
     if (voiceMode && stickToBottomRef.current) {
       scrollChatToBottom();
     }
@@ -1247,7 +1280,14 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 rounded-2xl px-3.5 py-2.5 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] transition-[border-color,box-shadow]',
                   // 16px always — avoids iOS zoom that blows up the mobile split layout
                   'text-base',
-                  isFullscreen ? 'max-h-[6.25rem]' : 'max-h-[3.25rem]',
+                  // Taller while dictating so long STT drafts stay readable
+                  voiceMode || voiceDraft
+                    ? isFullscreen
+                      ? 'max-h-[10rem]'
+                      : 'max-h-[7.5rem]'
+                    : isFullscreen
+                      ? 'max-h-[6.25rem]'
+                      : 'max-h-[3.25rem]',
                   // readOnly (not disabled) while listening so the box can grow with STT text
                   ((voiceMode && isListening) || isSpeaking) &&
                     'cursor-default opacity-90',

@@ -139,12 +139,15 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
             : undefined
         }
       >
+        {/*
+          flex-none + aspect-ratio (not flex-grow): on short Android coach panes,
+          flex-[2]/min-h fights aspect-video and collapses the preview to a sliver.
+        */}
         <div
           className={cn(
-            'relative rounded-2xl overflow-hidden border border-slate-700/60 bg-slate-900',
-            embedded
-              ? 'w-full flex-[2] min-h-[280px] max-h-[min(72vh,620px)] aspect-video flex-shrink-0'
-              : 'aspect-video'
+            'relative w-full overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900',
+            embedded ? 'flex-none' : '',
+            'aspect-video'
           )}
         >
           <video
@@ -152,7 +155,7 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
             muted
             playsInline
             autoPlay
-            className="w-full h-full object-cover scale-x-[-1]"
+            className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
           />
           {!hasPreview && phase !== 'live' && phase !== 'starting' && (
             <div className="absolute inset-0 flex items-center justify-center text-[#6B7280] text-[11px] sm:text-sm px-4 text-center">
@@ -160,7 +163,7 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
             </div>
           )}
           {phase === 'live' && (
-            <div className="absolute top-2 left-2 flex items-center gap-1.5">
+            <div className="absolute top-2 left-2 flex items-center gap-1.5 z-10">
               <div className="px-2 py-0.5 rounded-lg bg-rose-500/90 text-[10px] font-bold uppercase tracking-wider">
                 Live · {secondsLeft}s
               </div>

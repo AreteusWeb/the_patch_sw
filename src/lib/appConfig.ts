@@ -25,6 +25,24 @@ export const IS_LOCAL_MODE = APP_MODE === 'local';
 export const DEV_SHOW_ANY_DEVICE =
   IS_LOCAL_MODE && import.meta.env.VITE_DEV_SHOW_ANY_DEVICE === 'true';
 
+/**
+ * Staging / local-cloud auto-login (real Firebase email+password).
+ * Only active when BOTH are set. Leave unset in production builds so
+ * LoginScreen still appears. Never commit real passwords.
+ */
+export const AUTO_LOGIN_EMAIL = String(
+  import.meta.env.VITE_AUTO_LOGIN_EMAIL || ''
+).trim();
+
+export const AUTO_LOGIN_PASSWORD = String(
+  import.meta.env.VITE_AUTO_LOGIN_PASSWORD || ''
+);
+
+export const AUTO_LOGIN_ENABLED =
+  !IS_LOCAL_MODE &&
+  AUTO_LOGIN_EMAIL.length > 0 &&
+  AUTO_LOGIN_PASSWORD.length > 0;
+
 // ─── The Patch server WebSocket ───────────────────────────────────────────────
 
 // This URL used to be hard-coded inside useWebSocket.ts pointing always at

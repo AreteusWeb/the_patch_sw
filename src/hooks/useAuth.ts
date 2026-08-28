@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -7,7 +7,12 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { IS_LOCAL_MODE } from '../lib/appConfig';
+import {
+  AUTO_LOGIN_EMAIL,
+  AUTO_LOGIN_ENABLED,
+  AUTO_LOGIN_PASSWORD,
+  IS_LOCAL_MODE,
+} from '../lib/appConfig';
 import useStore from '../store/useStore';
 
 /** Fixed user used in local mode — no login (see meeting priority #4). */
@@ -26,6 +31,8 @@ const LOCAL_DEV_USER = {
  * 2. Create the `users/{uid}` document in Firestore if the user is logging in for the first time.
  * 3. Load the user's linked device MAC address, if any.
  * 4. Expose login and logout helpers.
+ * 5. Optional staging auto-login via VITE_AUTO_LOGIN_EMAIL / VITE_AUTO_LOGIN_PASSWORD
+ *    (real Firebase credentials — backend still verifies the idToken).
  *
  * In local mode (VITE_APP_MODE=local) none of this runs: a fixed user is
  * assigned immediately and the login screen is skipped entirely, since
@@ -33,8 +40,10 @@ const LOCAL_DEV_USER = {
  */
 export function useAuth() {
   const setCurrentUser = useStore(s => s.setCurrentUser);
-  const setDeviceMac   = useStore(s => s.setDeviceMac);
+  const setDeviceMac = useStore(s => s.setDeviceMac);
   const setAuthLoading = useStore(s => s.setAuthLoading);
+  /** One attempt per page load — logout stays logged out until refresh. */
+  const autoLoginAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (IS_LOCAL_MODE) {
@@ -52,15 +61,15 @@ export function useAuth() {
         // Read or create the user document in Firestore
         // (db is non-null here: this branch only runs when !IS_LOCAL_MODE)
         const userRef = doc(db!, 'users', firebaseUser.uid);
-        const snap    = await getDoc(userRef);
+        const snap = await getDoc(userRef);
 
         if (!snap.exists()) {
           // First time — create user profile document
           await setDoc(userRef, {
-            email:       firebaseUser.email,
+            email: firebaseUser.email,
             displayName: firebaseUser.displayName ?? firebaseUser.email,
-            createdAt:   serverTimestamp(),
-            deviceMac:   null,
+            createdAt: serverTimestamp(),
+            deviceMac: null,
           });
           setDeviceMac(null);
         } else {
@@ -68,17 +77,46 @@ export function useAuth() {
           const data = snap.data();
           setDeviceMac(data.deviceMac ?? null);
         }
-      } else {
-        // ── No Session ───────────────────────────────────────────────────────
-        setCurrentUser(null);
-        setDeviceMac(null);
+        setAuthLoading(false);
+        return;
       }
-      // Firebase auth state has resolved — hide loading screen
+
+      // ── No Session ───────────────────────────────────────────────────────
+      // Staging: try real email/password once before showing LoginScreen.
+      if (AUTO_LOGIN_ENABLED && !autoLoginAttemptedRef.current) {
+        autoLoginAttemptedRef.current = true;
+        // Keep the Loading screen up while we sign in.
+        setAuthLoading(true);
+        try {
+          await signInWithEmailAndPassword(
+            auth!,
+            AUTO_LOGIN_EMAIL,
+            AUTO_LOGIN_PASSWORD
+          );
+          // Success → onAuthStateChanged fires again with the user.
+          return;
+        } catch (err: unknown) {
+          const code =
+            err && typeof err === 'object' && 'code' in err
+              ? String((err as { code?: string }).code)
+              : 'unknown';
+          console.warn(
+            `[useAuth] auto-login failed for ${AUTO_LOGIN_EMAIL}: ${code}`
+          );
+          setCurrentUser(null);
+          setDeviceMac(null);
+          setAuthLoading(false);
+          return;
+        }
+      }
+
+      setCurrentUser(null);
+      setDeviceMac(null);
       setAuthLoading(false);
     });
 
     return () => unsub();
-  }, [setCurrentUser, setDeviceMac]);
+  }, [setCurrentUser, setDeviceMac, setAuthLoading]);
 }
 
 // ─── Auth Helpers ─────────────────────────────────────────────────────────────
@@ -97,6 +135,8 @@ export async function login(email: string, password: string): Promise<void> {
 
 /**
  * Logs out the current user.
+ * With auto-login env vars set, logout sticks until the next full page reload
+ * (auto-login runs only once per load).
  */
 export async function logout(): Promise<void> {
   if (IS_LOCAL_MODE) {

@@ -90,8 +90,8 @@ export default function MobileApp() {
         >
           <Panel
             id="mobile-main"
-            minSize={coachOpen ? '28%' : '100%'}
-            defaultSize={coachOpen ? '55%' : '100%'}
+            minSize={coachOpen ? '25%' : '100%'}
+            defaultSize={coachOpen ? '45%' : '100%'}
             className="min-h-0"
           >
             {mainScroll}
@@ -105,9 +105,9 @@ export default function MobileApp() {
               />
               <Panel
                 id="mobile-coach"
-                defaultSize="45%"
-                minSize="28%"
-                maxSize="70%"
+                defaultSize="55%"
+                minSize="35%"
+                maxSize="75%"
                 className="min-h-0 overflow-hidden border-t border-slate-800/80"
               >
                 <AiCoachPanel

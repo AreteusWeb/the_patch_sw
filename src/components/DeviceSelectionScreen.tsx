@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Cpu, Plus, Trash2, LogOut, Activity, X, Check, AlertCircle, Smartphone } from 'lucide-react';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { IS_LOCAL_MODE } from '../lib/appConfig';
+import { IS_LOCAL_MODE, AUTO_LOGIN_ENABLED } from '../lib/appConfig';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
+import { cn } from '../utils/cn';
 
 // ─── Local mode: device list stored in localStorage ────────────────────────
 // In cloud mode this list lives in Firestore (users/{uid}.devices). In local
@@ -197,8 +198,22 @@ export default function DeviceSelectionScreen() {
         </div>
 
         <button
-          onClick={() => logout()}
-          className="flex items-center gap-1.5 bg-slate-900/60 hover:bg-rose-500/10 border border-slate-800/80 hover:border-rose-500/20 text-slate-400 hover:text-rose-400 text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all shadow-md active:scale-95"
+          type="button"
+          onClick={() => {
+            if (!AUTO_LOGIN_ENABLED) void logout();
+          }}
+          disabled={AUTO_LOGIN_ENABLED}
+          title={
+            AUTO_LOGIN_ENABLED
+              ? 'Sign out disabled during auto-login testing'
+              : 'Sign out'
+          }
+          className={cn(
+            'flex items-center gap-1.5 border text-[10px] sm:text-xs font-bold uppercase tracking-wider px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-all shadow-md',
+            AUTO_LOGIN_ENABLED
+              ? 'bg-slate-900/40 border-slate-800/50 text-slate-600 cursor-not-allowed opacity-50 pointer-events-none'
+              : 'bg-slate-900/60 hover:bg-rose-500/10 border-slate-800/80 hover:border-rose-500/20 text-slate-400 hover:text-rose-400 active:scale-95'
+          )}
         >
           <LogOut size={12} />
           Sign Out

@@ -3,9 +3,11 @@ import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles } from 'lucide-react
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
+import { AUTO_LOGIN_ENABLED } from '../lib/appConfig';
 import AlertsDrawer from './AlertsDrawer';
 import ProfileDrawer from './ProfileDrawer';
 import { backdropMotion, drawerMotion } from '../utils/motionPresets';
+import { cn } from '../utils/cn';
 
 interface SideMenuProps {
   /** Mobile: open AI Coach as full-screen sheet. Omit on desktop (bar button). */
@@ -26,6 +28,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
     currentUser?.displayName?.split(' ')[0] ?? currentUser?.email?.split('@')[0] ?? 'User';
 
   const handleLogout = async () => {
+    if (AUTO_LOGIN_ENABLED) return;
     setIsAdvancedMenuOpen(false);
     await logout();
   };
@@ -149,12 +152,23 @@ const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
                 </div>
               </nav>
 
-              {/* Logout */}
+              {/* Logout — disabled while staging auto-login is on */}
               <div className="flex-shrink-0 border-t border-slate-800/80 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex items-center gap-3 w-full px-3.5 py-3 rounded-2xl text-[#6B7280] hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-colors group"
+                  disabled={AUTO_LOGIN_ENABLED}
+                  title={
+                    AUTO_LOGIN_ENABLED
+                      ? 'Sign out disabled during auto-login testing'
+                      : 'Sign out'
+                  }
+                  className={cn(
+                    'flex items-center gap-3 w-full px-3.5 py-3 rounded-2xl border border-transparent transition-colors group',
+                    AUTO_LOGIN_ENABLED
+                      ? 'text-[#6B7280]/50 cursor-not-allowed opacity-50 pointer-events-none'
+                      : 'text-[#6B7280] hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20'
+                  )}
                 >
                   <LogOut size={16} className="shrink-0" />
                   <span className="text-[13px] font-medium">Sign out</span>

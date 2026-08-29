@@ -174,6 +174,10 @@ export function useLiveCoachSession() {
   /** True when we close on purpose (Stop, time limit, unmount) — never auto-reconnect. */
   const intentionalCloseRef = useRef(false);
   const reconnectingRef = useRef(false);
+  /** TEMP: how many times auto-reconnect has been triggered this page lifetime. */
+  const reconnectAttemptCountRef = useRef(0);
+  /** TEMP: reconnect # that last opened a socket and is waiting for setupComplete (0 = initial). */
+  const awaitingSetupAfterReconnectRef = useRef(0);
   const liveRef = useRef(false);
   const lastServerErrorRef = useRef<string | null>(null);
   const attemptReconnectRef = useRef<
@@ -681,6 +685,14 @@ export function useLiveCoachSession() {
 
       if (msg.setupComplete != null) {
         setupDoneRef.current = true;
+        const afterReconnectN = awaitingSetupAfterReconnectRef.current;
+        awaitingSetupAfterReconnectRef.current = 0;
+        console.log('[LiveCoach] setupComplete received', {
+          at: new Date().toISOString(),
+          afterReconnectAttempt:
+            afterReconnectN > 0 ? afterReconnectN : null,
+          isInitialSetup: afterReconnectN === 0,
+        });
         setStatus('Live — move or speak; coach is watching.');
         if (wsRef.current) {
           sendJson(wsRef.current, {
@@ -901,9 +913,19 @@ export function useLiveCoachSession() {
     }
 
     reconnectingRef.current = true;
-    console.warn('[LiveCoach] reconnecting after unexpected close', {
+    reconnectAttemptCountRef.current += 1;
+    const reconnectN = reconnectAttemptCountRef.current;
+    console.warn(`[LiveCoach] reconnect attempt #${reconnectN}`, {
+      at: new Date().toISOString(),
       code,
       reason,
+      streamStillPresent: !!streamRef.current,
+      streamTrackStates: streamRef.current?.getTracks().map((t) => ({
+        kind: t.kind,
+        readyState: t.readyState,
+        enabled: t.enabled,
+        muted: t.muted,
+      })),
     });
     setError(null);
     setStatus('Reconnecting…');
@@ -927,6 +949,10 @@ export function useLiveCoachSession() {
       }
 
       try {
+        console.warn(
+          `[LiveCoach] reconnect attempt #${reconnectN} backoff try ${attempt + 1}/${RECONNECT_BACKOFF_MS.length}`,
+          { at: new Date().toISOString() }
+        );
         setStatus(
           attempt === 0
             ? 'Reconnecting…'
@@ -941,6 +967,7 @@ export function useLiveCoachSession() {
         if (!streamRef.current) {
           throw new Error('Camera stream lost during reconnect');
         }
+        awaitingSetupAfterReconnectRef.current = reconnectN;
         bootstrapLiveOnSocket(ws, streamRef.current);
         // If Google drops the socket immediately after open, treat as failed attempt.
         await sleep(250);
@@ -960,16 +987,17 @@ export function useLiveCoachSession() {
         reconnectingRef.current = false;
         setError(null);
         setStatus('Waiting for setupComplete…');
-        console.log('[LiveCoach] reconnected after unexpected close', {
-          code,
-          attempt: attempt + 1,
-        });
+        console.log(
+          `[LiveCoach] reconnect attempt #${reconnectN} socket open — waiting for setupComplete`,
+          { at: new Date().toISOString(), code, backoffTry: attempt + 1 }
+        );
         return;
       } catch (err) {
         lastErr = err;
+        awaitingSetupAfterReconnectRef.current = 0;
         console.warn(
-          '[LiveCoach] reconnect attempt failed',
-          { attempt: attempt + 1 },
+          `[LiveCoach] reconnect attempt #${reconnectN} failed`,
+          { at: new Date().toISOString(), backoffTry: attempt + 1 },
           err
         );
         detachLiveTransport();

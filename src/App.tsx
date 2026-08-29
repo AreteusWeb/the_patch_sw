@@ -45,7 +45,7 @@ export default function App() {
           <h1 className="text-3xl font-black text-white tracking-[0.2em] uppercase">Areteus</h1>
           <div className="flex items-center gap-3">
             <div className="h-[1px] w-8 bg-teal-500/40" />
-            <span className="text-sm font-bold text-teal-400 tracking-[0.4em] uppercase">ChestPad</span>
+            <span className="text-sm font-bold text-teal-400 tracking-[0.4em] uppercase">The Patch</span>
             <div className="h-[1px] w-8 bg-teal-500/40" />
           </div>
         </div>

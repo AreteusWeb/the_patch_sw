@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles } from 'lucide-react';
+import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
@@ -21,7 +21,14 @@ interface SideMenuProps {
  * Visual system aligned with AiCoachPanel (width, header, text palette).
  */
 const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
-  const { isAdvancedMenuOpen, setIsAdvancedMenuOpen, currentUser, setIsDeviceSelected } = useStore();
+  const {
+    isAdvancedMenuOpen,
+    setIsAdvancedMenuOpen,
+    currentUser,
+    setIsDeviceSelected,
+    notchFilterEnabled,
+    setNotchFilterEnabled,
+  } = useStore();
   const [activeDrawer, setActiveDrawer] = useState<'alerts' | 'profile' | null>(null);
 
   const displayName =
@@ -136,6 +143,36 @@ const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
                     Session
                   </p>
                   <div className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNotchFilterEnabled(!notchFilterEnabled)}
+                      className={navItemClass}
+                      title={
+                        notchFilterEnabled
+                          ? '60 Hz notch filter ON — removes electrical hum from the ECG'
+                          : '60 Hz notch filter OFF — tap to cut electrical hum from the ECG'
+                      }
+                    >
+                      <Zap
+                        size={16}
+                        className={cn(
+                          'shrink-0 transition-colors',
+                          notchFilterEnabled
+                            ? 'text-teal-400'
+                            : 'text-[#A0A0A8] group-hover:text-teal-400'
+                        )}
+                      />
+                      <span className="text-[13px] font-medium">60 Hz filter</span>
+                      <span
+                        className={cn(
+                          'ml-auto text-[10px] font-bold uppercase tracking-wider',
+                          notchFilterEnabled ? 'text-teal-400' : 'text-[#6B7280]'
+                        )}
+                      >
+                        {notchFilterEnabled ? 'On' : 'Off'}
+                      </span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {

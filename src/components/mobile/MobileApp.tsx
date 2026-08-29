@@ -6,7 +6,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
-import { Sparkles } from 'lucide-react';
 import Header from '../Header';
 import VitalsDisplay from '../VitalsDisplay';
 import ActivityStats from '../ActivityStats';
@@ -19,12 +18,12 @@ import MobileLiveBar from './MobileLiveBar';
 import AiCoachPanel from '../desktop/AiCoachPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import useStore from '../../store/useStore';
-import { cn } from '../../utils/cn';
 
 /**
  * MobileApp Component.
  * Header stays pinned; vitals/ECG scroll in the top pane.
- * AI Coach opens as a resizable bottom pane (both stay visible) via a FAB.
+ * AI Coach opens as a resizable bottom pane via the header AI control
+ * (same pattern as desktop).
  */
 export default function MobileApp() {
   const viewMode = useStore(state => state.viewMode);
@@ -80,7 +79,10 @@ export default function MobileApp() {
       <div className="max-w-md mx-auto relative flex flex-col h-full bg-black">
         {/* Pinned top bar — always visible (mode, connection, menu) */}
         <div className="flex-shrink-0 z-30 bg-black pt-[env(safe-area-inset-top)] border-b border-slate-900/80">
-          <Header />
+          <Header
+            coachOpen={coachOpen}
+            onToggleCoach={() => setCoachOpen((v) => !v)}
+          />
         </div>
 
         <Group
@@ -90,7 +92,7 @@ export default function MobileApp() {
         >
           <Panel
             id="mobile-main"
-            minSize={coachOpen ? '25%' : '100%'}
+            minSize={coachOpen ? '8%' : '100%'}
             defaultSize={coachOpen ? '45%' : '100%'}
             className="min-h-0"
           >
@@ -106,8 +108,8 @@ export default function MobileApp() {
               <Panel
                 id="mobile-coach"
                 defaultSize="55%"
-                minSize="35%"
-                maxSize="75%"
+                minSize="30%"
+                maxSize="92%"
                 className="min-h-0 overflow-hidden border-t border-slate-800/80"
               >
                 <AiCoachPanel
@@ -127,28 +129,11 @@ export default function MobileApp() {
           </div>
         )}
 
-        {/* Compact circular FAB */}
-        {!coachOpen && (
-          <button
-            type="button"
-            onClick={() => setCoachOpen(true)}
-            className={cn(
-              'absolute z-40 right-3',
-              'bottom-[calc(5.5rem+env(safe-area-inset-bottom))]',
-              'w-12 h-12 rounded-full',
-              'flex items-center justify-center',
-              'bg-teal-500 text-slate-950 shadow-[0_6px_18px_rgba(45,212,191,0.35)]',
-              'hover:bg-teal-400 active:scale-[0.96] transition-all'
-            )}
-            aria-label="Open AI Coach"
-            title="AI Coach"
-          >
-            <Sparkles size={18} strokeWidth={2.5} />
-          </button>
-        )}
-
         <AnimatePresence>
-          <SideMenu key="side-menu" />
+          <SideMenu
+            key="side-menu"
+            onOpenAiCoach={() => setCoachOpen(true)}
+          />
         </AnimatePresence>
       </div>
     </div>

@@ -121,10 +121,18 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
   /**
    * Padding-bottom 16:9 box — more reliable than aspect-ratio inside nested
    * flex + overflow on Android Chrome (which collapsed the preview to a sliver).
+   * Cap height so short mobile coach panes still leave room for status/actions
+   * above the fold; user can scroll the rest.
    */
   const videoPreview = (
-    <div className="relative w-full flex-none shrink-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900">
-      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+    <div
+      className="relative w-full flex-none shrink-0 overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900"
+      style={{ maxHeight: 'min(36vh, 240px)' }}
+    >
+      <div
+        className="relative w-full"
+        style={{ paddingBottom: '56.25%', maxHeight: 'min(36vh, 240px)' }}
+      >
         <video
           ref={videoRef}
           muted
@@ -198,30 +206,33 @@ const LiveCoachSessionView: React.FC<LiveCoachSessionViewProps> = ({
   );
 
   if (embedded) {
-    // Video OUTSIDE the scroll flex — avoids Android collapsing aspect boxes
-    // inside flex-1 + min-h-0 + overflow-y-auto parents.
+    // One scroll for video + status + actions so nothing is clipped off-screen
+    // on short mobile coach panes. Video uses padding-bottom 16:9 (not flex
+    // aspect-ratio) so Android won't collapse it to a sliver.
     return (
       <div
         className={cn(
-          'flex flex-col flex-1 h-full min-h-0 gap-2 overflow-hidden text-[#F5F5F5]',
+          'flex flex-col flex-1 h-full min-h-0 overflow-hidden text-[#F5F5F5]',
           className
         )}
       >
-        {videoPreview}
-        <canvas ref={canvasRef} className="hidden" />
-
         <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col gap-2.5"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide flex flex-col gap-2.5"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+          }}
         >
+          {videoPreview}
+          <canvas ref={canvasRef} className="hidden" />
           {statusBlock}
           <p className="text-[11px] text-[#6B7280] leading-[1.5] flex-shrink-0">
             Voice + video · 3 min limit
           </p>
-        </div>
-
-        <div className="flex-shrink-0 pt-1 border-t border-slate-800/60">
-          {actions}
+          <div className="flex-shrink-0 pt-1 pb-1 border-t border-slate-800/60">
+            {actions}
+          </div>
         </div>
       </div>
     );

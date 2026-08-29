@@ -9,8 +9,8 @@ import { API_BASE } from '../lib/appConfig';
 import useStore from '../store/useStore';
 
 export const LIVE_SESSION_LIMIT_MS = 3 * 60 * 1000;
-/** Send camera frames often enough for the model to track movement. */
-const FRAME_INTERVAL_MS = 400;
+/** Camera frames to Gemini Live (ms). 1000 = 1 fps; lower for more frames (more tokens). */
+const FRAME_INTERVAL_MS = 1000;
 /** Ask the coach to speak if it goes quiet (proactive form cues). */
 const COACH_NUDGE_INTERVAL_MS = 16_000;
 

@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/appConfig';
+import { setLiveCoachSessionActive } from '../lib/liveCoachActivity';
 import useStore from '../store/useStore';
 
 export const LIVE_SESSION_LIMIT_MS = 3 * 60 * 1000;
@@ -198,6 +199,15 @@ export function useLiveCoachSession() {
 
   const recordingSupported =
     typeof MediaRecorder !== 'undefined' && !!pickRecorderMimeType();
+
+  // Signal PWA update UI to defer prompts while Voice & Video is running.
+  useEffect(() => {
+    const busy = phase === 'starting' || phase === 'live';
+    setLiveCoachSessionActive(busy);
+    return () => {
+      if (busy) setLiveCoachSessionActive(false);
+    };
+  }, [phase]);
 
   const unlockAudioContexts = () => {
     if (!playCtxRef.current) {

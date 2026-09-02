@@ -62,7 +62,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
           <div className="flex items-center justify-between gap-3 mb-2 flex-wrap flex-shrink-0">
             <div className="flex items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                All Channels
+                FAll Channels
               </h2>
               <span className="text-[10px] text-slate-600">
                 8 ECG - Resp - SpO2 

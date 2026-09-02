@@ -14,6 +14,7 @@ import DesktopApp from './components/desktop/DesktopApp';
 import DeviceSelectionScreen from './components/DeviceSelectionScreen';
 import LiveCoachPOC from './pages/LiveCoachPOC';
 import { DEV_SHOW_ANY_DEVICE } from './lib/appConfig';
+import PwaUpdateBanner from './components/PwaUpdateBanner';
 
 /**
  * App Component.
@@ -37,9 +38,11 @@ export default function App() {
     typeof window !== 'undefined' &&
     window.location.pathname.replace(/\/$/, '') === '/live-coach-poc';
 
+  let body: React.ReactNode;
+
   // ── While Firebase verifies the session (same on mobile and desktop) ───────
   if (authLoading) {
-    return (
+    body = (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-6">
         <div className="flex flex-col items-center gap-2">
           <h1 className="text-3xl font-black text-white tracking-[0.2em] uppercase">Areteus</h1>
@@ -53,21 +56,22 @@ export default function App() {
         <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">Loading…</p>
       </div>
     );
+  } else if (currentUser === null) {
+    body = <LoginScreen />;
+  } else if (isLivePoc) {
+    // Isolated Live POC — skip device selection / dashboard entirely.
+    body = <LiveCoachPOC />;
+  } else if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {
+    body = <DeviceSelectionScreen />;
+  } else {
+    // ── From here, the visual layer branches ────────────────────────────────────
+    body = isDesktop ? <DesktopApp /> : <MobileApp />;
   }
 
-  if (currentUser === null) {
-    return <LoginScreen />;
-  }
-
-  // Isolated Live POC — skip device selection / dashboard entirely.
-  if (isLivePoc) {
-    return <LiveCoachPOC />;
-  }
-
-  if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {
-    return <DeviceSelectionScreen />;
-  }
-
-  // ── From here, the visual layer branches ────────────────────────────────────
-  return isDesktop ? <DesktopApp /> : <MobileApp />;
+  return (
+    <>
+      {body}
+      <PwaUpdateBanner />
+    </>
+  );
 }

@@ -206,6 +206,16 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
               Fitness
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={openElectrodeGuide}
+            className={actionBtnClass}
+            title="Electrode Guide"
+          >
+            <Cable size={14} />
+            <span className="hidden lg:inline">Electrode Guide</span>
+          </button>
         </div>
 
         {/* Right: actions — labels collapse to icons when narrow */}
@@ -275,16 +285,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
           >
             <Sparkles size={14} />
             <span className="hidden lg:inline">AI Coach</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={openElectrodeGuide}
-            className={actionBtnClass}
-            title="Electrode Guide"
-          >
-            <Cable size={14} />
-            <span className="hidden lg:inline">Electrode Guide</span>
           </button>
 
           <button

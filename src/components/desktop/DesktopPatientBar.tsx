@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Cable,
   Download,
   Pause,
   Play,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
+import { openElectrodeGuide } from '../../lib/electrodeGuide';
 import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
@@ -273,6 +275,16 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
           >
             <Sparkles size={14} />
             <span className="hidden lg:inline">AI Coach</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openElectrodeGuide}
+            className={actionBtnClass}
+            title="Electrode Guide"
+          >
+            <Cable size={14} />
+            <span className="hidden lg:inline">Electrode Guide</span>
           </button>
 
           <button

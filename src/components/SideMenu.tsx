@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles, Zap } from 'lucide-react';
+import { Bell, User, LogOut, X, ChevronRight, Cpu, Sparkles, Zap, Cable } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
 import { AUTO_LOGIN_ENABLED } from '../lib/appConfig';
+import { openElectrodeGuide } from '../lib/electrodeGuide';
 import AlertsDrawer from './AlertsDrawer';
 import ProfileDrawer from './ProfileDrawer';
 import { backdropMotion, drawerMotion } from '../utils/motionPresets';
@@ -115,6 +116,19 @@ const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
                         <ChevronRight size={14} className="ml-auto text-[#6B7280] group-hover:text-[#A0A0A8] transition-colors" />
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAdvancedMenuOpen(false);
+                        openElectrodeGuide();
+                      }}
+                      className={navItemClass}
+                    >
+                      <Cable size={16} className="shrink-0 text-[#A0A0A8] group-hover:text-teal-400 transition-colors" />
+                      <span className="text-[13px] font-medium">Electrode Guide</span>
+                      <ChevronRight size={14} className="ml-auto text-[#6B7280] group-hover:text-[#A0A0A8] transition-colors" />
+                    </button>
 
                     <button
                       type="button"

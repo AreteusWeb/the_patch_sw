@@ -616,7 +616,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   useEffect(() => {
     if (interactionMode !== 'text') return;
     const t = window.setTimeout(() => {
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
       resizeComposer();
     }, 200);
     return () => window.clearTimeout(t);
@@ -757,7 +757,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       // Don't focus the composer in voice mode — that opens the soft keyboard
       // and makes the chat pane jump while listening.
       if (!voiceModeRef.current) {
-        window.setTimeout(() => inputRef.current?.focus(), 100);
+        window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 100);
       }
       resumeVoiceListening();
     } catch {
@@ -785,7 +785,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     window.setTimeout(() => resizeComposer(), 0);
     // Keep caret in the composer after send (Enter or click) — unless voice mode.
     if (!voiceModeRef.current) {
-      window.setTimeout(() => inputRef.current?.focus(), 0);
+      window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
     }
 
     const userMsg: CoachChatMessage = {
@@ -975,7 +975,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     } finally {
       setLoading(false);
       if (!voiceModeRef.current) {
-        window.setTimeout(() => inputRef.current?.focus(), 0);
+        window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
       }
     }
   };
@@ -1260,6 +1260,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 onChange={(e) => {
                   setVoiceDraft(false);
                   setInput(e.target.value);
+                }}
+                onFocus={() => {
+                  // Keep the document pinned; MobileApp owns visualViewport layout.
+                  window.scrollTo(0, 0);
                 }}
                 onKeyDown={onKeyDown}
                 readOnly={

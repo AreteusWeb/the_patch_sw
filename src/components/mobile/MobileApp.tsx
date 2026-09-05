@@ -5,7 +5,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
 import Header from '../Header';
 import VitalsDisplay from '../VitalsDisplay';
 import ActivityStats from '../ActivityStats';
@@ -19,114 +18,100 @@ import AiCoachPanel from '../desktop/AiCoachPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import useStore from '../../store/useStore';
 
+/** Soft keyboard usually shrinks the visual viewport by more than this. */
+const KEYBOARD_OPEN_PX = 120;
+
 /**
  * MobileApp Component.
- * Header stays pinned; vitals/ECG scroll in the top pane.
- * AI Coach opens as a resizable bottom pane via the header AI control
- * (same pattern as desktop).
+ * Dashboard (vitals/ECG) and AI Coach are exclusive on mobile so the soft
+ * keyboard can sit cleanly under the composer — no split-pane collapse /
+ * black gap when focusing the text field.
  */
 export default function MobileApp() {
   const viewMode = useStore(state => state.viewMode);
   const { waveforms, bufferedSeconds } = useWebSocket();
   const [coachOpen, setCoachOpen] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-  // Keep layout height tied to the visible viewport so the soft keyboard
-  // doesn't blow up / crop the coach composer oddly.
+  // Pin the shell to the visual viewport (iOS offsetTop + Android keyboard).
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
 
     const sync = () => {
-      document.documentElement.style.setProperty(
-        '--mobile-vvh',
-        `${Math.round(vv.height)}px`
-      );
+      const top = Math.round(vv.offsetTop);
+      const height = Math.round(vv.height);
+      document.documentElement.style.setProperty('--mobile-vv-top', `${top}px`);
+      document.documentElement.style.setProperty('--mobile-vvh', `${height}px`);
+      setKeyboardOpen(window.innerHeight - height > KEYBOARD_OPEN_PX);
+
+      // Stop the browser from scrolling the document when focusing the composer.
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (document.documentElement.scrollTop !== 0) {
+        document.documentElement.scrollTop = 0;
+      }
     };
+
     sync();
     vv.addEventListener('resize', sync);
     vv.addEventListener('scroll', sync);
     return () => {
       vv.removeEventListener('resize', sync);
       vv.removeEventListener('scroll', sync);
+      document.documentElement.style.removeProperty('--mobile-vv-top');
       document.documentElement.style.removeProperty('--mobile-vvh');
     };
   }, []);
 
-  const mainScroll = (
-    <main className="h-full min-h-0 overflow-y-auto overscroll-contain scrollbar-hide bg-black">
-      {viewMode === 'Normal' ? (
-        <div className="flex flex-col animate-in fade-in duration-500 pb-3">
-          <VitalsDisplay />
-          <ActivityStats />
-          <AlertsPanel />
-          <WaveformContainer waveforms={waveforms} />
-        </div>
-      ) : (
-        <div className="flex flex-col animate-in fade-in duration-500 pb-3">
-          <VitalsDisplay compact />
-          <AdvancedControls />
-          <WaveformContainer waveforms={waveforms} />
-        </div>
-      )}
-    </main>
-  );
-
   return (
     <div
-      className="bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-hidden"
-      style={{ height: 'var(--mobile-vvh, 100dvh)' }}
+      className="bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-hidden fixed left-0 right-0"
+      style={{
+        top: 'var(--mobile-vv-top, 0px)',
+        height: 'var(--mobile-vvh, 100dvh)',
+      }}
     >
       <div className="max-w-md mx-auto relative flex flex-col h-full bg-black">
-        {/* Pinned top bar — always visible (mode, connection, menu) */}
-        <div className="flex-shrink-0 z-30 bg-black pt-[env(safe-area-inset-top)] border-b border-slate-900/80">
-          <Header
-            coachOpen={coachOpen}
-            onToggleCoach={() => setCoachOpen((v) => !v)}
-          />
-        </div>
-
-        <Group
-          orientation="vertical"
-          className="flex-1 min-h-0"
-          id="mobile-main-coach"
-        >
-          <Panel
-            id="mobile-main"
-            minSize={coachOpen ? '8%' : '100%'}
-            defaultSize={coachOpen ? '45%' : '100%'}
-            className="min-h-0"
-          >
-            {mainScroll}
-          </Panel>
-
-          {coachOpen && (
-            <>
-              <Separator
-                className="h-2 flex-shrink-0 bg-slate-800 hover:bg-teal-500/50 active:bg-teal-500/70 transition-colors data-[separator]:cursor-row-resize"
-                title="Drag to resize AI Coach"
-              />
-              <Panel
-                id="mobile-coach"
-                defaultSize="55%"
-                minSize="30%"
-                maxSize="92%"
-                className="min-h-0 overflow-hidden border-t border-slate-800/80"
-              >
-                <AiCoachPanel
-                  onClose={() => setCoachOpen(false)}
-                  presentation="embedded"
-                />
-              </Panel>
-            </>
-          )}
-        </Group>
-
-        {/* Hide chrome while coach is open so keyboard + composer fit cleanly */}
-        {!coachOpen && (
-          <div className="flex-shrink-0 bg-black z-20">
-            <MobileLiveBar bufferedSeconds={bufferedSeconds} />
-            <Footer />
+        {/* Hide chrome while typing so composer stays above the keyboard */}
+        {!(coachOpen && keyboardOpen) && (
+          <div className="flex-shrink-0 z-30 bg-black pt-[env(safe-area-inset-top)] border-b border-slate-900/80">
+            <Header
+              coachOpen={coachOpen}
+              onToggleCoach={() => setCoachOpen((v) => !v)}
+            />
           </div>
+        )}
+
+        {coachOpen ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <AiCoachPanel
+              onClose={() => setCoachOpen(false)}
+              presentation="embedded"
+            />
+          </div>
+        ) : (
+          <>
+            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide bg-black">
+              {viewMode === 'Normal' ? (
+                <div className="flex flex-col animate-in fade-in duration-500 pb-3">
+                  <VitalsDisplay />
+                  <ActivityStats />
+                  <AlertsPanel />
+                  <WaveformContainer waveforms={waveforms} />
+                </div>
+              ) : (
+                <div className="flex flex-col animate-in fade-in duration-500 pb-3">
+                  <VitalsDisplay compact />
+                  <AdvancedControls />
+                  <WaveformContainer waveforms={waveforms} />
+                </div>
+              )}
+            </main>
+            <div className="flex-shrink-0 bg-black z-20">
+              <MobileLiveBar bufferedSeconds={bufferedSeconds} />
+              <Footer />
+            </div>
+          </>
         )}
 
         <AnimatePresence>

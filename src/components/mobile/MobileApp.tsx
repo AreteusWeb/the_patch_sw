@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import Header from '../Header';
 import VitalsDisplay from '../VitalsDisplay';
 import ActivityStats from '../ActivityStats';
@@ -20,6 +20,13 @@ import useStore from '../../store/useStore';
 
 /** Soft keyboard usually shrinks the visual viewport by more than this. */
 const KEYBOARD_OPEN_PX = 120;
+
+const headerMotion = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: 'auto', opacity: 1 },
+  exit: { height: 0, opacity: 0 },
+  transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const },
+};
 
 /**
  * MobileApp Component.
@@ -63,32 +70,49 @@ export default function MobileApp() {
     };
   }, []);
 
+  const hideHeader = coachOpen && keyboardOpen;
+
   return (
     <div
-      className="bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-hidden fixed left-0 right-0"
+      className="bg-black text-slate-100 font-sans selection:bg-teal-500/30 overflow-hidden fixed left-0 right-0 box-border"
       style={{
         top: 'var(--mobile-vv-top, 0px)',
         height: 'var(--mobile-vvh, 100dvh)',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        transition: 'height 0.22s ease, top 0.22s ease',
       }}
     >
       <div className="max-w-md mx-auto relative flex flex-col h-full bg-black">
-        {/* Hide chrome while typing so composer stays above the keyboard */}
-        {!(coachOpen && keyboardOpen) && (
-          <div className="flex-shrink-0 z-30 bg-black pt-[env(safe-area-inset-top)] border-b border-slate-900/80">
-            <Header
-              coachOpen={coachOpen}
-              onToggleCoach={() => setCoachOpen((v) => !v)}
-            />
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {!hideHeader && (
+            <motion.div
+              key="mobile-header"
+              initial={headerMotion.initial}
+              animate={headerMotion.animate}
+              exit={headerMotion.exit}
+              transition={headerMotion.transition}
+              className="flex-shrink-0 z-30 bg-black border-b border-slate-900/80 overflow-hidden"
+            >
+              <Header
+                coachOpen={coachOpen}
+                onToggleCoach={() => setCoachOpen((v) => !v)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {coachOpen ? (
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <motion.div
+            layout
+            className="flex-1 min-h-0 overflow-hidden"
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
             <AiCoachPanel
               onClose={() => setCoachOpen(false)}
               presentation="embedded"
             />
-          </div>
+          </motion.div>
         ) : (
           <>
             <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide bg-black">
@@ -109,6 +133,7 @@ export default function MobileApp() {
             </main>
             <div className="flex-shrink-0 bg-black z-20">
               <MobileLiveBar bufferedSeconds={bufferedSeconds} />
+              {/* Shell already pads home indicator — keep footer spacing light */}
               <Footer />
             </div>
           </>

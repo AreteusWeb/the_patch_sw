@@ -70,10 +70,10 @@ const SideMenu: React.FC<SideMenuProps> = ({ onOpenAiCoach }) => {
               animate={drawerMotion.animate}
               exit={drawerMotion.exit}
               transition={drawerMotion.transition}
-              className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80"
+              className="fixed right-0 top-0 h-full w-full max-w-[28rem] sm:max-w-[32rem] z-[70] flex flex-col bg-slate-950/95 backdrop-blur-2xl shadow-2xl border-l border-slate-800/80 pt-[env(safe-area-inset-top,0px)]"
             >
               {/* Header — same family as AI Coach */}
-              <div className="flex items-center justify-between px-5 pt-6 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-3">
+              <div className="flex items-center justify-between px-5 pt-4 pb-4 border-b border-slate-800/80 flex-shrink-0 gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
                     Signed in as

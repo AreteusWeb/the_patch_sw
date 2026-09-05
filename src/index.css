@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* iOS standalone PWA: fill the screen under the status bar; React shell pads safe areas. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  overscroll-behavior: none;
+}
+
 /* Outside @layer so it always wins over browser / Tailwind defaults.
    Classic Windows scrollbars are white and were still flashing on the coach chat. */
 .scrollbar-hide {

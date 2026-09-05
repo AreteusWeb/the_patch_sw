@@ -20,7 +20,7 @@ const Footer: React.FC = () => {
     : 'text-rose-400';
 
   return (
-    <div className="w-full px-4 py-2 flex justify-between items-center bg-black z-[40] pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="w-full px-4 py-2 flex justify-between items-center bg-black z-[40]">
       <div className="flex items-center gap-1.5">
         <Battery size={10} className={cn("opacity-60", batteryColor)} />
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">

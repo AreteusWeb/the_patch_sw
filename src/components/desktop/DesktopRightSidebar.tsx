@@ -143,8 +143,9 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             24H Trends
           </h3>
+          {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (sin usar, dispositivo no lo manda) */}
           <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color="#2dd4bf" />
-          <MiniTrendGraph label="SpO2" data={waveforms[10]} color="#5eead4" />
+          <MiniTrendGraph label="SpO2" data={waveforms[9]} color="#5eead4" />
         </div>
       </div>
     </aside>

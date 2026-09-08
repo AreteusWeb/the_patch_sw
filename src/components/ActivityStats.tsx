@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import useStore from '../store/useStore';
+import WeightPrompt from './WeightPrompt';
 
 /**
  * ActivityStats Component.
@@ -16,10 +17,7 @@ const ActivityStats: React.FC = () => {
         <span className="text-2xl font-medium text-white">{activity.steps.toLocaleString()}</span>
         <span className="text-[9px] text-slate-500 uppercase tracking-widest mt-0.5">Steps</span>
       </div>
-      <div className="flex flex-col items-center border-r border-slate-900">
-        <span className="text-2xl font-medium text-white">{activity.calories}</span>
-        <span className="text-[9px] text-slate-500 uppercase tracking-widest mt-0.5">Calories</span>
-      </div>
+      <WeightPrompt layout="stat" />
       <div className="flex flex-col items-center">
         <div className="relative group">
           <select 

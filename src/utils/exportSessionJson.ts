@@ -46,7 +46,7 @@ export function exportSessionJson(kind: 'fitness' | 'clinical' = 'fitness') {
   const hr = s.vitals.heartRate.value;
   const zone = getHrZone(hr);
   const recovery = getRecoveryScore(s.vitals, s.hasRealData);
-  const calories = estimateCalories(durationSec, hr, s.activity.steps);
+  const calories = estimateCalories(durationSec, hr, s.activity.steps, s.bodyWeightKg);
 
   const sessionStartedAt =
     s.fitnessSessionStatus === 'idle'

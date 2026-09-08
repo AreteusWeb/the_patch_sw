@@ -13,6 +13,7 @@ import {
   AUTO_LOGIN_PASSWORD,
   IS_LOCAL_MODE,
 } from '../lib/appConfig';
+import { loadLocalBodyWeightKg, parseBodyWeightKg } from '../lib/userWeight';
 import useStore from '../store/useStore';
 
 /** Firestore Timestamp | Date | epoch ms → epoch ms. */
@@ -55,6 +56,7 @@ export function useAuth() {
   const setDeviceMac = useStore(s => s.setDeviceMac);
   const setAuthLoading = useStore(s => s.setAuthLoading);
   const setAccountCreatedAt = useStore(s => s.setAccountCreatedAt);
+  const setBodyWeightKg = useStore(s => s.setBodyWeightKg);
   /** One attempt per page load — logout stays logged out until refresh. */
   const autoLoginAttemptedRef = useRef(false);
 
@@ -62,6 +64,7 @@ export function useAuth() {
     if (IS_LOCAL_MODE) {
       setCurrentUser(LOCAL_DEV_USER);
       setDeviceMac(null);
+      setBodyWeightKg(loadLocalBodyWeightKg(LOCAL_DEV_USER.uid));
       setAuthLoading(false);
       return;
     }
@@ -85,6 +88,7 @@ export function useAuth() {
             deviceMac: null,
           });
           setDeviceMac(null);
+          setBodyWeightKg(null);
           const created = await getDoc(userRef);
           setAccountCreatedAt(createdAtToMs(created.data()?.createdAt));
         } else {
@@ -92,6 +96,9 @@ export function useAuth() {
           const data = snap.data();
           setDeviceMac(data.deviceMac ?? null);
           setAccountCreatedAt(createdAtToMs(data.createdAt));
+          setBodyWeightKg(
+            parseBodyWeightKg(data.weightKg) ?? loadLocalBodyWeightKg(firebaseUser.uid)
+          );
         }
         setAuthLoading(false);
         return;

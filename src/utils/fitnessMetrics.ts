@@ -144,11 +144,21 @@ export function getFitnessSessionElapsedSec(
   return Math.floor((accumulatedMs + running) / 1000);
 }
 
-export function estimateCalories(elapsedSeconds: number, hr: number | string | undefined, steps: number): number {
-  const bpm = typeof hr === 'number' ? hr : 70;
-  const hours = elapsedSeconds / 3600;
-  const met = bpm < 100 ? 2.5 : bpm < 140 ? 6 : 9;
-  const fromHr = Math.round(met * 70 * hours); // ~70kg reference
+/**
+ * MET × body weight × hours. Returns null when weight is unknown —
+ * never substitutes a default kg.
+ */
+export function estimateCalories(
+  elapsedSeconds: number,
+  hr: number | string | undefined,
+  steps: number,
+  weightKg: number | null
+): number | null {
+  if (weightKg == null || !Number.isFinite(weightKg) || weightKg <= 0) return null;
+  const hours = Math.max(0, elapsedSeconds) / 3600;
+  const bpm = typeof hr === 'number' && hr > 0 ? hr : null;
+  const met = bpm == null ? 0 : bpm < 100 ? 2.5 : bpm < 140 ? 6 : 9;
+  const fromHr = Math.round(met * weightKg * hours);
   const fromSteps = Math.round(steps * 0.04);
   return Math.max(fromHr, fromSteps);
 }

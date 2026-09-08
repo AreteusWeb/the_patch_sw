@@ -1,8 +1,9 @@
 import React from 'react';
 import useStore from '../../store/useStore';
-import { estimateCalories, formatSessionClock } from '../../utils/fitnessMetrics';
+import { formatSessionClock } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
+import WeightPrompt from '../WeightPrompt';
 
 /**
  * DesktopStatusBar
@@ -19,8 +20,6 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
   const isConnected = useStore(s => s.isConnected);
   const historyOffset = useStore(s => s.historyOffset);
   const desktopLayout = useStore(s => s.desktopLayout);
-  const vitals = useStore(s => s.vitals);
-  const activity = useStore(s => s.activity);
   const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
   const sessionElapsed = useFitnessSessionElapsed();
 
@@ -38,7 +37,6 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
   const hours = Math.floor(monitorElapsed / 3600);
   const minutes = Math.floor((monitorElapsed % 3600) / 60);
   const isFitness = desktopLayout === 'fitness';
-  const calories = estimateCalories(sessionElapsed, vitals.heartRate.value, activity.steps);
 
   const recordingLabel = isConnected
     ? `Recording: ${hours}h ${minutes}m`
@@ -61,9 +59,7 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
               Session Data: {sessionLabel}
             </span>
             <span className="text-slate-700">•</span>
-            <span className="tabular-nums">
-              Calories Est: {fitnessSessionStatus !== 'idle' ? `~${calories.toLocaleString()}` : '—'}
-            </span>
+            <WeightPrompt layout="bar" />
             <span className="text-slate-700">•</span>
             <span>AI Analysis: —</span>
             <span className="text-slate-700">•</span>

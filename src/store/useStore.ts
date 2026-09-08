@@ -73,6 +73,10 @@ interface AuthState {
    * monitoring start until a real session.startDate exists.
    */
   accountCreatedAt: number | null;
+  /** User body weight in kg. null = not set — never invent a default. */
+  bodyWeightKg: number | null;
+  /** Wall-clock ms when the patch last connected. null while disconnected. */
+  patchConnectedAt: number | null;
 }
 
 interface AuthActions {
@@ -81,6 +85,7 @@ interface AuthActions {
   setAuthLoading: (loading: boolean) => void;
   setIsDeviceSelected: (selected: boolean) => void;
   setAccountCreatedAt: (ms: number | null) => void;
+  setBodyWeightKg: (kg: number | null) => void;
 }
 
 const useStore = create<
@@ -187,6 +192,8 @@ const useStore = create<
   currentUser: null,
   deviceMac: null,
   accountCreatedAt: null,
+  bodyWeightKg: null,
+  patchConnectedAt: null,
   authLoading: true,
   isDeviceSelected: false,
 
@@ -195,7 +202,12 @@ const useStore = create<
   setHasRealData: (v: boolean) => set({ hasRealData: v }),
 
   setConnected: (connected) =>
-    set({ isConnected: connected }),
+    set((state) => ({
+      isConnected: connected,
+      patchConnectedAt: connected
+        ? (state.patchConnectedAt ?? Date.now())
+        : null,
+    })),
 
   setIsLive: (isLive) =>
     set({
@@ -296,12 +308,15 @@ const useStore = create<
     set({
       currentUser: user,
       ...(user === null
-        ? { isDeviceSelected: false, deviceMac: null, accountCreatedAt: null }
+        ? { isDeviceSelected: false, deviceMac: null, accountCreatedAt: null, bodyWeightKg: null }
         : {}),
     }),
 
   setAccountCreatedAt: (ms) =>
     set({ accountCreatedAt: ms }),
+
+  setBodyWeightKg: (kg) =>
+    set({ bodyWeightKg: kg }),
 
   setDeviceMac: (mac) =>
     set({ deviceMac: mac }),

@@ -68,6 +68,11 @@ interface AuthState {
   deviceMac: string | null;
   authLoading: boolean;
   isDeviceSelected: boolean;
+  /**
+   * users/{uid}.createdAt — account creation, used as the only available
+   * monitoring start until a real session.startDate exists.
+   */
+  accountCreatedAt: number | null;
 }
 
 interface AuthActions {
@@ -75,6 +80,7 @@ interface AuthActions {
   setDeviceMac: (mac: string | null) => void;
   setAuthLoading: (loading: boolean) => void;
   setIsDeviceSelected: (selected: boolean) => void;
+  setAccountCreatedAt: (ms: number | null) => void;
 }
 
 const useStore = create<
@@ -180,6 +186,7 @@ const useStore = create<
 
   currentUser: null,
   deviceMac: null,
+  accountCreatedAt: null,
   authLoading: true,
   isDeviceSelected: false,
 
@@ -286,7 +293,15 @@ const useStore = create<
     set({ isAdvancedMenuOpen: isOpen }),
 
   setCurrentUser: (user) =>
-    set({ currentUser: user, ...(user === null ? { isDeviceSelected: false, deviceMac: null } : {}) }),
+    set({
+      currentUser: user,
+      ...(user === null
+        ? { isDeviceSelected: false, deviceMac: null, accountCreatedAt: null }
+        : {}),
+    }),
+
+  setAccountCreatedAt: (ms) =>
+    set({ accountCreatedAt: ms }),
 
   setDeviceMac: (mac) =>
     set({ deviceMac: mac }),

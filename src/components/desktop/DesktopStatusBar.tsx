@@ -8,7 +8,14 @@ import { exportSessionJson } from '../../utils/exportSessionJson';
  * DesktopStatusBar
  * Barra inferior de ancho completo — wording adapta a Normal vs Fitness.
  */
-const DesktopStatusBar: React.FC = () => {
+interface DesktopStatusBarProps {
+  /** Lead II points received since the current stream session started. null = no session yet. */
+  sessionSampleCount?: number | null;
+}
+
+const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
+  sessionSampleCount = null,
+}) => {
   const isConnected = useStore(s => s.isConnected);
   const historyOffset = useStore(s => s.historyOffset);
   const desktopLayout = useStore(s => s.desktopLayout);
@@ -73,7 +80,11 @@ const DesktopStatusBar: React.FC = () => {
           <div className="flex items-center gap-4 text-slate-500">
             <span className="tabular-nums">{recordingLabel}</span>
             <span className="text-slate-700">•</span>
-            <span>Total Data: —</span>
+            <span className="tabular-nums">
+              {sessionSampleCount == null
+                ? 'Total Data: —'
+                : `Total Data: ${sessionSampleCount.toLocaleString()} pts`}
+            </span>
             <span className="text-slate-700">•</span>
             <span>AI Last Analyzed: —</span>
             <span className="text-slate-700">•</span>

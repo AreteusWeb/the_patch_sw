@@ -379,6 +379,10 @@ export const useWebSocket = () => {
   const bufferedSecondsRef = useRef(0);
 
   const rings  = useRef<RingBuffer[]>(Array.from({ length: TOTAL_SLOTS }, () => new RingBuffer(BUFFER_SIZE)));
+  /** Lead II points pushed this stream session. Ring size caps at 1h; this does not. */
+  const sessionPtsRef = useRef(0);
+  const sessionOpenRef = useRef(false);
+  const [sessionSampleCount, setSessionSampleCount] = useState<number | null>(null);
   const wsRef  = useRef<WebSocket | null>(null);
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const simTime = useRef(0);
@@ -391,10 +395,30 @@ export const useWebSocket = () => {
     notchFilters.current.forEach(f => f.reset());
   }, [notchFilterEnabled]);
 
+  const LEAD_II_SLOT = LEAD_CHANNEL_INDEX['Lead II'];
+
+  const closeSampleSession = useCallback(() => {
+    sessionOpenRef.current = false;
+    sessionPtsRef.current = 0;
+    setSessionSampleCount(null);
+  }, []);
+
+  const addSessionPoints = useCallback((n: number) => {
+    if (n <= 0) return;
+    // First samples after disconnect / device change = new session.
+    if (!sessionOpenRef.current) {
+      sessionOpenRef.current = true;
+      sessionPtsRef.current = 0;
+    }
+    sessionPtsRef.current += n;
+    setSessionSampleCount(sessionPtsRef.current);
+  }, []);
+
   // ── Process incoming packets — supports BOTH formats ─────────────────────
   const handlePacket = useCallback((packet: { timestamp: number; channels: unknown[] }) => {
     const notchOn = useStore.getState().notchFilterEnabled;
     let receivedSamples = false;
+    let leadIIPts = 0;
 
     packet.channels.forEach((ch, i) => {
       // ── Real format (server.cjs / device): { index, name, samples } ────────
@@ -409,6 +433,7 @@ export const useWebSocket = () => {
           ring.push(notchOn ? filter.process(mv) : mv);
         }
         if (named.samples.length > 0) receivedSamples = true;
+        if (slot === LEAD_II_SLOT) leadIIPts += named.samples.length;
         return;
       }
 
@@ -433,8 +458,11 @@ export const useWebSocket = () => {
         const filter = notchFilters.current[slot];
         for (const v of ch) ring.push(notchOn ? filter.process(v) : v);
         if (ch.length > 0) receivedSamples = true;
+        if (slot === LEAD_II_SLOT) leadIIPts += ch.length;
       }
     });
+
+    addSessionPoints(leadIIPts);
 
     // Patch is "connected" only once live sensor samples arrive — not on WS auth alone.
     if (receivedSamples) {
@@ -444,7 +472,7 @@ export const useWebSocket = () => {
         store.setConnectionStatus('Stable');
       }
     }
-  }, []);
+  }, [addSessionPoints]);
 
   const historyOffsetRef = useRef(historyOffset);
   useEffect(() => { historyOffsetRef.current = historyOffset; }, [historyOffset]);
@@ -734,6 +762,9 @@ export const useWebSocket = () => {
       }, 100);
     };
 
+    // New device = new sample session. WS reconnect alone does not reset.
+    closeSampleSession();
+
     const connect = () => {
       setConnected(false);
       setConnectionStatus('Connecting');
@@ -793,6 +824,7 @@ export const useWebSocket = () => {
             setConnected(false);
             setConnectionStatus('Disconnected');
             useStore.getState().setHasRealData(false);
+            closeSampleSession();
           }
         } catch { /* ignore non-JSON messages */ }
       };
@@ -823,7 +855,7 @@ export const useWebSocket = () => {
       }
       stopSim();
     };
-  }, [handlePacket, setConnected, setConnectionStatus, simulationMode, deviceMac]);
+  }, [handlePacket, setConnected, setConnectionStatus, simulationMode, deviceMac, closeSampleSession]);
 
   useEffect(() => {
     const ws = wsRef.current;
@@ -832,5 +864,5 @@ export const useWebSocket = () => {
     }
   }, [simulationMode]);
 
-  return { waveforms, bufferedSeconds };
+  return { waveforms, bufferedSeconds, sessionSampleCount };
 };

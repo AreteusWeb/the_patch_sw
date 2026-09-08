@@ -16,6 +16,31 @@ import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
 
+/** Calendar day index from account createdAt. Day 1 = the start date. */
+function monitoringDayNumber(startMs: number, now = new Date()): number {
+  const start = new Date(startMs);
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.floor((today.getTime() - startDay.getTime()) / 86_400_000);
+  return Math.max(1, diff + 1);
+}
+
+/**
+ * Clinical monitoring line.
+ * Start comes from users/{uid}.createdAt (no session.startDate exists).
+ * "of Y" stays a dash — there is no plannedDurationDays on the patient/session.
+ */
+function formatMonitoringLine(accountCreatedAt: number | null): string {
+  if (accountCreatedAt == null) {
+    return 'Monitoring: Day — of — • Started —';
+  }
+  const started = new Date(accountCreatedAt).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `Monitoring: Day ${monitoringDayNumber(accountCreatedAt)} of — • Started ${started}`;
+}
+
 interface DesktopPatientBarProps {
   coachOpen: boolean;
   onToggleCoach: () => void;
@@ -56,6 +81,7 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
     currentUser?.displayName ?? currentUser?.email?.split('@')[0] ?? 'Patient';
 
   const patientId = currentUser?.uid?.slice(0, 8).toUpperCase() ?? '—';
+  const accountCreatedAt = useStore(s => s.accountCreatedAt);
   const isViewingPast = historyOffset > 0;
   const isFitness = desktopLayout === 'fitness';
 
@@ -171,24 +197,25 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
                   </span>
                 </span>
               ) : (
-                <span>Monitoring: Day — of — • Started —</span>
+                <span>{formatMonitoringLine(accountCreatedAt)}</span>
               )}
             </div>
           </div>
 
           <div
-            className="flex-shrink-0 flex bg-slate-900/60 backdrop-blur-md p-0.5 xl:p-1 rounded-full border border-slate-800/50 gap-0.5 xl:gap-1"
+            className="flex-shrink-0 flex items-center h-9 xl:h-10 p-0.5 rounded-lg border border-slate-800 bg-slate-900/60"
             role="group"
             aria-label="Desktop layout mode"
           >
             <button
               type="button"
               onClick={() => setDesktopLayout('normal')}
+              aria-pressed={!isFitness}
               className={cn(
-                'px-2.5 xl:px-5 py-1.5 xl:py-2 rounded-full text-[10px] xl:text-xs font-semibold uppercase tracking-[0.12em] transition-all',
+                'h-full px-2.5 xl:px-3.5 rounded-md text-[10px] xl:text-[11px] font-bold uppercase tracking-wider transition-colors',
                 !isFitness
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-teal-500/15 text-teal-300 border border-teal-500/40'
+                  : 'border border-transparent text-slate-500 hover:text-slate-200'
               )}
             >
               Normal
@@ -196,11 +223,12 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
             <button
               type="button"
               onClick={() => setDesktopLayout('fitness')}
+              aria-pressed={isFitness}
               className={cn(
-                'px-2.5 xl:px-5 py-1.5 xl:py-2 rounded-full text-[10px] xl:text-xs font-semibold uppercase tracking-[0.12em] transition-all',
+                'h-full px-2.5 xl:px-3.5 rounded-md text-[10px] xl:text-[11px] font-bold uppercase tracking-wider transition-colors',
                 isFitness
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-teal-500/15 text-teal-300 border border-teal-500/40'
+                  : 'border border-transparent text-slate-500 hover:text-slate-200'
               )}
             >
               Fitness

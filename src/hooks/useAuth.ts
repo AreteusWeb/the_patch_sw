@@ -5,7 +5,7 @@ import {
   signOut,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, type Timestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import {
   AUTO_LOGIN_EMAIL,
@@ -14,6 +14,18 @@ import {
   IS_LOCAL_MODE,
 } from '../lib/appConfig';
 import useStore from '../store/useStore';
+
+/** Firestore Timestamp | Date | epoch ms → epoch ms. */
+function createdAtToMs(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    const date = (value as Timestamp).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.getTime();
+  }
+  return null;
+}
 
 /** Fixed user used in local mode — no login (see meeting priority #4). */
 const LOCAL_DEV_USER = {
@@ -42,6 +54,7 @@ export function useAuth() {
   const setCurrentUser = useStore(s => s.setCurrentUser);
   const setDeviceMac = useStore(s => s.setDeviceMac);
   const setAuthLoading = useStore(s => s.setAuthLoading);
+  const setAccountCreatedAt = useStore(s => s.setAccountCreatedAt);
   /** One attempt per page load — logout stays logged out until refresh. */
   const autoLoginAttemptedRef = useRef(false);
 
@@ -72,10 +85,13 @@ export function useAuth() {
             deviceMac: null,
           });
           setDeviceMac(null);
+          const created = await getDoc(userRef);
+          setAccountCreatedAt(createdAtToMs(created.data()?.createdAt));
         } else {
           // Existing user — load linked device MAC address
           const data = snap.data();
           setDeviceMac(data.deviceMac ?? null);
+          setAccountCreatedAt(createdAtToMs(data.createdAt));
         }
         setAuthLoading(false);
         return;

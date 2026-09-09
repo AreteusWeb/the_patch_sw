@@ -28,7 +28,7 @@ import AiCoachPanel from './AiCoachPanel';
  * AI Coach opens as a resizable right column (not an overlay).
  */
 export default function DesktopApp() {
-  const { waveforms, sessionSampleCount } = useWebSocket();
+  const { waveforms, sessionSampleCount, recoveryTrend } = useWebSocket();
   const desktopLayout = useStore(s => s.desktopLayout);
   const isFitness = desktopLayout === 'fitness';
   const [coachOpen, setCoachOpen] = useState(false);
@@ -37,7 +37,7 @@ export default function DesktopApp() {
     <>
       <FitnessLeftSidebar waveforms={waveforms} />
       <FitnessCentralArea waveforms={waveforms} />
-      <FitnessRightSidebar waveforms={waveforms} />
+      <FitnessRightSidebar waveforms={waveforms} recoveryTrend={recoveryTrend} />
     </>
   ) : (
     <>

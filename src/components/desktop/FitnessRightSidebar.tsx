@@ -15,13 +15,23 @@ const severityColor: Record<string, string> = {
   low: 'border-slate-800/80 bg-slate-900/30',
 };
 
-const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }> = ({
+const MiniTrendGraph: React.FC<{
+  data: number[];
+  color: string;
+  label: string;
+  minPoints?: number;
+  emptyLabel?: string;
+  window?: number;
+}> = ({
   data,
   color,
   label,
+  minPoints = 2,
+  emptyLabel = 'No data yet',
+  window = 24,
 }) => {
-  const samples = data.slice(-24);
-  const hasData = samples.length >= 2;
+  const samples = data.slice(-window);
+  const hasData = samples.length >= minPoints;
   const min = hasData ? Math.min(...samples) : 0;
   const max = hasData ? Math.max(...samples) : 1;
   const range = max - min || 1;
@@ -44,7 +54,7 @@ const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }>
             />
           ))
         ) : (
-          <span className="text-[10px] text-slate-600 italic">No data yet</span>
+          <span className="text-[10px] text-slate-600 italic">{emptyLabel}</span>
         )}
       </div>
     </div>
@@ -86,9 +96,10 @@ function buildPerformanceNotes(vitals: Vitals, hasRealData: boolean): string[] {
 
 interface FitnessRightSidebarProps {
   waveforms: number[][];
+  recoveryTrend: number[];
 }
 
-const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) => {
+const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms, recoveryTrend }) => {
   const alerts = useStore(s => s.alerts);
   const vitals = useStore(s => s.vitals);
   const hasRealData = useStore(s => s.hasRealData);
@@ -103,7 +114,6 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) 
     [vitals, live]
   );
   const activeAlerts = alerts;
-  const recoveryTrend = waveforms[1]?.slice(-48) ?? [];
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
@@ -204,7 +214,14 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({ waveforms }) 
             24H / Session Trends
           </h3>
           <MiniTrendGraph label="HR Trend" data={waveforms[1]} color="#2dd4bf" />
-          <MiniTrendGraph label="Recovery Score Trend" data={recoveryTrend} color="#5eead4" />
+          <MiniTrendGraph
+            label="Recovery Score Trend"
+            data={recoveryTrend}
+            color="#5eead4"
+            minPoints={4}
+            emptyLabel="Collecting data..."
+            window={48}
+          />
         </div>
       </div>
     </aside>

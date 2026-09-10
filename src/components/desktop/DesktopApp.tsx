@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useCoachInsights } from '../../hooks/useCoachInsights';
 import useStore from '../../store/useStore';
 import SideMenu from '../SideMenu';
 import EventBanner from '../EventBanner';
@@ -29,6 +30,7 @@ import AiCoachPanel from './AiCoachPanel';
  */
 export default function DesktopApp() {
   const { waveforms, sessionSampleCount, recoveryTrend } = useWebSocket();
+  const insights = useCoachInsights();
   const desktopLayout = useStore(s => s.desktopLayout);
   const isFitness = desktopLayout === 'fitness';
   const [coachOpen, setCoachOpen] = useState(false);
@@ -37,13 +39,17 @@ export default function DesktopApp() {
     <>
       <FitnessLeftSidebar waveforms={waveforms} />
       <FitnessCentralArea waveforms={waveforms} />
-      <FitnessRightSidebar waveforms={waveforms} recoveryTrend={recoveryTrend} />
+      <FitnessRightSidebar
+        waveforms={waveforms}
+        recoveryTrend={recoveryTrend}
+        insights={insights}
+      />
     </>
   ) : (
     <>
       <DesktopLeftSidebar waveforms={waveforms} />
       <DesktopCentralArea waveforms={waveforms} />
-      <DesktopRightSidebar waveforms={waveforms} />
+      <DesktopRightSidebar waveforms={waveforms} insights={insights} />
     </>
   );
 
@@ -90,7 +96,10 @@ export default function DesktopApp() {
         )}
       </Group>
 
-      <DesktopStatusBar sessionSampleCount={sessionSampleCount} />
+      <DesktopStatusBar
+        sessionSampleCount={sessionSampleCount}
+        lastAnalyzedAt={insights.timestamp}
+      />
 
       <AnimatePresence>
         <SideMenu key="side-menu" />

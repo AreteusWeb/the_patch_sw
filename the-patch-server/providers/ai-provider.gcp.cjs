@@ -769,9 +769,167 @@ async function generateSessionSummary({ messages, uid, sessionId }) {
   return text || 'Coaching session completed; no detailed topics captured.';
 }
 
+/**
+ * Cheap Flash-Lite model for passive sidebar insights (not the chat coach model).
+ * Override with VERTEX_AI_INSIGHTS_MODEL if needed.
+ */
+const insightsModelName =
+  process.env.VERTEX_AI_INSIGHTS_MODEL || 'gemini-3.1-flash-lite';
+
+const INSIGHTS_NORMAL_INSTRUCTION =
+  'You write short clinical-status bullets for The Patch desktop sidebar (AI Insights). ' +
+  'Language: English only. Output ONLY a JSON object: {"bullets":["...","..."]} with 3 or 4 bullets. ' +
+  'Each bullet is one short sentence about current vitals (HR, SpO2, respiration, recovery if present). ' +
+  'Do not diagnose disease. Do not invent numbers not in the snapshot. Do not mention severity, confidence, or alerts. ' +
+  'No markdown, no preamble, no Spanish.';
+
+const INSIGHTS_FITNESS_INSTRUCTION =
+  'You write short training/recovery tip bullets for The Patch fitness sidebar (AI Performance Notes). ' +
+  'Language: English only. Output ONLY a JSON object: {"bullets":["...","..."]} with 3 or 4 bullets. ' +
+  'Tone: coach-like — effort, breathing, pacing, recovery. Use the snapshot numbers when relevant. ' +
+  'Do not diagnose disease. Do not invent numbers not in the snapshot. Do not mention severity, confidence, or alerts. ' +
+  'No markdown, no preamble, no Spanish.';
+
+/**
+ * Parse model text into 3–4 English bullet strings.
+ * @param {string} raw
+ * @returns {string[]}
+ */
+function parseInsightBullets(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  // Prefer JSON object / array embedded in the reply.
+  const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const list = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.bullets)
+          ? parsed.bullets
+          : null;
+      if (list) {
+        return list
+          .map((b) => String(b || '').trim())
+          .filter(Boolean)
+          .slice(0, 4);
+      }
+    } catch {
+      /* fall through to line parse */
+    }
+  }
+
+  return text
+    .split(/\n+/)
+    .map((line) => line.replace(/^[\s\-*•\d.)]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+/**
+ * Passive vitals insights — no tools, no chat history, Flash-Lite only.
+ * @param {{
+ *   mode: 'normal'|'fitness',
+ *   metricsSnapshot: object|null,
+ *   uid?: string,
+ * }} args
+ * @returns {Promise<{ bullets: string[] }>}
+ */
+async function generateInsights({ mode, metricsSnapshot, uid }) {
+  const isFitness = mode === 'fitness';
+  const systemPrompt = isFitness
+    ? INSIGHTS_FITNESS_INSTRUCTION
+    : INSIGHTS_NORMAL_INSTRUCTION;
+
+  const insightsLocation = resolveVertexLocation(
+    insightsModelName,
+    process.env.VERTEX_AI_LOCATION
+  );
+  const insightsEndpoint =
+    insightsLocation === 'global' ? 'aiplatform.googleapis.com' : undefined;
+  const insightsVertex =
+    insightsLocation === location && insightsEndpoint === apiEndpoint
+      ? vertexAI
+      : new VertexAI({
+          project,
+          location: insightsLocation,
+          apiEndpoint: insightsEndpoint,
+        });
+
+  const generativeModel = insightsVertex.getGenerativeModel({
+    model: insightsModelName,
+    systemInstruction: {
+      role: 'system',
+      parts: [{ text: systemPrompt }],
+    },
+    // Gemini 3.x: thinkingLevel only — keep cheap/low for sidebar copy.
+    generationConfig: {
+      thinkingConfig: {
+        thinkingLevel: 'low',
+        includeThoughts: false,
+      },
+    },
+  });
+
+  const snapshotJson = JSON.stringify(metricsSnapshot || {}, null, 2);
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        {
+          text:
+            `Mode: ${isFitness ? 'fitness' : 'normal'}\n` +
+            `Current metrics snapshot (authoritative — do not invent other values):\n` +
+            `${snapshotJson}\n\n` +
+            `Return JSON only: {"bullets":["..."]}`,
+        },
+      ],
+    },
+  ];
+  assertContentsEndWithUser(contents, 'insights');
+
+  const result = await generativeModel.generateContent({ contents });
+  const response = result?.response;
+  logGeminiUsage({
+    kind: 'insights',
+    uid,
+    sessionId: null,
+    usageMetadata: response?.usageMetadata,
+    toolCallRounds: 0,
+    toolRoundLimitHit: false,
+    groundingSearchCount: 0,
+  });
+
+  const parts = response?.candidates?.[0]?.content?.parts || [];
+  let text = '';
+  for (const part of parts) {
+    if (!part || part.thought === true) continue;
+    if (part.text) text += part.text;
+  }
+
+  let bullets = parseInsightBullets(text);
+  if (bullets.length < 3) {
+    bullets = isFitness
+      ? [
+          'Stay smooth with breathing as intensity changes.',
+          'Watch heart rate drift before pushing the next interval.',
+          'Use recovery windows to reset posture and cadence.',
+        ]
+      : [
+          'Live vitals are being summarized from the current snapshot.',
+          'Heart rate and SpO2 are the primary signals in this update.',
+          'Respiration is included when the patch stream provides it.',
+        ];
+  }
+
+  return { bullets: bullets.slice(0, 4) };
+}
+
 module.exports = {
   generateCoachReply,
   generateSessionSummary,
+  generateInsights,
   getCoachTools,
   searchReferenceImage,
   searchReferenceVideo,

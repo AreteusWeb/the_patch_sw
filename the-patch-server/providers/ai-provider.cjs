@@ -32,6 +32,12 @@ module.exports = {
    * @returns {Promise<string>}
    */
   generateSessionSummary: impl.generateSessionSummary,
+  /**
+   * Passive sidebar insights (no chat session, no tools).
+   * @param {{ mode: 'normal'|'fitness', metricsSnapshot: object|null, uid?: string }} args
+   * @returns {Promise<{ bullets: string[] }>}
+   */
+  generateInsights: impl.generateInsights,
   /** Vertex-format tool declarations for the coach endpoint. */
   getCoachTools: impl.getCoachTools,
   /** Unsplash reference-image search (hotlink + attribution metadata). */

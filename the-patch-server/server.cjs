@@ -397,6 +397,48 @@ function sanitizeCoachMetricsSnapshot(raw) {
 }
 
 /**
+ * Insight severity from the same alert thresholds as the live WS path
+ * (useWebSocket applyDisplayVitals / high alerts). Gemini does not decide this.
+ *   alert  — high: HR > 120, HR < 45, SpO2 < 90
+ *   watch  — moderate: HR > 100 or < 55, SpO2 < 94, RR > 25 or < 10
+ *   normal — otherwise / no usable numbers
+ */
+function computeInsightsSeverity(metricsSnapshot) {
+  if (!metricsSnapshot || !metricsSnapshot.hasRealData) return 'normal';
+
+  const hr = typeof metricsSnapshot.heartRate === 'number'
+    ? metricsSnapshot.heartRate
+    : null;
+  const spo2 = typeof metricsSnapshot.spo2 === 'number'
+    ? metricsSnapshot.spo2
+    : null;
+  const rr = typeof metricsSnapshot.respirationRate === 'number'
+    ? metricsSnapshot.respirationRate
+    : null;
+
+  if (
+    (hr != null && hr > 0 && (hr > 120 || hr < 45)) ||
+    (spo2 != null && spo2 < 90)
+  ) {
+    return 'alert';
+  }
+
+  if (
+    (hr != null && hr > 0 && (hr > 100 || hr < 55)) ||
+    (spo2 != null && spo2 < 94) ||
+    (rr != null && (rr > 25 || rr < 10))
+  ) {
+    return 'watch';
+  }
+
+  return 'normal';
+}
+
+/** In-memory last insights reply per uid+mode (cooldown / cache). Not Firestore. */
+const INSIGHTS_COOLDOWN_MS = 75_000;
+const insightsCacheByKey = new Map();
+
+/**
  * Close a coach session after generating a Gemini summary of its messages.
  * Shared by idle-timeout rollover and POST /api/coach/new-session.
  */
@@ -712,6 +754,64 @@ async function handleCoachApi(req, res) {
         return true;
       }
       sendJson(req, res, 500, { error: 'save_recording_failed' });
+      return true;
+    }
+  }
+
+  // ── Passive sidebar insights (NOT chat — no coachSessions / tools) ─────────
+  if (req.method === 'POST' && url.pathname === '/api/coach/insights') {
+    let body;
+    try { body = await readJsonBody(req); }
+    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+
+    const mode = body.mode === 'fitness' ? 'fitness' : body.mode === 'normal' ? 'normal' : null;
+    if (!mode) {
+      sendJson(req, res, 400, { error: 'invalid_mode' });
+      return true;
+    }
+
+    const metricsSnapshot = sanitizeCoachMetricsSnapshot(body.metricsSnapshot);
+    const severity = computeInsightsSeverity(metricsSnapshot);
+    const cacheKey = `${uid}:${mode}`;
+    const cached = insightsCacheByKey.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && now - cached.at < INSIGHTS_COOLDOWN_MS) {
+      sendJson(req, res, 200, {
+        ...cached.payload,
+        severity,
+        cached: true,
+      });
+      return true;
+    }
+
+    try {
+      const { bullets } = await aiProvider.generateInsights({
+        mode,
+        metricsSnapshot,
+        uid,
+      });
+      const payload = {
+        bullets: Array.isArray(bullets) ? bullets.slice(0, 4) : [],
+        severity,
+        timestamp: new Date().toISOString(),
+        source: APP_MODE === 'local' ? 'mock' : 'gemini',
+        cached: false,
+      };
+      insightsCacheByKey.set(cacheKey, { at: now, payload });
+      sendJson(req, res, 200, payload);
+      return true;
+    } catch (err) {
+      console.error('[coach/insights] error:', err?.stack || err);
+      if (cached?.payload) {
+        sendJson(req, res, 200, {
+          ...cached.payload,
+          severity,
+          cached: true,
+        });
+        return true;
+      }
+      sendJson(req, res, 500, { error: 'insights_failed' });
       return true;
     }
   }

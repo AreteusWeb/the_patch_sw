@@ -362,9 +362,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
               <span className="text-slate-500 font-normal"> • {batteryLevel}% Battery</span>
             )}
           </span>
-          <span className="text-[10px] text-slate-500 mt-0.5">
-            AI Confidence: —
-          </span>
         </div>
       </div>
     </header>

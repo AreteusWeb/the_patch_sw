@@ -1,21 +1,25 @@
 import React from 'react';
 import useStore from '../../store/useStore';
 import { formatSessionClock } from '../../utils/fitnessMetrics';
+import { formatRelativeAgo } from '../../utils/formatRelativeAgo';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
 import WeightPrompt from '../WeightPrompt';
 
 /**
  * DesktopStatusBar
- * Barra inferior de ancho completo — wording adapta a Normal vs Fitness.
+ * Full-width bottom bar — wording adapts to Normal vs Fitness.
  */
 interface DesktopStatusBarProps {
   /** Lead II points received since the current stream session started. null = no session yet. */
   sessionSampleCount?: number | null;
+  /** ISO timestamp from the last successful /api/coach/insights response. */
+  lastAnalyzedAt?: string | null;
 }
 
 const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
   sessionSampleCount = null,
+  lastAnalyzedAt = null,
 }) => {
   const isConnected = useStore(s => s.isConnected);
   const historyOffset = useStore(s => s.historyOffset);
@@ -24,6 +28,7 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
   const sessionElapsed = useFitnessSessionElapsed();
 
   const [monitorElapsed, setMonitorElapsed] = React.useState(0);
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
 
   React.useEffect(() => {
     if (!isConnected || desktopLayout === 'fitness') return;
@@ -33,6 +38,12 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
     }, 1000);
     return () => clearInterval(id);
   }, [isConnected, historyOffset, desktopLayout]);
+
+  React.useEffect(() => {
+    if (!lastAnalyzedAt) return;
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [lastAnalyzedAt]);
 
   const hours = Math.floor(monitorElapsed / 3600);
   const minutes = Math.floor((monitorElapsed % 3600) / 60);
@@ -50,6 +61,10 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
             : ''
       }`;
 
+  const analyzedLabel = lastAnalyzedAt
+    ? formatRelativeAgo(lastAnalyzedAt, nowMs)
+    : '—';
+
   return (
     <footer className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur-sm">
       <div className="px-6 py-2 flex items-center justify-between gap-4 text-[10px]">
@@ -61,7 +76,7 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
             <span className="text-slate-700">•</span>
             <WeightPrompt layout="bar" />
             <span className="text-slate-700">•</span>
-            <span>AI Analysis: —</span>
+            <span>AI Last Analyzed: {analyzedLabel}</span>
             <span className="text-slate-700">•</span>
             <button
               type="button"
@@ -82,7 +97,7 @@ const DesktopStatusBar: React.FC<DesktopStatusBarProps> = ({
                 : `Total Data: ${sessionSampleCount.toLocaleString()} pts`}
             </span>
             <span className="text-slate-700">•</span>
-            <span>AI Last Analyzed: —</span>
+            <span>AI Last Analyzed: {analyzedLabel}</span>
             <span className="text-slate-700">•</span>
             <button
               type="button"

@@ -1,6 +1,7 @@
 import React from 'react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
+import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
 
 const severityColor: Record<string, string> = {
@@ -43,6 +44,7 @@ const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }>
   );
 };
 
+/** Local fallback when the insights API fails before any successful reply. */
 function buildAiInsights(vitals: Vitals, hasRealData: boolean): string[] {
   if (!hasRealData) {
     return ['Awaiting live sensor data…'];
@@ -77,20 +79,33 @@ function buildAiInsights(vitals: Vitals, hasRealData: boolean): string[] {
   return insights.slice(0, 4);
 }
 
-interface DesktopRightSidebarProps {
-  waveforms: number[][];
+function resolveInsightLines(
+  insights: CoachInsightsState,
+  vitals: Vitals,
+  hasRealData: boolean
+): string[] {
+  if (insights.bullets && insights.bullets.length > 0) return insights.bullets;
+  if (insights.status === 'analyzing' || insights.loading) return ['Analyzing...'];
+  if (insights.status === 'error') return buildAiInsights(vitals, hasRealData);
+  if (!hasRealData) return ['Awaiting live sensor data…'];
+  return ['Analyzing...'];
 }
 
-const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) => {
+interface DesktopRightSidebarProps {
+  waveforms: number[][];
+  insights: CoachInsightsState;
+}
+
+const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
+  waveforms,
+  insights,
+}) => {
   const alerts = useStore(s => s.alerts);
   const vitals = useStore(s => s.vitals);
   const hasRealData = useStore(s => s.hasRealData);
 
-  const aiInsights = React.useMemo(
-    () => buildAiInsights(vitals, hasRealData),
-    [vitals, hasRealData]
-  );
-
+  const aiInsights = resolveInsightLines(insights, vitals, hasRealData);
+  const alertHighlight = insights.severity === 'alert';
   const activeAlerts = alerts;
 
   return (
@@ -102,7 +117,12 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
       </div>
 
       <div className="px-4 pb-4 flex flex-col">
-        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60">
+        <ul
+          className={cn(
+            'flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60',
+            alertHighlight && 'rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2'
+          )}
+        >
           {aiInsights.map((insight) => (
             <li
               key={insight}
@@ -143,7 +163,7 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({ waveforms }) 
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             24H Trends
           </h3>
-          {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (sin usar, dispositivo no lo manda) */}
+          {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (unused) */}
           <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color="#2dd4bf" />
           <MiniTrendGraph label="SpO2" data={waveforms[9]} color="#5eead4" />
         </div>

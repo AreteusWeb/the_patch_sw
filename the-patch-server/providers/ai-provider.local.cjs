@@ -279,9 +279,36 @@ async function generateSessionSummary({ messages: _messages }) {
   return '[local mock summary] Discussed recovery and training topics.';
 }
 
+/**
+ * Fixed English bullets for local mode (no Gemini call).
+ * @param {{ mode: 'normal'|'fitness', metricsSnapshot?: object|null }} args
+ * @returns {Promise<{ bullets: string[] }>}
+ */
+async function generateInsights({ mode }) {
+  if (mode === 'fitness') {
+    return {
+      bullets: [
+        'Breathing looks steady — keep long exhales on the easy stretches.',
+        'Heart rate is in a workable training band for this block.',
+        'Ease intensity if SpO2 dips or breathing gets choppy.',
+        'Use short recoveries to reset posture before the next effort.',
+      ],
+    };
+  }
+  return {
+    bullets: [
+      'Heart rate is within the expected monitoring range.',
+      'SpO2 is holding in a stable band for this session.',
+      'Respiration rate shows no acute excursion right now.',
+      'Continue live monitoring — values will refresh when vitals shift.',
+    ],
+  };
+}
+
 module.exports = {
   generateCoachReply,
   generateSessionSummary,
+  generateInsights,
   getCoachTools,
   searchReferenceImage,
   searchReferenceVideo,

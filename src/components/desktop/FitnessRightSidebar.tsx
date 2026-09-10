@@ -128,7 +128,6 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
   const hrv = getHrvProxyMs(vitals.heartRate.value, live);
   const readiness = getReadinessLabel(recovery.score, live);
   const notes = resolvePerformanceNotes(insights, vitals, live);
-  const alertHighlight = insights.severity === 'alert';
   const activeAlerts = alerts;
 
   return (
@@ -183,12 +182,7 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
           </li>
         </ul>
 
-        <div
-          className={cn(
-            'py-3 border-b border-slate-800/60',
-            alertHighlight && 'rounded-lg border border-rose-500/30 bg-rose-500/10 px-3'
-          )}
-        >
+        <div className="py-3 border-b border-slate-800/60">
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
             AI Performance Notes
           </h3>

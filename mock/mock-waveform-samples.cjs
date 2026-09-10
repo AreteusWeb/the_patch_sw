@@ -2,14 +2,16 @@
  * Shared realistic waveform sample generators for mock ESP32 scripts.
  * Values are converted to raw ADC so rawToMv() on the frontend yields ~±1 mV ECG.
  *
- * Vitals (HR / Resp / SpO2) change every 15s so scrubbing the desktop timeline
- * shows clearly different past values (elevated → low → moderate).
+ * Vitals (HR / Resp / SpO2) change every 60s so scrubbing still shows past
+ * values, without flipping alert/watch bands every few seconds (better for
+ * testing AI Insights cooldown + flow).
  */
 
 const ADC_VAL_MAX = 8388607;
 const ADC_VAL_MAX_MV = 1200;
 const SAMPLE_RATE_HZ = 250;
-const PHASE_SECONDS = 15;
+/** Override: PHASE_SECONDS=15 node mock/mock-esp32-ui.cjs */
+const PHASE_SECONDS = Number(process.env.PHASE_SECONDS ?? 60);
 
 const LEAD_SCALE = {
   'Lead I': 1.0,
@@ -22,12 +24,16 @@ const LEAD_SCALE = {
   V6: 0.8,
 };
 
-/** Stepped vitals so rewind shows past Resp/HR/SpO2 changes. */
+/**
+ * Stepped vitals for timeline scrubbing.
+ * Kept mostly in "normal" severity so the UI is not flooded with alerts;
+ * one mild "watch" phase remains so insights can still re-fire.
+ */
 const VITAL_PHASES = [
-  { label: 'baseline',  hr: 70,  resp: 14, spo2: 98 },
-  { label: 'elevated',  hr: 105, resp: 24, spo2: 94 },
-  { label: 'low',       hr: 52,  resp: 10, spo2: 97 },
-  { label: 'moderate',  hr: 82,  resp: 18, spo2: 96 },
+  { label: 'baseline', hr: 72, resp: 14, spo2: 98 },
+  { label: 'elevated', hr: 108, resp: 22, spo2: 95 }, // mild watch (HR moderate)
+  { label: 'easy',     hr: 64, resp: 13, spo2: 97 },
+  { label: 'moderate', hr: 82, resp: 17, spo2: 96 },
 ];
 
 function vitalsAtTime(tSec) {

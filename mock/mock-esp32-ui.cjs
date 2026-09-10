@@ -7,6 +7,7 @@
  * Usage:
  *   node mock/mock-esp32-ui.cjs
  *   set PACKETS_TO_SEND=1800&& node mock/mock-esp32-ui.cjs   # ~3 min (Windows)
+ *   set PHASE_SECONDS=15&& node mock/mock-esp32-ui.cjs       # faster vital phases
  *
  * Requires the app MAC in profile to match MOCK_MAC (default AA:BB:CC:DD:EE:FF).
  */

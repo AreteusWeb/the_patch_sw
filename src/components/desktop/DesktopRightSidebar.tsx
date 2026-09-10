@@ -105,7 +105,6 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
   const hasRealData = useStore(s => s.hasRealData);
 
   const aiInsights = resolveInsightLines(insights, vitals, hasRealData);
-  const alertHighlight = insights.severity === 'alert';
   const activeAlerts = alerts;
 
   return (
@@ -117,12 +116,7 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
       </div>
 
       <div className="px-4 pb-4 flex flex-col">
-        <ul
-          className={cn(
-            'flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60',
-            alertHighlight && 'rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2'
-          )}
-        >
+        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60">
           {aiInsights.map((insight) => (
             <li
               key={insight}

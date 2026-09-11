@@ -438,6 +438,10 @@ function computeInsightsSeverity(metricsSnapshot) {
 const INSIGHTS_COOLDOWN_MS = 75_000;
 const insightsCacheByKey = new Map();
 
+/** Live token: 1 successful issue per uid / 60s (cloud only). Not Firestore. */
+const LIVE_TOKEN_COOLDOWN_MS = 60_000;
+const liveTokenLastSuccessByUid = new Map();
+
 /**
  * Close a coach session after generating a Gemini summary of its messages.
  * Shared by idle-timeout rollover and POST /api/coach/new-session.
@@ -818,6 +822,19 @@ async function handleCoachApi(req, res) {
 
   // ── Gemini Live API ephemeral token (POC only — no Firestore) ────────────
   if (req.method === 'POST' && url.pathname === '/api/coach/live-token') {
+    // Same in-memory uid cooldown pattern as /api/coach/insights (cloud only).
+    if (APP_MODE !== 'local') {
+      const lastOk = liveTokenLastSuccessByUid.get(uid);
+      const nowCooldown = Date.now();
+      if (lastOk != null && nowCooldown - lastOk < LIVE_TOKEN_COOLDOWN_MS) {
+        sendJson(req, res, 429, {
+          error: 'rate_limited',
+          message: 'Too many requests, try again shortly',
+        });
+        return true;
+      }
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       sendJson(req, res, 503, {
@@ -877,6 +894,10 @@ async function handleCoachApi(req, res) {
         console.error('[coach/live-token] unexpected token response:', tokenRes);
         sendJson(req, res, 500, { error: 'live_token_failed' });
         return true;
+      }
+
+      if (APP_MODE !== 'local') {
+        liveTokenLastSuccessByUid.set(uid, Date.now());
       }
 
       console.log(

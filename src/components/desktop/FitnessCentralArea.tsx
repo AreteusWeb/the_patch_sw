@@ -53,7 +53,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
 
   const tempDisplay =
     typeof vitals.temperature.value === 'number'
-      ? `${vitals.temperature.value}�C`
+      ? `${vitals.temperature.value}\u00B0C`
       : '--';
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
@@ -226,12 +226,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span>
-                Accelerometer � Steps:{' '}
+                Accelerometer · Steps:{' '}
                 <span className="text-white tabular-nums font-medium">
                   {activity.steps.toLocaleString()}
                 </span>
               </span>
-              <span className="text-slate-500">Pace Trend � {activity.activityType}</span>
+              <span className="text-slate-500">Pace Trend · {activity.activityType}</span>
             </div>
           </div>
         </section>
@@ -247,7 +247,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 {zone.label} Zone
               </span>
               <span className="text-[10px] text-slate-500">
-                Combined view � Live waveform energy
+                Combined view · Live waveform energy
               </span>
             </div>
             <div className="h-16 flex items-end gap-px overflow-hidden">

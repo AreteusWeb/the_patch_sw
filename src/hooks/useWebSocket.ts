@@ -851,7 +851,7 @@ export const useWebSocket = () => {
 
       ws.onmessage = ({ data }) => {
         if (data instanceof ArrayBuffer) {
-          // Auscultation audio — stored elsewhere if/when a panel needs it.
+          // Binary payloads ignored — auscultation audio is not supported.
           return;
         }
         try {

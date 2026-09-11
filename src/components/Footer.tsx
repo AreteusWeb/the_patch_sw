@@ -25,7 +25,7 @@ const Footer: React.FC = () => {
         <Battery size={10} className={cn("opacity-60", batteryColor)} />
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">
           Battery: <span className={cn("text-slate-300", batteryColor)}>
-            {batteryLevel != null ? `${batteryLevel}%` : '--'}
+            {batteryLevel != null ? `${batteryLevel}%` : 'Waiting for sensor'}
           </span>
         </span>
       </div>

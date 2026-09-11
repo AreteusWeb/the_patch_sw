@@ -1058,22 +1058,8 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', async (data, isBinary) => {
 
-    // ── Binary packet — auscultation audio ───────────────────────────────────
+    // ── Binary packet — dropped (auscultation audio cancelled; not used) ─────
     if (isBinary) {
-      if (ws.role !== 'device') return;
-
-      // Relay only to the webclient that owns this device
-      let relayed = 0;
-      for (const client of webClients) {
-        if (client.readyState === client.OPEN && client.deviceMac === ws.deviceId) {
-          client.send(data, { binary: true });
-          relayed++;
-        }
-      }
-      console.log(`[BIN] device=${ws.deviceId} | bytes=${data.byteLength} | relay→${relayed} clients`);
-      // NOTE: auscultation audio does NOT enter the GCS/AI pipeline —
-      // Jennifer confirmed the model only uses ECG signals. This binary
-      // frame stays only in the live relay to the frontend, as before.
       return;
     }
 

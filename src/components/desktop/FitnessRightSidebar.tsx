@@ -164,13 +164,6 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
           <li className="flex items-start gap-2">
             <span className="text-teal-500 mt-0.5">•</span>
             <span>
-              Sleep Quality Impact:{' '}
-              <span className="text-slate-500 italic">Pending sleep sync</span>
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-teal-500 mt-0.5">•</span>
-            <span>
               Recovery Score:{' '}
               <span className="text-white font-medium tabular-nums">
                 {live ? `${recovery.score}/100` : '--'}
@@ -226,7 +219,7 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
 
         <div className="pt-1">
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
-            24H / Session Trends
+            Session Trends
           </h3>
           <MiniTrendGraph label="HR Trend" data={waveforms[1]} color="#2dd4bf" />
           <MiniTrendGraph

@@ -358,8 +358,14 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
           </span>
           <span className={cn('text-[11px] font-medium tracking-wide leading-tight', patchColor)}>
             {patchLabel}
-            {patchLive && batteryLevel != null && (
-              <span className="text-slate-500 font-normal"> • {batteryLevel}% Battery</span>
+            {patchLive && (
+              <span className="text-slate-500 font-normal">
+                {' '}
+                •{' '}
+                {batteryLevel != null
+                  ? `${batteryLevel}% Battery`
+                  : 'Battery: waiting for sensor'}
+              </span>
             )}
           </span>
         </div>

@@ -49,7 +49,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
   };
 
   const tempDisplay = typeof vitals.temperature.value === 'number'
-    ? `${vitals.temperature.value}�C`
+    ? `${vitals.temperature.value}\u00B0C`
     : '--';
 
   return (

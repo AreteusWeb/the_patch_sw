@@ -6,7 +6,6 @@ Real-time monitoring of multi-channel ECG data from wearable chest patches ("The
 - Real-time WebSocket streaming of 10-channel ECG data
 - Live multi-channel visualization with ECG-style grids
 - Basic heart rate (BPM), SpO2, and respiration rate estimation
-- Real-time audio playback of heart sounds (auscultation)
 - Over-the-Air (OTA) firmware updates
 - Multi-user support with device ownership
 

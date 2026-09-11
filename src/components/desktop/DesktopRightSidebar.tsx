@@ -155,7 +155,7 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
 
         <div className="pt-1">
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
-            24H Trends
+            Session Trends
           </h3>
           {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (unused) */}
           <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color="#2dd4bf" />

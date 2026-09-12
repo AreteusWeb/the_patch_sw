@@ -5,6 +5,7 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { IS_LOCAL_MODE } from '../lib/appConfig';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '../lib/legalLinks';
 
 /**
  * Properties for the RegisterScreen component.
@@ -34,12 +35,18 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [mac,      setMac]      = useState('');
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!acceptedLegal) {
+      setError('Please agree to the Privacy Policy and Terms of Service.');
+      return;
+    }
 
     const normalizedMac = normalizeMac(mac);
     if (!normalizedMac) {
@@ -75,6 +82,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
 
       // onAuthStateChanged in useAuth detects the new user → dashboard
     } catch (err: unknown) {
+      setAcceptedLegal(false);
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('email-already-in-use')) {
         setError('An account with this email already exists.');
@@ -90,7 +98,7 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
     }
   };
 
-  const isReady = name && email && password && mac && !loading;
+  const isReady = name && email && password && mac && acceptedLegal && !loading;
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 relative overflow-hidden font-sans">
@@ -231,6 +239,39 @@ export default function RegisterScreen({ onBackToLogin }: RegisterScreenProps) {
                 Found on the label of your The Patch device
               </p>
             </div>
+
+            {/* Legal acceptance — required before account creation */}
+            <label className="flex items-start gap-3 cursor-pointer select-none px-1">
+              <input
+                type="checkbox"
+                checked={acceptedLegal}
+                onChange={e => setAcceptedLegal(e.target.checked)}
+                disabled={loading}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-950 text-teal-400 focus:ring-teal-500/40 focus:ring-offset-0 disabled:opacity-60"
+              />
+              <span className="text-[11px] text-slate-400 leading-relaxed">
+                I have read and agree to the{' '}
+                <a
+                  href={PRIVACY_POLICY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal-400 hover:text-teal-300 underline underline-offset-2"
+                  onClick={e => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+                {' '}and{' '}
+                <a
+                  href={TERMS_OF_SERVICE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-teal-400 hover:text-teal-300 underline underline-offset-2"
+                  onClick={e => e.stopPropagation()}
+                >
+                  Terms of Service
+                </a>
+              </span>
+            </label>
 
             {/* Error */}
             {error && (

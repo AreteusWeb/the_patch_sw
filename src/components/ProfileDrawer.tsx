@@ -13,6 +13,7 @@ import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import useStore from '../store/useStore';
 import { API_BASE } from '../lib/appConfig';
+import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '../lib/legalLinks';
 
 /**
  * Properties for the ProfileDrawer component.
@@ -437,6 +438,30 @@ const ProfileDrawer: React.FC<ProfileDrawerProps> = ({ open, onClose }) => {
                   </AnimatePresence>
                 </div>
               ))}
+
+              <div className="pt-4 mt-2 border-t border-slate-800/80">
+                <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest px-1 mb-2">
+                  Legal
+                </p>
+                <div className="flex flex-col gap-1.5 px-1">
+                  <a
+                    href={PRIVACY_POLICY_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[12px] text-teal-400 hover:text-teal-300 transition-colors underline underline-offset-2"
+                  >
+                    Privacy Policy
+                  </a>
+                  <a
+                    href={TERMS_OF_SERVICE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[12px] text-teal-400 hover:text-teal-300 transition-colors underline underline-offset-2"
+                  >
+                    Terms of Service
+                  </a>
+                </div>
+              </div>
             </div>
           </motion.div>
         </>

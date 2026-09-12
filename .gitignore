@@ -9,3 +9,4 @@ coverage/
 !.env.example
 !**/.env.example
 the-patch-server/local-data/
+login.json

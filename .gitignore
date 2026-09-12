@@ -10,3 +10,17 @@ coverage/
 !**/.env.example
 the-patch-server/local-data/
 login.json
+scripts/reset-test-password.cjs
+
+# Credentials / keys (do not commit)
+service-account*.json
+*firebase-adminsdk*.json
+**/credentials.json
+**/client_secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+*.keystore

@@ -39,12 +39,21 @@ export interface Activity {
   activityType: string;
 }
 
+/**
+ * Sensor data freshness for monitoring UI.
+ * LIVE = patch streaming now; STALE = last known after disconnect;
+ * DEMO = built-in simulator stream; NO_DATA = never received samples.
+ */
+export type DataFreshness = 'LIVE' | 'STALE' | 'DEMO' | 'NO_DATA';
+
 /** Real-time clinical alert details. */
 export interface Alert {
   id: string;
   timestamp: string;
   message: string;
   severity: 'low' | 'medium' | 'high';
+  /** True once the patch left LIVE — shown as historical, not actionable. */
+  historical?: boolean;
 }
 
 /** Raw JSON message packet from the device containing multi-channel waveforms. */
@@ -89,6 +98,10 @@ export interface AppState {
    * While false, vitals UI shows '--' instead of placeholder defaults.
    */
   hasRealData: boolean;
+  /** Wall-clock ms of the last packet that carried real samples. */
+  lastRealDataAt: number | null;
+  /** True while the built-in WS simulator (startSim) is feeding packets. */
+  isSimulatedStream: boolean;
   /** Fitness Start Session state machine (front-only). */
   fitnessSessionStatus: FitnessSessionStatus;
   /** Wall-clock ms when the current recording segment started; null if not recording. */
@@ -120,6 +133,10 @@ export interface AppActions {
   setEcgGain: (gain: EcgGainSetting) => void;
   setEcgMeasureEnabled: (enabled: boolean) => void;
   setHasRealData: (hasRealData: boolean) => void;
+  setLastRealDataAt: (ms: number | null) => void;
+  setIsSimulatedStream: (simulated: boolean) => void;
+  /** Mark every alert as historical (called when leaving LIVE). */
+  markAlertsHistorical: () => void;
   startFitnessSession: () => void;
   pauseFitnessSession: () => void;
   resumeFitnessSession: () => void;

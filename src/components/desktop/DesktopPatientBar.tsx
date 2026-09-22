@@ -15,6 +15,7 @@ import { openElectrodeGuide } from '../../lib/electrodeGuide';
 import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
 
 /** Calendar day index from account createdAt. Day 1 = the start date. */
 function monitoringDayNumber(startMs: number, now = new Date()): number {
@@ -57,7 +58,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
 }) => {
   const {
     currentUser,
-    isConnected,
     connectionStatus,
     batteryLevel,
     historyOffset,
@@ -69,7 +69,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
     desktopLayout,
     setDesktopLayout,
     vitals,
-    hasRealData,
     fitnessSessionStatus,
     startFitnessSession,
     pauseFitnessSession,
@@ -84,27 +83,41 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
   const accountCreatedAt = useStore(s => s.accountCreatedAt);
   const isViewingPast = historyOffset > 0;
   const isFitness = desktopLayout === 'fitness';
+  const { freshness, isLiveData } = useDataFreshness();
 
-  const patchLive = isConnected && hasRealData;
+  // Align header STATUS with the same freshness model as Quick Vitals / waveforms.
+  const patchLive = isLiveData;
 
   const statusLabel = isViewingPast
     ? 'REVIEWING HISTORY'
-    : patchLive
-      ? 'CONNECTED'
-      : connectionStatus === 'Connecting'
-        ? 'WAITING FOR PATCH'
-        : 'OFFLINE';
+    : freshness === 'DEMO'
+      ? 'DEMO'
+      : patchLive
+        ? 'CONNECTED'
+        : connectionStatus === 'Connecting'
+          ? 'WAITING FOR PATCH'
+          : 'OFFLINE';
 
   const statusColor = isViewingPast
     ? 'text-amber-400'
-    : patchLive
-      ? 'text-emerald-400'
-      : connectionStatus === 'Connecting'
-        ? 'text-amber-400'
-        : 'text-rose-400';
+    : freshness === 'DEMO'
+      ? 'text-amber-400'
+      : patchLive
+        ? 'text-emerald-400'
+        : connectionStatus === 'Connecting'
+          ? 'text-amber-400'
+          : 'text-rose-400';
 
-  const patchLabel = patchLive ? 'Patch Connected' : 'Patch Disconnected';
-  const patchColor = patchLive ? 'text-emerald-400' : 'text-rose-400';
+  const patchLabel = patchLive
+    ? 'Patch Connected'
+    : freshness === 'DEMO'
+      ? 'Demo Stream'
+      : 'Patch Disconnected';
+  const patchColor = patchLive
+    ? 'text-emerald-400'
+    : freshness === 'DEMO'
+      ? 'text-amber-400'
+      : 'text-rose-400';
 
   const sessionElapsed = useFitnessSessionElapsed();
   const sessionActive =

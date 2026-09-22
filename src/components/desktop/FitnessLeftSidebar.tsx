@@ -4,6 +4,8 @@ import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { getActivityIntensity, getHrZone } from '../../utils/fitnessMetrics';
 import type { VitalStatus } from '../../types';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   if (trend === 'up') return <ArrowUp size={10} className="text-amber-400" />;
@@ -11,7 +13,11 @@ const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   return <Minus size={10} className="text-slate-600" />;
 };
 
-const MiniSparkline: React.FC<{ data: number[]; color?: string }> = ({ data, color = '#2dd4bf' }) => {
+const MiniSparkline: React.FC<{ data: number[]; color?: string; muted?: boolean }> = ({
+  data,
+  color = '#2dd4bf',
+  muted = false,
+}) => {
   const samples = data.slice(-24);
   if (samples.length < 2) {
     return (
@@ -26,14 +32,14 @@ const MiniSparkline: React.FC<{ data: number[]; color?: string }> = ({ data, col
   const max = Math.max(...samples);
   const range = max - min || 1;
   return (
-    <div className="h-5 flex items-end gap-px">
+    <div className={cn('h-5 flex items-end gap-px', muted && 'opacity-45')}>
       {samples.map((val, i) => (
         <div
           key={i}
           className="flex-1 rounded-sm opacity-80"
           style={{
             height: `${Math.max(8, ((val - min) / range) * 100)}%`,
-            backgroundColor: color,
+            backgroundColor: muted ? '#64748b' : color,
           }}
         />
       ))}
@@ -48,9 +54,8 @@ interface FitnessLeftSidebarProps {
 const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) => {
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
-  const hasRealData = useStore(s => s.hasRealData);
-  // Keep last/history vitals visible after disconnect so scrubbing still works
-  const showDash = !hasRealData;
+  const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
+  const showDash = freshness === 'NO_DATA';
 
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
@@ -59,50 +64,67 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-r border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
           Key Metrics
         </h2>
+        <DataFreshnessBadge
+          freshness={freshness}
+          staleAgeLabel={staleAgeLabel}
+          compact
+        />
       </div>
 
       <div className="px-4 pb-4 flex flex-col gap-1">
         {/* Heart Rate + Zone */}
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Heart Rate
           </div>
           <div className="flex items-baseline gap-1.5 mb-2">
-            <span className={cn('text-3xl font-light tabular-nums', showDash ? 'text-slate-600' : 'text-white')}>
+            <span className={cn(
+              'text-3xl font-light tabular-nums',
+              showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+            )}>
               {showDash ? '--' : hr}
             </span>
             {!showDash && <span className="text-xs text-slate-500">bpm</span>}
-            {!showDash && <TrendIcon trend={vitals.heartRate.trend} />}
+            {isLiveData && !showDash && <TrendIcon trend={vitals.heartRate.trend} />}
           </div>
           {!showDash && (
             <>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden mb-1.5">
                 <div
-                  className={cn('h-full rounded-full transition-all duration-500', zone.barClass)}
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    dimmed ? 'bg-slate-500/60' : zone.barClass
+                  )}
                   style={{ width: `${zone.intensity}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[10px] mb-2">
-                <span style={{ color: zone.color }} className="font-semibold">
+                <span
+                  style={{ color: dimmed ? '#94a3b8' : zone.color }}
+                  className="font-semibold"
+                >
                   Zone: {zone.label}
                 </span>
               </div>
             </>
           )}
-          <MiniSparkline data={waveforms[1]} color={zone.color} />
+          <MiniSparkline data={waveforms[1]} color={zone.color} muted={dimmed} />
         </div>
 
         {/* SpO2 */}
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             SpO2
           </div>
           <div className="flex items-baseline gap-1.5 mb-2">
-            <span className={cn('text-2xl font-light tabular-nums', showDash ? 'text-slate-600' : 'text-white')}>
+            <span className={cn(
+              'text-2xl font-light tabular-nums',
+              showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+            )}>
               {showDash ? '--' : vitals.spo2.value}
             </span>
             {!showDash && <span className="text-xs text-slate-500">%</span>}
@@ -110,7 +132,10 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           {!showDash && (
             <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-teal-400/80 rounded-full transition-all duration-500"
+                className={cn(
+                  'h-full rounded-full transition-all duration-500',
+                  dimmed ? 'bg-slate-500/60' : 'bg-teal-400/80'
+                )}
                 style={{ width: `${Math.min(100, spo2Percent)}%` }}
               />
             </div>
@@ -118,22 +143,28 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
         </div>
 
         {/* BP */}
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             BP (PTT)
           </div>
-          <div className={cn('text-2xl font-light tabular-nums', showDash ? 'text-slate-600' : 'text-white')}>
+          <div className={cn(
+            'text-2xl font-light tabular-nums',
+            showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+          )}>
             {showDash ? '--' : vitals.bloodPressure.value}
           </div>
         </div>
 
         {/* Respiration */}
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Respiration
           </div>
           <div className="flex items-baseline gap-1.5">
-            <span className={cn('text-2xl font-light tabular-nums', showDash ? 'text-slate-600' : 'text-white')}>
+            <span className={cn(
+              'text-2xl font-light tabular-nums',
+              showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+            )}>
               {showDash ? '--' : vitals.respirationRate.value}
             </span>
             {!showDash && <span className="text-xs text-slate-500">bpm</span>}
@@ -141,24 +172,27 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
         </div>
 
         {/* Temperature */}
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Temperature
           </div>
           <div className="flex items-baseline gap-1.5 mb-2">
-            <span className={cn('text-2xl font-light tabular-nums', showDash || vitals.temperature.value === '--' ? 'text-slate-600' : 'text-white')}>
+            <span className={cn(
+              'text-2xl font-light tabular-nums',
+              showDash || vitals.temperature.value === '--' ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+            )}>
               {showDash || vitals.temperature.value === '--'
                 ? '--'
                 : `${vitals.temperature.value}°C`}
             </span>
-            {!showDash && vitals.temperature.value !== '--' && (
+            {isLiveData && !showDash && vitals.temperature.value !== '--' && (
               <TrendIcon trend={vitals.temperature.trend} />
             )}
           </div>
         </div>
 
         {/* Activity */}
-        <div className="py-3">
+        <div className={cn('py-3 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Activity / Movement
           </div>
@@ -170,7 +204,10 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           </div>
           <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-teal-400/80 rounded-full transition-all duration-500"
+              className={cn(
+                'h-full rounded-full transition-all duration-500',
+                dimmed ? 'bg-slate-500/60' : 'bg-teal-400/80'
+              )}
               style={{ width: `${intensity.level}%` }}
             />
           </div>

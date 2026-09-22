@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import type { VitalStatus } from '../../types';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   if (trend === 'up') return <ArrowUp size={10} className="text-amber-400" />;
@@ -10,7 +12,11 @@ const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   return <Minus size={10} className="text-slate-600" />;
 };
 
-const MiniSparkline: React.FC<{ data: number[]; color?: string }> = ({ data, color = '#2dd4bf' }) => {
+const MiniSparkline: React.FC<{ data: number[]; color?: string; muted?: boolean }> = ({
+  data,
+  color = '#2dd4bf',
+  muted = false,
+}) => {
   const samples = data.slice(-24);
   if (samples.length < 2) {
     return <div className="h-6 flex items-end gap-px">{Array.from({ length: 12 }).map((_, i) => (
@@ -23,14 +29,14 @@ const MiniSparkline: React.FC<{ data: number[]; color?: string }> = ({ data, col
   const range = max - min || 1;
 
   return (
-    <div className="h-6 flex items-end gap-px">
+    <div className={cn('h-6 flex items-end gap-px', muted && 'opacity-45')}>
       {samples.map((val, i) => (
         <div
           key={i}
           className="flex-1 rounded-sm opacity-80"
           style={{
             height: `${Math.max(8, ((val - min) / range) * 100)}%`,
-            backgroundColor: color,
+            backgroundColor: muted ? '#64748b' : color,
           }}
         />
       ))}
@@ -55,40 +61,49 @@ const VitalRow: React.FC<VitalRowProps> = ({
   sparkColor,
   barPercent,
 }) => {
-  const hasRealData = useStore(s => s.hasRealData);
-  // Keep last/history vitals visible after disconnect so scrubbing still works
-  const showDash = !hasRealData;
+  const { freshness, dimmed, isLiveData } = useDataFreshness();
+  // NO_DATA → dashes; STALE/DEMO keep last numeric value (dimmed).
+  const showDash = freshness === 'NO_DATA';
+  const showLiveChrome = isLiveData;
 
   return (
-    <div className="py-3 border-b border-slate-800/60 last:border-b-0">
+    <div
+      className={cn(
+        'py-3 border-b border-slate-800/60 last:border-b-0 transition-opacity duration-300',
+        dimmed && 'opacity-50'
+      )}
+    >
       <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
         {label}
       </div>
       <div className="flex items-baseline gap-1.5 mb-2">
         <span className={cn(
           'text-2xl font-light tabular-nums',
-          showDash ? 'text-slate-600' : 'text-white'
+          showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
         )}>
           {showDash ? '--' : status.value}
         </span>
         {unit && !showDash && (
           <span className="text-xs text-slate-500">{unit}</span>
         )}
-        {!showDash && <TrendIcon trend={status.trend} />}
+        {showLiveChrome && !showDash && <TrendIcon trend={status.trend} />}
       </div>
 
       {barPercent != null && !showDash && (
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
           <div
-            className="h-full bg-teal-500/70 rounded-full transition-all duration-500"
+            className={cn(
+              'h-full rounded-full transition-all duration-500',
+              dimmed ? 'bg-slate-500/60' : 'bg-teal-500/70'
+            )}
             style={{ width: `${Math.min(100, Math.max(0, barPercent))}%` }}
           />
         </div>
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <MiniSparkline data={sparkData} color={sparkColor} />
-        {!showDash && (
+        <MiniSparkline data={sparkData} color={sparkColor} muted={dimmed} />
+        {showLiveChrome && !showDash && (
           <span className="text-[9px] text-slate-600 uppercase tracking-wider flex-shrink-0">
             Trend
           </span>
@@ -109,15 +124,21 @@ interface DesktopLeftSidebarProps {
 const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) => {
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
+  const { dimmed, freshness, staleAgeLabel } = useDataFreshness();
 
   const spo2Percent = typeof vitals.spo2.value === 'number' ? vitals.spo2.value : 0;
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-r border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-1">
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
+        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500 mb-0">
           Quick Vitals
         </h2>
+        <DataFreshnessBadge
+          freshness={freshness}
+          staleAgeLabel={staleAgeLabel}
+          compact
+        />
       </div>
 
       <div className="px-4 pb-4">
@@ -162,7 +183,7 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
             : 0}
         />
 
-        <div className="py-3">
+        <div className={cn('py-3 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Activity
           </div>

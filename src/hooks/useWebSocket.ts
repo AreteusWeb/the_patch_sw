@@ -491,12 +491,36 @@ export const useWebSocket = () => {
     // Patch is "connected" only once live sensor samples arrive — not on WS auth alone.
     if (receivedSamples) {
       const store = useStore.getState();
+      const now = Date.now();
+      store.setLastRealDataAt(now);
+      if (store.isSimulatedStream && !simRef.current) {
+        store.setIsSimulatedStream(false);
+      }
       if (!store.isConnected) {
         store.setConnected(true);
         store.setConnectionStatus('Stable');
       }
     }
   }, [addSessionPoints]);
+
+  /**
+   * Stream watchdog: the browser WS to Cloud Run stays open when only the
+   * mock/patch dies. Without this (or a server `device_disconnected` notify),
+   * isConnected would stay true forever and the UI would never go STALE.
+   * Packets arrive ~every 100ms; 2.5s of silence ⇒ treat as disconnected.
+   */
+  const STREAM_SILENCE_MS = 2_500;
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const store = useStore.getState();
+      if (!store.isConnected) return;
+      if (store.lastRealDataAt == null) return;
+      if (Date.now() - store.lastRealDataAt < STREAM_SILENCE_MS) return;
+      store.setConnected(false);
+      store.setConnectionStatus('Disconnected');
+    }, 500);
+    return () => window.clearInterval(id);
+  }, []);
 
   const historyOffsetRef = useRef(historyOffset);
   useEffect(() => { historyOffsetRef.current = historyOffset; }, [historyOffset]);
@@ -683,7 +707,13 @@ export const useWebSocket = () => {
       // CHANGE: Lead III derivation removed entirely — per decision, we no
       // longer synthesize a lead the device doesn't send.
 
-      setWaveforms(next);
+      const storeSnap = useStore.getState();
+      const patchStreaming = storeSnap.isConnected;
+      // Freeze the last captured strip when the patch is offline (no scroll/redraw churn).
+      // Scrubbing history still refreshes the view from the ring buffer.
+      if (patchStreaming || offsetSec > 0) {
+        setWaveforms(next);
+      }
 
       // Vitals every ~1s
       vitalTick++;
@@ -698,33 +728,37 @@ export const useWebSocket = () => {
       const liveHr   = estimateHR(leadIIRing.slice(750));
       const liveSpo2 = estimateSpO2(ppgRing.slice(250));
       const liveRr   = estimateResp(respRing.slice(1500));
-      vitalsHistoryRef.current.push({
-        atSize: leadIIRing.size,
-        hr: liveHr > 0 ? liveHr : prevVitals.current.hr,
-        spo2: liveSpo2,
-        rr: liveRr > 0 ? liveRr : 16,
-      });
-      if (vitalsHistoryRef.current.length > MAX_VITAL_SNAPS) {
-        vitalsHistoryRef.current.splice(0, vitalsHistoryRef.current.length - MAX_VITAL_SNAPS);
-      }
 
-      // Live-edge Recovery Score for the session trend chart (not scrub view).
-      // First point as soon as HR is real, then one sample every 30s.
-      if (liveHr > 0) {
-        const now = Date.now();
-        if (
-          lastRecoveryAtRef.current === 0 ||
-          now - lastRecoveryAtRef.current >= RECOVERY_SAMPLE_MS
-        ) {
-          const score = recoveryScoreFromLive(
-            liveHr,
-            liveSpo2,
-            liveRr > 0 ? liveRr : 16,
-          );
-          const next = recoveryTrendRef.current.concat(score).slice(-RECOVERY_TREND_MAX);
-          recoveryTrendRef.current = next;
-          lastRecoveryAtRef.current = now;
-          setRecoveryTrend(next);
+      // Only advance history / recovery while samples are still arriving.
+      if (patchStreaming) {
+        vitalsHistoryRef.current.push({
+          atSize: leadIIRing.size,
+          hr: liveHr > 0 ? liveHr : prevVitals.current.hr,
+          spo2: liveSpo2,
+          rr: liveRr > 0 ? liveRr : 16,
+        });
+        if (vitalsHistoryRef.current.length > MAX_VITAL_SNAPS) {
+          vitalsHistoryRef.current.splice(0, vitalsHistoryRef.current.length - MAX_VITAL_SNAPS);
+        }
+
+        // Live-edge Recovery Score for the session trend chart (not scrub view).
+        // First point as soon as HR is real, then one sample every 30s.
+        if (liveHr > 0) {
+          const now = Date.now();
+          if (
+            lastRecoveryAtRef.current === 0 ||
+            now - lastRecoveryAtRef.current >= RECOVERY_SAMPLE_MS
+          ) {
+            const score = recoveryScoreFromLive(
+              liveHr,
+              liveSpo2,
+              liveRr > 0 ? liveRr : 16,
+            );
+            const nextTrend = recoveryTrendRef.current.concat(score).slice(-RECOVERY_TREND_MAX);
+            recoveryTrendRef.current = nextTrend;
+            lastRecoveryAtRef.current = now;
+            setRecoveryTrend(nextTrend);
+          }
         }
       }
 
@@ -745,11 +779,17 @@ export const useWebSocket = () => {
         spo2 = pastSpo2;
         rr   = pastRr > 0 ? pastRr : (snap?.rr ?? rr);
         if (snap && pastSpo2 === 98) spo2 = snap.spo2;
+        applyDisplayVitals(hr, spo2, rr);
+        return;
       }
+
+      // LIVE edge only — keep last vitals frozen while STALE / waiting for patch.
+      if (!patchStreaming) return;
 
       applyDisplayVitals(hr, spo2, rr);
 
-      if (offsetSec === 0) {
+      // New clinical alerts only while a real device is streaming (not DEMO).
+      if (!storeSnap.isSimulatedStream) {
         if (hr > 120)          addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
         if (hr > 0 && hr < 45) addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Low HR: ${hr} BPM`, severity: 'high' });
         if (spo2 < 90)         addAlert({ timestamp: new Date().toLocaleTimeString(), message: `SpO2 Drop: ${spo2}%`, severity: 'high' });
@@ -766,10 +806,12 @@ export const useWebSocket = () => {
 
     const stopSim = () => {
       if (simRef.current) { clearInterval(simRef.current); simRef.current = null; }
+      useStore.getState().setIsSimulatedStream(false);
     };
 
     const startSim = () => {
       if (simRef.current) return;
+      useStore.getState().setIsSimulatedStream(true);
       setConnected(true);
       setConnectionStatus('Stable');
 
@@ -812,7 +854,9 @@ export const useWebSocket = () => {
     const connect = () => {
       setConnected(false);
       setConnectionStatus('Connecting');
-      useStore.getState().setHasRealData(false);
+      useStore.getState().setIsSimulatedStream(false);
+      // Keep hasRealData / lastRealDataAt so UI can show STALE last values
+      // while waiting for the patch (WAITING FOR PATCH).
       const ws = new WebSocket(WS_URL);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -867,7 +911,7 @@ export const useWebSocket = () => {
           if (msg.type === 'device_disconnected') {
             setConnected(false);
             setConnectionStatus('Disconnected');
-            useStore.getState().setHasRealData(false);
+            // Keep hasRealData + last vitals → STALE UI (not NO_DATA wipe).
             closeSampleSession();
           }
         } catch { /* ignore non-JSON messages */ }
@@ -876,10 +920,12 @@ export const useWebSocket = () => {
       ws.onclose = () => {
         setConnected(false);
         setConnectionStatus('Disconnected');
+        useStore.getState().setIsSimulatedStream(false);
         // Keep hasRealData if we still have buffered history — scrubbing
-        // past data must keep showing vitals after the stream ends.
+        // past data must keep showing vitals after the stream ends (STALE).
         if (rings.current[LEAD_CHANNEL_INDEX['Lead II']].size === 0) {
           useStore.getState().setHasRealData(false);
+          useStore.getState().setLastRealDataAt(null);
         }
         // startSim(); // SIMULATOR — uncomment only for a local fallback without a real device
         reconnect = setTimeout(connect, 5000);

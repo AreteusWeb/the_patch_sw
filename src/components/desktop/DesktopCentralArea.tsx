@@ -5,6 +5,8 @@ import EcgPaperControls from './EcgPaperControls';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import { cn } from '../../utils/cn';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const MAX_HISTORY_SECONDS = 3600;
 
@@ -26,6 +28,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
 
   const paperGrid = ecgGridEnabled ? 'clinical' : 'off';
   const isLive = historyOffset === 0;
+  const { freshness, dimmed, staleAgeLabel, isLiveData } = useDataFreshness();
 
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => {
@@ -67,12 +70,18 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               <span className="text-[10px] text-slate-600">
                 8 ECG - Resp - SpO2 
               </span>
+              <DataFreshnessBadge
+                freshness={freshness}
+                staleAgeLabel={staleAgeLabel}
+                compact
+              />
             </div>
             <EcgPaperControls />
           </div>
 
           <div className={cn(
-            'rounded-xl border border-white/5 overflow-hidden bg-[#0a0a0f]',
+            'rounded-xl border border-white/5 overflow-hidden bg-[#0a0a0f] transition-opacity duration-300',
+            dimmed && 'opacity-50',
             ecgGridEnabled ? 'flex-shrink-0' : 'flex-1 min-h-[320px]'
           )}>
             <MultiChannelWaveformCanvas
@@ -83,6 +92,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
               paperGrid={paperGrid}
               paperSpeed={ecgPaperSpeed}
               gain={ecgGain}
+              frozen={!isLiveData}
             />
           </div>
 

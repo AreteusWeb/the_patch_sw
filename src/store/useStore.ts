@@ -116,6 +116,8 @@ const useStore = create<
    * While false, VitalsDisplay shows '--' instead of default values.
    */
   hasRealData: false,
+  lastRealDataAt: null,
+  isSimulatedStream: false,
 
   // Fitness session — front-only state machine (idle → recording → paused → ended)
   fitnessSessionStatus: 'idle',
@@ -201,13 +203,35 @@ const useStore = create<
 
   setHasRealData: (v: boolean) => set({ hasRealData: v }),
 
-  setConnected: (connected) =>
+  setLastRealDataAt: (ms) => set({ lastRealDataAt: ms }),
+
+  setIsSimulatedStream: (simulated) => set({ isSimulatedStream: simulated }),
+
+  markAlertsHistorical: () =>
     set((state) => ({
-      isConnected: connected,
-      patchConnectedAt: connected
-        ? (state.patchConnectedAt ?? Date.now())
-        : null,
+      alerts: state.alerts.map((a) =>
+        a.historical ? a : { ...a, historical: true }
+      ),
     })),
+
+  setConnected: (connected) =>
+    set((state) => {
+      // Leaving LIVE → freeze prior alerts as historical (no new actionable alarms).
+      const leavingLive = state.isConnected && !connected;
+      return {
+        isConnected: connected,
+        patchConnectedAt: connected
+          ? (state.patchConnectedAt ?? Date.now())
+          : null,
+        ...(leavingLive
+          ? {
+              alerts: state.alerts.map((a) =>
+                a.historical ? a : { ...a, historical: true }
+              ),
+            }
+          : {}),
+      };
+    }),
 
   setIsLive: (isLive) =>
     set({
@@ -350,15 +374,20 @@ const useStore = create<
     }),
 
   addAlert: (alert) =>
-    set((state) => ({
-      alerts: [
-        {
-          ...alert,
-          id: Math.random().toString(36).substr(2, 9),
-        },
-        ...state.alerts,
-      ].slice(0, 100),
-    })),
+    set((state) => {
+      // Never raise new clinical alerts unless the patch is streaming live.
+      if (!state.isConnected || state.isSimulatedStream) return state;
+      return {
+        alerts: [
+          {
+            ...alert,
+            id: Math.random().toString(36).substr(2, 9),
+            historical: false,
+          },
+          ...state.alerts,
+        ].slice(0, 100),
+      };
+    }),
 
   // ── Event Actions ──────────────────────────────────────────────────────────
 

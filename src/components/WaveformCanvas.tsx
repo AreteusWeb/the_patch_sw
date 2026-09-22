@@ -37,6 +37,8 @@ interface WaveformCanvasProps {
   /** Enable click-drag time/voltage measurement. */
   measureEnabled?: boolean;
   sampleRateHz?: number;
+  /** STALE / DEMO / NO_DATA — draw slate grey trace + hatch. */
+  frozen?: boolean;
 }
 
 interface MeasureState {
@@ -66,6 +68,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   showCalibration = false,
   measureEnabled = false,
   sampleRateHz = ECG_SAMPLE_RATE_HZ,
+  frozen = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -216,7 +219,8 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
     }
 
     ctx.beginPath();
-    ctx.strokeStyle = color;
+    ctx.globalAlpha = frozen ? 0.5 : 1;
+    ctx.strokeStyle = frozen ? 'rgba(148, 163, 184, 0.9)' : color;
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -247,11 +251,27 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
       }
     }
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     if (label) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fillStyle = frozen ? 'rgba(148, 163, 184, 0.55)' : 'rgba(255, 255, 255, 0.5)';
       ctx.font = '10px Roboto Mono, monospace';
       ctx.fillText(label, 8, 14);
+    }
+
+    // Diagonal hatch when the strip is frozen (not a live stream).
+    if (frozen) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+      ctx.lineWidth = 1;
+      const hatch = 10;
+      for (let x = -displayHeight; x < displayWidth + displayHeight; x += hatch) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + displayHeight, displayHeight);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     // ── Measurement overlay ────────────────────────────────────────────────
@@ -289,6 +309,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   }, [
     data, color, lineWidth, height, min, max, label, gridLines, autoScale,
     paperGrid, paperSpeed, gain, showCalibration, measureEnabled, measure, usePaper,
+    frozen,
   ]);
 
   useEffect(() => {

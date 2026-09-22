@@ -63,10 +63,15 @@ const EMPTY: CoachInsightsState = {
 
 export function useCoachInsights(): CoachInsightsState {
   const hasRealData = useStore((s) => s.hasRealData);
+  const isConnected = useStore((s) => s.isConnected);
+  const isSimulatedStream = useStore((s) => s.isSimulatedStream);
   const vitals = useStore((s) => s.vitals);
   const alerts = useStore((s) => s.alerts);
   const desktopLayout = useStore((s) => s.desktopLayout);
   const currentUser = useStore((s) => s.currentUser);
+
+  // Insights only while a real device is LIVE (not STALE / DEMO / NO_DATA).
+  const liveForInsights = hasRealData && isConnected && !isSimulatedStream;
 
   const [state, setState] = useState<CoachInsightsState>(EMPTY);
 
@@ -77,12 +82,12 @@ export function useCoachInsights(): CoachInsightsState {
   const pendingRef = useRef(false);
   const modeRef = useRef<'normal' | 'fitness'>('normal');
   const vitalsRef = useRef(vitals);
-  const hasRealDataRef = useRef(hasRealData);
+  const liveRef = useRef(liveForInsights);
   const userRef = useRef(currentUser);
 
   modeRef.current = desktopLayout === 'fitness' ? 'fitness' : 'normal';
   vitalsRef.current = vitals;
-  hasRealDataRef.current = hasRealData;
+  liveRef.current = liveForInsights;
   userRef.current = currentUser;
 
   const fetchInsights = useCallback(async () => {
@@ -90,7 +95,7 @@ export function useCoachInsights(): CoachInsightsState {
       pendingRef.current = true;
       return;
     }
-    if (!hasRealDataRef.current) return;
+    if (!liveRef.current) return;
 
     fetchingRef.current = true;
     setState((prev) => ({
@@ -115,7 +120,7 @@ export function useCoachInsights(): CoachInsightsState {
           mode: modeRef.current,
           metricsSnapshot: buildMetricsSnapshot(
             vitalsRef.current,
-            hasRealDataRef.current
+            liveRef.current
           ),
         }),
       });
@@ -176,19 +181,19 @@ export function useCoachInsights(): CoachInsightsState {
     }
   }, []);
 
-  // Session ended — clear shared insights (next real data = fresh (a)).
+  // Session ended / left LIVE — clear shared insights (next LIVE = fresh (a)).
   useEffect(() => {
-    if (hasRealData) return;
+    if (liveForInsights) return;
     sessionStartedRef.current = false;
     bandKeyRef.current = null;
     topAlertIdRef.current = null;
     pendingRef.current = false;
     setState(EMPTY);
-  }, [hasRealData]);
+  }, [liveForInsights]);
 
   // (a) First real data of the stream session.
   useEffect(() => {
-    if (!hasRealData || sessionStartedRef.current) return;
+    if (!liveForInsights || sessionStartedRef.current) return;
     sessionStartedRef.current = true;
     bandKeyRef.current = vitalSeverityKey(vitals);
     topAlertIdRef.current = alerts[0]?.id ?? null;
@@ -196,11 +201,11 @@ export function useCoachInsights(): CoachInsightsState {
     void fetchInsights();
     // vitals/alerts captured only as baseline for (b); do not re-run (a) on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRealData, fetchInsights]);
+  }, [liveForInsights, fetchInsights]);
 
   // (b) Significant change: severity band flip or new leading alert.
   useEffect(() => {
-    if (!hasRealData || !sessionStartedRef.current) return;
+    if (!liveForInsights || !sessionStartedRef.current) return;
 
     const nextBand = vitalSeverityKey(vitals);
     const nextAlertId = alerts[0]?.id ?? null;
@@ -215,7 +220,7 @@ export function useCoachInsights(): CoachInsightsState {
     if (bandChanged || alertChanged) {
       void fetchInsights();
     }
-  }, [hasRealData, vitals, alerts, fetchInsights]);
+  }, [liveForInsights, vitals, alerts, fetchInsights]);
 
   return state;
 }

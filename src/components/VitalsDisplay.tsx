@@ -3,6 +3,8 @@ import { ArrowUp, ArrowDown, TriangleAlert, X } from 'lucide-react';
 import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
 import { SeverityLevel, VitalStatus } from '../types';
+import { useDataFreshness } from '../hooks/useDataFreshness';
+import DataFreshnessBadge from './DataFreshnessBadge';
 
 /**
  * Renders directional arrows indicating changes in vital severity trends.
@@ -144,11 +146,14 @@ const VitalCard: React.FC<{
             </div>
           )}
 
-          {/* Number — '--' until real data arrives */}
+          {/* Number — grey when STALE/DEMO; teal only while scrubbing live history */}
           <span className={cn(
             "font-light tracking-tight transition-colors duration-300",
             isXL ? 'text-7xl' : size === 'normal' ? 'text-4xl' : 'text-2xl',
-            showDash ? "text-slate-600" : frozen ? "text-teal-300" : color
+            showDash ? "text-slate-600"
+              : disconnected ? "text-slate-400"
+              : frozen ? "text-teal-300"
+              : color
           )}>
             {showDash ? '--' : status.value}
           </span>
@@ -158,13 +163,15 @@ const VitalCard: React.FC<{
             <span className={cn(
               "font-light transition-all duration-300 ml-1",
               isXL ? 'text-2xl' : size === 'normal' ? 'text-lg' : 'text-xs',
-              frozen ? "text-teal-500/70" : color
+              disconnected ? "text-slate-500"
+                : frozen ? "text-teal-500/70"
+                : color
             )}>{status.unit}</span>
           )}
         </div>
 
         {/* Severity arrows — hide while scrubbing past (values still update) */}
-        {!frozen && !showDash && (
+        {!frozen && !disconnected && !showDash && (
           <SeverityArrows
             trend={status.trend}
             severity={status.severity}
@@ -177,7 +184,9 @@ const VitalCard: React.FC<{
       <span className={cn(
         "font-normal uppercase tracking-widest mt-1 transition-all duration-300",
         size === 'sm' ? 'text-[8px]' : 'text-xs',
-        frozen ? "text-teal-700" : "text-slate-500"
+        disconnected ? "text-slate-600"
+          : frozen ? "text-teal-700"
+          : "text-slate-500"
       )}>{label}</span>
     </div>
   );
@@ -205,14 +214,15 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
   const jumpToEvent   = useStore(state => state.jumpToEvent);
   const events        = useStore(state => state.events);
   const viewMode      = useStore(state => state.viewMode);
-  const isConnected   = useStore(state => state.isConnected);
-  const hasRealData   = useStore(state => state.hasRealData);  // ← new flag
+  const { freshness, isLiveData, dimmed, staleAgeLabel } = useDataFreshness();
   const isAdvanced    = viewMode === 'Advanced';
 
   // Scrubbing updates vitals from history / re-estimation in useWebSocket —
   // always show the store values for the current historyOffset.
   const displayVitals = vitals;
-  const isFrozen = historyOffset > 0;
+  // Past scrub keeps teal "Past" chrome; STALE/DEMO use grey via disconnected.
+  const isPastScrub = historyOffset > 0;
+  const hasData = freshness !== 'NO_DATA';
 
   const prevOffset = React.useRef(historyOffset);
   const [goLiveSignal, setGoLiveSignal] = React.useState(0);
@@ -234,14 +244,26 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
 
   return (
     <div className={cn(
+      // Extra top pad so SpO2/BP alert chips (-top-4/-top-5) clear the fixed header.
       "relative flex flex-col items-center gap-1 flex-shrink-0 transition-all duration-300",
-      compact ? "py-1" : "py-4"
+      compact ? "pt-7 pb-1" : "pt-7 pb-4",
+      dimmed && "opacity-50"
     )}>
 
-      {isFrozen && (
-        <div className="absolute top-1 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20">
-          <span className="w-1 h-1 rounded-full bg-teal-500" />
-          <span className="text-[7px] font-bold uppercase tracking-widest text-teal-500">Past</span>
+      {(isPastScrub || !isLiveData) && (
+        <div className="absolute top-1 right-2 z-10 flex items-center gap-1">
+          {isPastScrub ? (
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20">
+              <span className="w-1 h-1 rounded-full bg-teal-500" />
+              <span className="text-[7px] font-bold uppercase tracking-widest text-teal-500">Past</span>
+            </div>
+          ) : (
+            <DataFreshnessBadge
+              freshness={freshness}
+              staleAgeLabel={staleAgeLabel}
+              compact
+            />
+          )}
         </div>
       )}
 
@@ -252,20 +274,20 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           status={displayVitals.spo2}
           color="text-white"
           size={compact ? 'sm' : 'normal'}
-          frozen={isFrozen}
-          disconnected={!isConnected}
-          hasData={hasRealData}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['spo2_drop']) : undefined}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={hasData}
+          onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['spo2_drop']) : undefined}
           goLiveSignal={goLiveSignal}
         />
         <VitalCard
           label="Blood Pressure"
           status={displayVitals.bloodPressure}
           size={compact ? 'sm' : 'normal'}
-          frozen={isFrozen}
-          disconnected={!isConnected}
-          hasData={hasRealData}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['hypertension', 'hypotension']) : undefined}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={hasData}
+          onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['hypertension', 'hypotension']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>
@@ -277,10 +299,10 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           status={displayVitals.heartRate}
           size={compact ? 'normal' : 'xl'}
           showUnit={false}
-          frozen={isFrozen}
-          disconnected={!isConnected}
-          hasData={hasRealData}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['tachycardia', 'bradycardia']) : undefined}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={hasData}
+          onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['tachycardia', 'bradycardia']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>
@@ -290,22 +312,22 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
         <VitalCard
           label="Temperature"
           status={displayVitals.temperature}
-          color={!isFrozen && displayVitals.temperature.severity !== 'normal' ? "text-rose-400" : "text-white"}
+          color={!isPastScrub && displayVitals.temperature.severity !== 'normal' ? "text-rose-400" : "text-white"}
           size={compact ? 'sm' : 'normal'}
-          frozen={isFrozen}
-          disconnected={!isConnected}
-          hasData={hasRealData}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['hyperthermia', 'hypothermia']) : undefined}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={hasData}
+          onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['hyperthermia', 'hypothermia']) : undefined}
           goLiveSignal={goLiveSignal}
         />
         <VitalCard
           label="Respiratory Rate"
           status={displayVitals.respirationRate}
           size={compact ? 'sm' : 'normal'}
-          frozen={isFrozen}
-          disconnected={!isConnected}
-          hasData={hasRealData}
-          onAlertTap={isAdvanced ? () => handleAlertTap(['tachypnea', 'bradypnea']) : undefined}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={hasData}
+          onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['tachypnea', 'bradypnea']) : undefined}
           goLiveSignal={goLiveSignal}
         />
       </div>

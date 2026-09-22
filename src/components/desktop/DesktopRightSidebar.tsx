@@ -3,6 +3,8 @@ import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
@@ -82,12 +84,14 @@ function buildAiInsights(vitals: Vitals, hasRealData: boolean): string[] {
 function resolveInsightLines(
   insights: CoachInsightsState,
   vitals: Vitals,
-  hasRealData: boolean
+  live: boolean
 ): string[] {
+  if (!live) {
+    return ['Live sensor required for AI insights — reconnect The Patch.'];
+  }
   if (insights.bullets && insights.bullets.length > 0) return insights.bullets;
   if (insights.status === 'analyzing' || insights.loading) return ['Analyzing...'];
-  if (insights.status === 'error') return buildAiInsights(vitals, hasRealData);
-  if (!hasRealData) return ['Awaiting live sensor data…'];
+  if (insights.status === 'error') return buildAiInsights(vitals, live);
   return ['Analyzing...'];
 }
 
@@ -102,21 +106,29 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
 }) => {
   const alerts = useStore(s => s.alerts);
   const vitals = useStore(s => s.vitals);
-  const hasRealData = useStore(s => s.hasRealData);
+  const { isLiveData, dimmed, freshness, staleAgeLabel } = useDataFreshness();
 
-  const aiInsights = resolveInsightLines(insights, vitals, hasRealData);
+  const aiInsights = resolveInsightLines(insights, vitals, isLiveData);
   const activeAlerts = alerts;
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
           AI Insights
         </h2>
+        <DataFreshnessBadge
+          freshness={freshness}
+          staleAgeLabel={staleAgeLabel}
+          compact
+        />
       </div>
 
       <div className="px-4 pb-4 flex flex-col">
-        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60">
+        <ul className={cn(
+          'flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60 transition-opacity duration-300',
+          dimmed && 'opacity-50'
+        )}>
           {aiInsights.map((insight) => (
             <li
               key={insight}
@@ -142,24 +154,38 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
                   key={alert.id}
                   className={cn(
                     'px-3 py-2 rounded-lg border text-[10px] flex-shrink-0',
-                    severityColor[alert.severity] ?? severityColor.low
+                    alert.historical
+                      ? 'border-slate-700/60 bg-slate-900/40 opacity-60'
+                      : (severityColor[alert.severity] ?? severityColor.low)
                   )}
                 >
-                  <div className="text-slate-500 tabular-nums mb-0.5">{alert.timestamp}</div>
-                  <div className="text-white font-medium">{alert.message}</div>
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <div className="text-slate-500 tabular-nums">{alert.timestamp}</div>
+                    {alert.historical && (
+                      <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500">
+                        Historical
+                      </span>
+                    )}
+                  </div>
+                  <div className={cn(
+                    'font-medium',
+                    alert.historical ? 'text-slate-400' : 'text-white'
+                  )}>
+                    {alert.message}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="pt-1">
+        <div className={cn('pt-1 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             Session Trends
           </h3>
           {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (unused) */}
-          <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color="#2dd4bf" />
-          <MiniTrendGraph label="SpO2" data={waveforms[9]} color="#5eead4" />
+          <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color={dimmed ? '#64748b' : '#2dd4bf'} />
+          <MiniTrendGraph label="SpO2" data={waveforms[9]} color={dimmed ? '#64748b' : '#5eead4'} />
         </div>
       </div>
     </aside>

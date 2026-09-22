@@ -1217,9 +1217,26 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     if (ws.role === 'device') {
-      devices.delete(ws.deviceId);
-      chunkBuffers.delete(ws.deviceId); // TODO: today the in-progress partial chunk is lost; see fault-tolerance note in the proposal
-      console.log(`[-] DEVICE disconnected: ${ws.deviceId} | devices=${devices.size}`);
+      const deviceId = ws.deviceId;
+      devices.delete(deviceId);
+      chunkBuffers.delete(deviceId); // TODO: today the in-progress partial chunk is lost; see fault-tolerance note in the proposal
+      console.log(`[-] DEVICE disconnected: ${deviceId} | devices=${devices.size}`);
+
+      // Tell matching web clients the patch stream ended — otherwise the UI
+      // stays "CONNECTED" forever (browser WS to this server is still open).
+      if (deviceId) {
+        const notice = JSON.stringify({ type: 'device_disconnected', deviceId });
+        let notified = 0;
+        for (const client of webClients) {
+          if (client.readyState === client.OPEN && client.deviceMac === deviceId) {
+            client.send(notice);
+            notified++;
+          }
+        }
+        if (notified > 0) {
+          console.log(`[NOTIFY] device_disconnected → ${notified} webclient(s) for ${deviceId}`);
+        }
+      }
     } else if (ws.role === 'webclient') {
       webClients.delete(ws);
       console.log(`[-] WEBCLIENT disconnected uid=${ws.uid} | webclients=${webClients.size}`);

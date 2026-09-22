@@ -20,6 +20,8 @@ interface MultiChannelWaveformCanvasProps {
   paperSpeed?: EcgPaperSpeed;
   gain?: EcgGain;
   labelWidth?: number;
+  /** When true (STALE / DEMO / NO_DATA), mute colors and stop looking "live". */
+  frozen?: boolean;
 }
 
 function resolveScale(
@@ -149,6 +151,7 @@ const MultiChannelWaveformCanvas: React.FC<MultiChannelWaveformCanvasProps> = ({
   paperSpeed = 25,
   gain = 10,
   labelWidth = 56,
+  frozen = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -228,7 +231,7 @@ const MultiChannelWaveformCanvas: React.FC<MultiChannelWaveformCanvasProps> = ({
       }
 
       const labelPx = laneHeight >= 36 ? 10 : laneHeight >= 28 ? 9 : 8;
-      ctx.fillStyle = ch.color;
+      ctx.fillStyle = frozen ? 'rgba(148, 163, 184, 0.55)' : ch.color;
       ctx.font = `600 ${labelPx}px ui-monospace, monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -248,7 +251,8 @@ const MultiChannelWaveformCanvas: React.FC<MultiChannelWaveformCanvasProps> = ({
       ctx.clip();
 
       ctx.beginPath();
-      ctx.strokeStyle = ch.color;
+      ctx.globalAlpha = frozen ? 0.45 : 1;
+      ctx.strokeStyle = frozen ? 'rgba(148, 163, 184, 0.85)' : ch.color;
       ctx.lineWidth = ch.ecgScale
         ? (laneHeight >= 32 ? 1.25 : 1)
         : (laneHeight >= 32 ? 1.15 : 1);
@@ -263,6 +267,7 @@ const MultiChannelWaveformCanvas: React.FC<MultiChannelWaveformCanvasProps> = ({
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.restore();
 
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
@@ -272,9 +277,24 @@ const MultiChannelWaveformCanvas: React.FC<MultiChannelWaveformCanvasProps> = ({
       ctx.lineTo(displayWidth - 2, midY);
       ctx.stroke();
     });
+
+    // Diagonal hatch = frozen strip (STALE / DEMO / NO_DATA), not a live stream.
+    if (frozen) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.07)';
+      ctx.lineWidth = 1;
+      const step = 10;
+      for (let x = -displayHeight; x < displayWidth + displayHeight; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + displayHeight, displayHeight);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }, [
     waveforms, channels, height, fill, minHeight, labelWidth, paperGrid, paperSpeed, gain, usePaper,
-    resolveDisplayHeight,
+    frozen, resolveDisplayHeight,
   ]);
 
   useLayoutEffect(() => {

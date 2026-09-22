@@ -4,6 +4,8 @@ import WaveformCanvas from './WaveformCanvas';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../hooks/useWebSocket';
+import { useDataFreshness } from '../hooks/useDataFreshness';
+import DataFreshnessBadge from './DataFreshnessBadge';
 
 // CHANGE: fixed indices for Resp/PPG, matching useWebSocket.ts's 11-slot
 // layout (0-7 ECG leads, 8 Resp, 9 PPG, 10 Temp-reserved). Named constants
@@ -30,6 +32,10 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
   const setIsEcgExpanded = useStore(state => state.setIsEcgExpanded);
   const advancedEcgMode = useStore(state => state.advancedEcgMode);
   const setAdvancedEcgMode = useStore(state => state.setAdvancedEcgMode);
+  const { isLiveData, dimmed, freshness, staleAgeLabel } = useDataFreshness();
+  const frozen = !isLiveData;
+  const liveColor = '#2dd4bf';
+  const liveRespColor = '#5eead4';
 
   // CHANGE: `leads` now comes from the shared LEADS export (no 'Lead III',
   // matches useWebSocket.ts exactly) instead of a locally hardcoded array.
@@ -66,6 +72,11 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
                 <ChevronDown size={14} className="opacity-40" />
               </span>
             </div>
+            <DataFreshnessBadge
+              freshness={freshness}
+              staleAgeLabel={staleAgeLabel}
+              compact
+            />
           </div>
           <button
             onClick={() => setIsEcgExpanded(!isEcgExpanded)}
@@ -76,6 +87,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
         </div>
         <div className={cn(
           "relative bg-slate-950/40 rounded-xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-300",
+          dimmed && "opacity-50",
           isEcgExpanded ? "h-[500px]" : "h-24"
         )}>
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -84,10 +96,11 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           <WaveformCanvas
             data={waveforms[wIdx]}
             height={isEcgExpanded ? 500 : 96}
-            color="#2dd4bf"
+            color={liveColor}
             min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
             lineWidth={isEcgExpanded ? 2.5 : 1.5}
             gridLines={isEcgExpanded}
+            frozen={frozen}
           />
         </div>
       </div>
@@ -112,6 +125,11 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           >
             ALL LEADS
           </button>
+          <DataFreshnessBadge
+            freshness={freshness}
+            staleAgeLabel={staleAgeLabel}
+            compact
+          />
         </div>
         {advancedEcgMode === 'Single' && (
           <div className="relative group ml-auto">
@@ -133,7 +151,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
       </div>
 
       {/* Multi-lead or Single-lead ECG */}
-      <div className="flex flex-col gap-0.5 min-h-0">
+      <div className={cn('flex flex-col gap-0.5 min-h-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
         {advancedEcgMode === 'All' ? (
           leads.map((label, i) => {
             const wIdx = waveformIndexForLead(i);
@@ -143,10 +161,11 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
                 <WaveformCanvas
                   data={waveforms[wIdx]}
                   height={28}
-                  color="#2dd4bf"
+                  color={liveColor}
                   min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
                   gridLines={false}
                   lineWidth={1}
+                  frozen={frozen}
                 />
               </div>
             );
@@ -168,17 +187,18 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
             <WaveformCanvas
               data={waveforms[singleLeadWIdx]}
               height={isEcgExpanded ? 300 : 144}
-              color="#2dd4bf"
+              color={liveColor}
               min={CH_RANGES[singleLeadWIdx][0]} max={CH_RANGES[singleLeadWIdx][1]}
               gridLines={true}
               lineWidth={2}
+              frozen={frozen}
             />
           </div>
         )}
       </div>
 
       {/* Respiration - Much Narrower */}
-      <div className="flex flex-col mt-0.5">
+      <div className={cn('flex flex-col mt-0.5 transition-opacity duration-300', dimmed && 'opacity-50')}>
         <div className="flex items-center justify-between px-1 mb-0.5">
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">Resp Tracking</h4>
         </div>
@@ -186,16 +206,17 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           <WaveformCanvas
             data={waveforms[RESP_WAVEFORM_INDEX]}
             height={32}
-            color="#5eead4"
+            color={liveRespColor}
             min={CH_RANGES[RESP_WAVEFORM_INDEX][0]} max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
             gridLines={false}
             lineWidth={1}
+            frozen={frozen}
           />
         </div>
       </div>
 
       {/* SpO2 Graph - Refined */}
-      <div className="flex flex-col mt-0.5">
+      <div className={cn('flex flex-col mt-0.5 transition-opacity duration-300', dimmed && 'opacity-50')}>
         <div className="flex items-center justify-between px-1 mb-0.5">
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">SpO2 Tracking</h4>
         </div>
@@ -203,7 +224,10 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
             <div
               key={i}
-              className="bg-teal-500/20 w-[2px] rounded-t-[1px] flex-shrink-0"
+              className={cn(
+                'w-[2px] rounded-t-[1px] flex-shrink-0',
+                frozen ? 'bg-slate-500/35' : 'bg-teal-500/20'
+              )}
               style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
             />
           ))}

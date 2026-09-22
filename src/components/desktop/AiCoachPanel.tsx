@@ -531,6 +531,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const currentUser = useStore(s => s.currentUser);
   const vitals = useStore(s => s.vitals);
   const hasRealData = useStore(s => s.hasRealData);
+  const isConnected = useStore(s => s.isConnected);
+  const isSimulatedStream = useStore(s => s.isSimulatedStream);
+  // Coach must not treat STALE / DEMO numbers as live coaching inputs.
+  const liveForCoach = hasRealData && isConnected && !isSimulatedStream;
 
   const [interactionMode, setInteractionMode] =
     useState<CoachInteractionMode>('text');
@@ -690,15 +694,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   }, [isSpeaking, sessionLimitReached, startListening]);
 
   const buildMetricsSnapshot = () => {
-    const recovery = getRecoveryScore(vitals, hasRealData);
+    const recovery = getRecoveryScore(vitals, liveForCoach);
     return {
       heartRate: vitals.heartRate.value,
       spo2: vitals.spo2.value,
       respirationRate: vitals.respirationRate.value,
       temperature: vitals.temperature.value,
-      hrvProxyMs: getHrvProxyMs(vitals.heartRate.value, hasRealData),
+      hrvProxyMs: getHrvProxyMs(vitals.heartRate.value, liveForCoach),
       recoveryScore: recovery.score,
-      hasRealData,
+      hasRealData: liveForCoach,
     };
   };
 

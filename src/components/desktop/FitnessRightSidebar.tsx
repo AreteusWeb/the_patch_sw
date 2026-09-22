@@ -9,6 +9,8 @@ import {
 } from '../../utils/fitnessMetrics';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
@@ -100,10 +102,12 @@ function resolvePerformanceNotes(
   vitals: Vitals,
   live: boolean
 ): string[] {
+  if (!live) {
+    return ['Live sensor required for performance notes — reconnect The Patch.'];
+  }
   if (insights.bullets && insights.bullets.length > 0) return insights.bullets;
   if (insights.status === 'analyzing' || insights.loading) return ['Analyzing...'];
   if (insights.status === 'error') return buildPerformanceNotes(vitals, live);
-  if (!live) return ['Connect The Patch to unlock AI coach notes…'];
   return ['Analyzing...'];
 }
 
@@ -120,9 +124,8 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
 }) => {
   const alerts = useStore(s => s.alerts);
   const vitals = useStore(s => s.vitals);
-  const hasRealData = useStore(s => s.hasRealData);
-  const isConnected = useStore(s => s.isConnected);
-  const live = hasRealData && isConnected;
+  const { isLiveData, dimmed, freshness, staleAgeLabel } = useDataFreshness();
+  const live = isLiveData;
 
   const recovery = getRecoveryScore(vitals, live);
   const hrv = getHrvProxyMs(vitals.heartRate.value, live);
@@ -132,14 +135,22 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 flex items-center justify-between gap-2">
         <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
           Recovery Insights
         </h2>
+        <DataFreshnessBadge
+          freshness={freshness}
+          staleAgeLabel={staleAgeLabel}
+          compact
+        />
       </div>
 
       <div className="px-4 pb-4 flex flex-col">
-        <ul className="flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60 text-[11px] text-slate-300">
+        <ul className={cn(
+          'flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60 text-[11px] text-slate-300 transition-opacity duration-300',
+          dimmed && 'opacity-50'
+        )}>
           <li className="flex items-start gap-2">
             <span className="text-teal-500 mt-0.5">•</span>
             <span>
@@ -175,7 +186,10 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
           </li>
         </ul>
 
-        <div className="py-3 border-b border-slate-800/60">
+        <div className={cn(
+          'py-3 border-b border-slate-800/60 transition-opacity duration-300',
+          dimmed && 'opacity-50'
+        )}>
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
             AI Performance Notes
           </h3>
@@ -206,26 +220,44 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
                   key={alert.id}
                   className={cn(
                     'px-3 py-2 rounded-lg border text-[10px] flex-shrink-0',
-                    severityColor[alert.severity] ?? severityColor.low
+                    alert.historical
+                      ? 'border-slate-700/60 bg-slate-900/40 opacity-60'
+                      : (severityColor[alert.severity] ?? severityColor.low)
                   )}
                 >
-                  <div className="text-slate-500 tabular-nums mb-0.5">{alert.timestamp}</div>
-                  <div className="text-white font-medium">{alert.message}</div>
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <div className="text-slate-500 tabular-nums">{alert.timestamp}</div>
+                    {alert.historical && (
+                      <span className="text-[8px] font-bold uppercase tracking-wider text-slate-500">
+                        Historical
+                      </span>
+                    )}
+                  </div>
+                  <div className={cn(
+                    'font-medium',
+                    alert.historical ? 'text-slate-400' : 'text-white'
+                  )}>
+                    {alert.message}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="pt-1">
+        <div className={cn('pt-1 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             Session Trends
           </h3>
-          <MiniTrendGraph label="HR Trend" data={waveforms[1]} color="#2dd4bf" />
+          <MiniTrendGraph
+            label="HR Trend"
+            data={waveforms[1]}
+            color={dimmed ? '#64748b' : '#2dd4bf'}
+          />
           <MiniTrendGraph
             label="Recovery Score Trend"
             data={recoveryTrend}
-            color="#5eead4"
+            color={dimmed ? '#64748b' : '#5eead4'}
             minPoints={4}
             emptyLabel="Collecting data..."
             window={48}

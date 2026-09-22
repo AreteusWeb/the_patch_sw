@@ -13,6 +13,8 @@ import {
 } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
+import { useDataFreshness } from '../../hooks/useDataFreshness';
+import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const MAX_HISTORY_SECONDS = 3600;
 const LEAD_II = 1;
@@ -32,18 +34,17 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
-  const isConnected = useStore(s => s.isConnected);
-  const hasRealData = useStore(s => s.hasRealData);
   const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
   const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
   const ecgGain = useStore(s => s.ecgGain);
   const paperGrid = ecgGridEnabled ? 'subtle' : 'off';
 
   const isLive = historyOffset === 0;
+  const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
   const intensity = getActivityIntensity(activity, hr);
-  const hrv = getHrvProxyMs(hr, hasRealData && isConnected);
+  const hrv = getHrvProxyMs(hr, isLiveData);
   const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
   const elapsed = useFitnessSessionElapsed();
 
@@ -70,6 +71,9 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const zoneMax = zoneSamples.length ? Math.max(...zoneSamples) : 1;
   const zoneRange = zoneMax - zoneMin || 1;
 
+  // Zone accent follows HR when LIVE; slate when STALE/DEMO/NO_DATA.
+  const zoneAccent = dimmed ? '#64748b' : zone.color;
+
   // Fixed canvas height so Fitness metric bar charts cannot flex-overlap the ECG lanes.
   const channelsCanvasHeight = ecgGridEnabled ? undefined : 420;
 
@@ -84,17 +88,31 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 All Channels
               </h2>
               <div className="flex items-center gap-3 text-[10px]">
+                <DataFreshnessBadge
+                  freshness={freshness}
+                  staleAgeLabel={staleAgeLabel}
+                  compact
+                />
                 <span className="text-slate-500">
                   HRV:{' '}
-                  <span className="text-teal-400 tabular-nums font-semibold">
+                  <span className={cn(
+                    'tabular-nums font-semibold',
+                    dimmed ? 'text-slate-400' : 'text-teal-400'
+                  )}>
                     {hrv != null ? `${hrv} ms` : '--'}
                   </span>
                 </span>
-                <span style={{ color: zone.color }} className="font-semibold uppercase tracking-wider">
+                <span
+                  style={{ color: zoneAccent }}
+                  className="font-semibold uppercase tracking-wider"
+                >
                   {zone.label}
                 </span>
-                <span className="text-white tabular-nums font-light">
-                  {hasRealData && isConnected ? hr : '--'}
+                <span className={cn(
+                  'tabular-nums font-light',
+                  dimmed ? 'text-slate-400' : 'text-white'
+                )}>
+                  {freshness === 'NO_DATA' ? '--' : hr}
                   <span className="text-slate-500 ml-1">bpm</span>
                 </span>
               </div>
@@ -102,7 +120,10 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             <EcgPaperControls compact />
           </div>
           <div
-            className="rounded-xl border border-white/5 overflow-hidden bg-[#0a0a0f] flex-shrink-0"
+            className={cn(
+              'rounded-xl border border-white/5 overflow-hidden bg-[#0a0a0f] flex-shrink-0 transition-opacity duration-300',
+              dimmed && 'opacity-50'
+            )}
             style={channelsCanvasHeight != null ? { height: channelsCanvasHeight } : undefined}
           >
             <MultiChannelWaveformCanvas
@@ -114,15 +135,19 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
               paperGrid={paperGrid}
               paperSpeed={ecgPaperSpeed}
               gain={ecgGain}
+              frozen={!isLiveData}
             />
           </div>
         </section>
 
-        {/* Training metrics (non-waveform) */}
-        <section className="relative z-0 flex-shrink-0">
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Training Metrics
-          </h2>
+        {/* Training metrics — HR-derived heuristics + session clock (not raw sensor traces) */}
+        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+              Training Metrics
+            </h2>
+            <DataFreshnessBadge freshness={freshness} staleAgeLabel={staleAgeLabel} compact />
+          </div>
           <div className="grid grid-cols-1 gap-2">
             <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
               <div className="flex items-center justify-between mb-1.5">
@@ -131,22 +156,24 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 </span>
                 <span
                   className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: zone.color }}
+                  style={{ color: zoneAccent }}
                 >
-                  {intensity.label}
+                  {isLiveData ? intensity.label : '—'}
                 </span>
               </div>
               <div className="h-6 flex items-end gap-px overflow-hidden">
                 {Array.from({ length: 40 }).map((_, i) => {
-                  const base = intensity.level / 100;
-                  const hPx = Math.max(3, Math.min(24, base * 16 + Math.sin(i * 0.4 + elapsed * 0.05) * 5 + 6));
+                  const base = isLiveData ? intensity.level / 100 : 0.15;
+                  // Freeze decorative motion when not LIVE.
+                  const motion = isLiveData ? Math.sin(i * 0.4 + elapsed * 0.05) * 5 : 0;
+                  const hPx = Math.max(3, Math.min(24, base * 16 + motion + 6));
                   return (
                     <div
                       key={i}
                       className="flex-1 rounded-sm"
                       style={{
                         height: hPx,
-                        backgroundColor: zone.color,
+                        backgroundColor: zoneAccent,
                         opacity: 0.35 + (i / 40) * 0.5,
                       }}
                     />
@@ -160,9 +187,12 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                 <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
                   Temperature
                 </span>
-                <div className="text-lg font-light text-white tabular-nums mt-0.5">
+                <div className={cn(
+                  'text-lg font-light tabular-nums mt-0.5',
+                  dimmed ? 'text-slate-400' : 'text-white'
+                )}>
                   {tempDisplay}
-                  {vitals.temperature.trend === 'up' && tempDisplay !== '--' && (
+                  {isLiveData && vitals.temperature.trend === 'up' && tempDisplay !== '--' && (
                     <span className="text-[10px] text-teal-400 ml-2 uppercase tracking-wider">
                       Rising ? Monitor
                     </span>
@@ -175,7 +205,9 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                     key={i}
                     className={cn(
                       'w-2 h-2 rounded-full',
-                      tempDisplay !== '--' && i < 5 ? 'bg-teal-400/70' : 'bg-slate-800'
+                      isLiveData && tempDisplay !== '--' && i < 5
+                        ? 'bg-teal-400/70'
+                        : 'bg-slate-800'
                     )}
                   />
                 ))}
@@ -184,8 +216,8 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </div>
         </section>
 
-        {/* Timeline + activity map */}
-        <section className="relative z-0 flex-shrink-0">
+        {/* Timeline + activity map — front-only session phases (no GPS map yet) */}
+        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
             Timeline + Activity Map
           </h2>
@@ -198,11 +230,13 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             </div>
             <div className="flex items-center gap-0 mb-3">
               {PHASES.map((phase, i) => {
-                const isActive = activePhase === phase.id;
+                const isActive = isLiveData && activePhase === phase.id;
                 const isPast =
-                  (activePhase === 'interval' && phase.id === 'warm-up') ||
-                  (activePhase === 'cool-down' && phase.id !== 'cool-down') ||
-                  activePhase === 'complete';
+                  isLiveData && (
+                    (activePhase === 'interval' && phase.id === 'warm-up') ||
+                    (activePhase === 'cool-down' && phase.id !== 'cool-down') ||
+                    activePhase === 'complete'
+                  );
                 return (
                   <React.Fragment key={phase.id}>
                     <div
@@ -227,8 +261,8 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span>
                 Accelerometer · Steps:{' '}
-                <span className="text-white tabular-nums font-medium">
-                  {activity.steps.toLocaleString()}
+                <span className={cn('tabular-nums font-medium', dimmed ? 'text-slate-400' : 'text-white')}>
+                  {isLiveData ? activity.steps.toLocaleString() : '—'}
                 </span>
               </span>
               <span className="text-slate-500">Pace Trend · {activity.activityType}</span>
@@ -236,15 +270,15 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </div>
         </section>
 
-        {/* HR + Power Zone Graph */}
-        <section className="relative z-0 flex-shrink-0">
+        {/* HR + Intensity Zone — Lead II amplitude bars colored by HR zone */}
+        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
             HR + Intensity Zone
           </h2>
           <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: zone.color }}>
-                {zone.label} Zone
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: zoneAccent }}>
+                {isLiveData ? `${zone.label} Zone` : '— Zone'}
               </span>
               <span className="text-[10px] text-slate-500">
                 Combined view · Live waveform energy
@@ -260,7 +294,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                       className="flex-1 rounded-t-sm"
                       style={{
                         height: hPx,
-                        backgroundColor: zone.color,
+                        backgroundColor: zoneAccent,
                         opacity: 0.45 + (i / zoneSamples.length) * 0.4,
                       }}
                     />

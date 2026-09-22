@@ -6,10 +6,8 @@ import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import EcgPaperControls from './EcgPaperControls';
 import {
   formatSessionClock,
-  getActivityIntensity,
   getHrZone,
   getHrvProxyMs,
-  getWorkoutPhase,
 } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
@@ -17,23 +15,19 @@ import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
 
 const MAX_HISTORY_SECONDS = 3600;
-const LEAD_II = 1;
-
-const PHASES = [
-  { id: 'warm-up', label: 'Warm-up' },
-  { id: 'interval', label: 'Interval' },
-  { id: 'cool-down', label: 'Cool-down' },
-] as const;
 
 interface FitnessCentralAreaProps {
   waveforms: number[][];
 }
 
+/**
+ * Fitness center: live multi-channel waveforms + training session strip + scrubber.
+ * Placeholder panels (fake intensity / map / zone bars) were removed — they had no real data.
+ */
 const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
-  const activity = useStore(s => s.activity);
   const ecgGridEnabled = useStore(s => s.ecgGridEnabled);
   const ecgPaperSpeed = useStore(s => s.ecgPaperSpeed);
   const ecgGain = useStore(s => s.ecgGain);
@@ -43,19 +37,24 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
-  const intensity = getActivityIntensity(activity, hr);
   const hrv = getHrvProxyMs(hr, isLiveData);
   const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
   const elapsed = useFitnessSessionElapsed();
 
-  // Session phase progress — assume a 3h training window for phase mapping.
-  const progress01 = Math.min(1, elapsed / (3 * 3600));
-  const activePhase = getWorkoutPhase(progress01);
+  const zoneAccent = dimmed ? '#64748b' : zone.color;
+  const channelsCanvasHeight = ecgGridEnabled ? undefined : 420;
 
-  const tempDisplay =
-    typeof vitals.temperature.value === 'number'
-      ? `${vitals.temperature.value}\u00B0C`
-      : '--';
+  const sessionStatusLabel =
+    fitnessSessionStatus === 'recording' ? 'Recording'
+      : fitnessSessionStatus === 'paused' ? 'Paused'
+        : fitnessSessionStatus === 'ended' ? 'Ended'
+          : 'Idle';
+
+  const sessionStatusColor =
+    fitnessSessionStatus === 'recording' ? 'text-teal-400'
+      : fitnessSessionStatus === 'paused' ? 'text-amber-400'
+        : fitnessSessionStatus === 'ended' ? 'text-slate-300'
+          : 'text-slate-500';
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
     const next =
@@ -65,22 +64,10 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
     setHistoryOffset(next);
   };
 
-  // Zone bars for combined HR / intensity graph (last 48 Lead II samples as proxy amplitude)
-  const zoneSamples = waveforms[LEAD_II]?.slice(-48) ?? [];
-  const zoneMin = zoneSamples.length ? Math.min(...zoneSamples) : 0;
-  const zoneMax = zoneSamples.length ? Math.max(...zoneSamples) : 1;
-  const zoneRange = zoneMax - zoneMin || 1;
-
-  // Zone accent follows HR when LIVE; slate when STALE/DEMO/NO_DATA.
-  const zoneAccent = dimmed ? '#64748b' : zone.color;
-
-  // Fixed canvas height so Fitness metric bar charts cannot flex-overlap the ECG lanes.
-  const channelsCanvasHeight = ecgGridEnabled ? undefined : 420;
-
   return (
     <main className="flex-1 min-w-0 flex flex-col bg-black overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 py-3 flex flex-col gap-3">
-        {/* All channels ? single compact canvas (intrinsic height, never flex-fill) */}
+        {/* Live multi-channel waveforms */}
         <section className="relative z-10 flex flex-col flex-shrink-0 isolate">
           <div className="flex items-center justify-between mb-2 gap-3 flex-wrap flex-shrink-0">
             <div className="flex items-center gap-3">
@@ -140,177 +127,49 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </div>
         </section>
 
-        {/* Training metrics — HR-derived heuristics + session clock (not raw sensor traces) */}
-        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-              Training Metrics
-            </h2>
-            <DataFreshnessBadge freshness={freshness} staleAgeLabel={staleAgeLabel} compact />
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                  Activity Intensity
-                </span>
-                <span
-                  className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: zoneAccent }}
-                >
-                  {isLiveData ? intensity.label : '—'}
-                </span>
-              </div>
-              <div className="h-6 flex items-end gap-px overflow-hidden">
-                {Array.from({ length: 40 }).map((_, i) => {
-                  const base = isLiveData ? intensity.level / 100 : 0.15;
-                  // Freeze decorative motion when not LIVE.
-                  const motion = isLiveData ? Math.sin(i * 0.4 + elapsed * 0.05) * 5 : 0;
-                  const hPx = Math.max(3, Math.min(24, base * 16 + motion + 6));
-                  return (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-sm"
-                      style={{
-                        height: hPx,
-                        backgroundColor: zoneAccent,
-                        opacity: 0.35 + (i / 40) * 0.5,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-2 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                  Temperature
-                </span>
-                <div className={cn(
-                  'text-lg font-light tabular-nums mt-0.5',
-                  dimmed ? 'text-slate-400' : 'text-white'
-                )}>
-                  {tempDisplay}
-                  {isLiveData && vitals.temperature.trend === 'up' && tempDisplay !== '--' && (
-                    <span className="text-[10px] text-teal-400 ml-2 uppercase tracking-wider">
-                      Rising ? Monitor
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-1">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      'w-2 h-2 rounded-full',
-                      isLiveData && tempDisplay !== '--' && i < 5
-                        ? 'bg-teal-400/70'
-                        : 'bg-slate-800'
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Timeline + activity map — front-only session phases (no GPS map yet) */}
-        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
+        {/* Training session — driven by Start Session in the top bar (real front-only state) */}
+        <section className="relative z-0 flex-shrink-0">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            Timeline + Activity Map
+            Training Session
           </h2>
-          <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
-            <div className="text-[10px] text-slate-500 mb-2 uppercase tracking-wider">
-              Workout Phases · Session {formatSessionClock(elapsed)}
-              {fitnessSessionStatus === 'idle' && ' (start a session)'}
-              {fitnessSessionStatus === 'paused' && ' · paused'}
-              {fitnessSessionStatus === 'ended' && ' · ended'}
-            </div>
-            <div className="flex items-center gap-0 mb-3">
-              {PHASES.map((phase, i) => {
-                const isActive = isLiveData && activePhase === phase.id;
-                const isPast =
-                  isLiveData && (
-                    (activePhase === 'interval' && phase.id === 'warm-up') ||
-                    (activePhase === 'cool-down' && phase.id !== 'cool-down') ||
-                    activePhase === 'complete'
-                  );
-                return (
-                  <React.Fragment key={phase.id}>
-                    <div
-                      className={cn(
-                        'flex-1 text-center py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors',
-                        isActive
-                          ? 'bg-teal-500/25 text-teal-300 border border-teal-500/40'
-                          : isPast
-                            ? 'bg-slate-800/80 text-slate-400'
-                            : 'bg-slate-900 text-slate-600 border border-slate-800'
-                      )}
-                    >
-                      {phase.label}
-                    </div>
-                    {i < PHASES.length - 1 && (
-                      <div className="w-4 h-px bg-slate-700 flex-shrink-0" />
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>
-                Accelerometer · Steps:{' '}
-                <span className={cn('tabular-nums font-medium', dimmed ? 'text-slate-400' : 'text-white')}>
-                  {isLiveData ? activity.steps.toLocaleString() : '—'}
+          <div className="bg-slate-950/60 rounded-lg border border-white/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-baseline gap-3 min-w-0">
+                <span className="text-3xl font-light tabular-nums text-white tracking-tight">
+                  {formatSessionClock(elapsed)}
                 </span>
-              </span>
-              <span className="text-slate-500">Pace Trend · {activity.activityType}</span>
+                <span className={cn('text-[11px] font-bold uppercase tracking-wider', sessionStatusColor)}>
+                  {sessionStatusLabel}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-slate-500">
+                <span>
+                  Zone{' '}
+                  <span
+                    className="font-semibold uppercase tracking-wider"
+                    style={{ color: isLiveData ? zone.color : '#64748b' }}
+                  >
+                    {isLiveData && zone.label !== '—' ? zone.label : '—'}
+                  </span>
+                </span>
+                <span>
+                  HR{' '}
+                  <span className={cn('tabular-nums font-medium', isLiveData ? 'text-white' : 'text-slate-500')}>
+                    {isLiveData && freshness !== 'NO_DATA' ? `${hr} bpm` : '—'}
+                  </span>
+                </span>
+              </div>
             </div>
-          </div>
-        </section>
-
-        {/* HR + Intensity Zone — Lead II amplitude bars colored by HR zone */}
-        <section className={cn('relative z-0 flex-shrink-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
-          <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
-            HR + Intensity Zone
-          </h2>
-          <div className="bg-slate-950/60 rounded-lg border border-white/5 px-3 py-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: zoneAccent }}>
-                {isLiveData ? `${zone.label} Zone` : '— Zone'}
-              </span>
-              <span className="text-[10px] text-slate-500">
-                Combined view · Live waveform energy
-              </span>
-            </div>
-            <div className="h-16 flex items-end gap-px overflow-hidden">
-              {zoneSamples.length >= 2 ? (
-                zoneSamples.map((val, i) => {
-                  const hPx = Math.max(4, ((val - zoneMin) / zoneRange) * 64);
-                  return (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-t-sm"
-                      style={{
-                        height: hPx,
-                        backgroundColor: zoneAccent,
-                        opacity: 0.45 + (i / zoneSamples.length) * 0.4,
-                      }}
-                    />
-                  );
-                })
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-600 italic">
-                  Waiting for ECG?
-                </div>
-              )}
-            </div>
+            {fitnessSessionStatus === 'idle' && (
+              <p className="mt-2 text-[10px] text-slate-600">
+                Press Start Session in the top bar to begin timing your workout.
+              </p>
+            )}
           </div>
         </section>
       </div>
 
-      {/* Timeline scrubber */}
+      {/* Waveform history scrubber */}
       <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/60 px-4 py-3">
         <div className="flex items-center gap-3">
           <button
@@ -332,8 +191,8 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
               className="timeline-scrubber w-full"
             />
             <div className="flex items-center justify-between text-[10px] text-slate-500">
-              <span>Session Scrubber</span>
-              <span className="tabular-nums">{formatSessionClock(elapsed)} elapsed</span>
+              <span>Waveform Scrubber</span>
+              <span className="tabular-nums">{formatSessionClock(elapsed)} session</span>
             </div>
           </div>
 

@@ -2,7 +2,8 @@ import React from 'react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
-import { getActivityIntensity, getHrZone } from '../../utils/fitnessMetrics';
+import { formatSessionClock, getHrZone } from '../../utils/fitnessMetrics';
+import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import type { VitalStatus } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
@@ -53,14 +54,20 @@ interface FitnessLeftSidebarProps {
 
 const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) => {
   const vitals = useStore(s => s.vitals);
-  const activity = useStore(s => s.activity);
+  const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
+  const elapsed = useFitnessSessionElapsed();
   const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
   const showDash = freshness === 'NO_DATA';
 
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
-  const intensity = getActivityIntensity(activity, hr);
   const spo2Percent = typeof vitals.spo2.value === 'number' ? vitals.spo2.value : 0;
+
+  const sessionStatusLabel =
+    fitnessSessionStatus === 'recording' ? 'Recording'
+      : fitnessSessionStatus === 'paused' ? 'Paused'
+        : fitnessSessionStatus === 'ended' ? 'Ended'
+          : 'Idle';
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-r border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
@@ -76,7 +83,6 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
       </div>
 
       <div className="px-4 pb-4 flex flex-col gap-1">
-        {/* Heart Rate + Zone */}
         <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Heart Rate
@@ -115,7 +121,6 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           <MiniSparkline data={waveforms[1]} color={zone.color} muted={dimmed} />
         </div>
 
-        {/* SpO2 */}
         <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             SpO2
@@ -142,7 +147,6 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           )}
         </div>
 
-        {/* BP */}
         <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             BP (PTT)
@@ -155,7 +159,6 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           </div>
         </div>
 
-        {/* Respiration */}
         <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
             Respiration
@@ -171,45 +174,16 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           </div>
         </div>
 
-        {/* Temperature */}
-        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
+        {/* Session clock — real Start Session state (replaces fake steps/activity) */}
+        <div className="py-3">
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
-            Temperature
+            Session
           </div>
-          <div className="flex items-baseline gap-1.5 mb-2">
-            <span className={cn(
-              'text-2xl font-light tabular-nums',
-              showDash || vitals.temperature.value === '--' ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
-            )}>
-              {showDash || vitals.temperature.value === '--'
-                ? '--'
-                : `${vitals.temperature.value}°C`}
-            </span>
-            {isLiveData && !showDash && vitals.temperature.value !== '--' && (
-              <TrendIcon trend={vitals.temperature.trend} />
-            )}
+          <div className="text-2xl font-light tabular-nums text-white">
+            {formatSessionClock(elapsed)}
           </div>
-        </div>
-
-        {/* Activity */}
-        <div className={cn('py-3 transition-opacity duration-300', dimmed && 'opacity-50')}>
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
-            Activity / Movement
-          </div>
-          <div className="text-sm text-white font-medium">
-            {intensity.label} • {activity.steps.toLocaleString()} steps
-          </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">
-            {activity.activityType}
-          </div>
-          <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className={cn(
-                'h-full rounded-full transition-all duration-500',
-                dimmed ? 'bg-slate-500/60' : 'bg-teal-400/80'
-              )}
-              style={{ width: `${intensity.level}%` }}
-            />
+          <div className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider">
+            {sessionStatusLabel}
           </div>
         </div>
       </div>

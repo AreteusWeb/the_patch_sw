@@ -1,4 +1,4 @@
-import type { Activity, Vitals } from '../types';
+import type { Vitals } from '../types';
 
 export type HrZoneId = 'recovery' | 'fat_burn' | 'cardio' | 'high' | 'peak';
 
@@ -85,31 +85,6 @@ export function getReadinessLabel(score: number, hasRealData: boolean): string {
   if (score >= 85) return 'High';
   if (score >= 65) return 'Moderate';
   return 'Low';
-}
-
-export function getActivityIntensity(
-  activity: Activity,
-  hr: number | string | undefined
-): { label: string; level: number } {
-  const zone = getHrZone(hr);
-  const fromSteps = Math.min(100, Math.round((activity.steps / 10000) * 70));
-  const level = Math.max(zone.intensity * 0.7, fromSteps);
-  const label =
-    level >= 80 ? 'High' :
-    level >= 50 ? 'Moderate' :
-    level >= 20 ? 'Light' :
-    'Rest';
-  return { label, level: Math.round(level) };
-}
-
-export type WorkoutPhase = 'warm-up' | 'interval' | 'cool-down' | 'complete';
-
-/** Map session progress (0–1) onto simple workout phases for the timeline UI. */
-export function getWorkoutPhase(progress01: number): WorkoutPhase {
-  if (progress01 < 0.15) return 'warm-up';
-  if (progress01 < 0.75) return 'interval';
-  if (progress01 < 0.95) return 'cool-down';
-  return 'complete';
 }
 
 export function formatDuration(totalSeconds: number): string {

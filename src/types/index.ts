@@ -102,12 +102,26 @@ export interface AppState {
   lastRealDataAt: number | null;
   /** True while the built-in WS simulator (startSim) is feeding packets. */
   isSimulatedStream: boolean;
-  /** Fitness Start Session state machine (front-only). */
+  /** Fitness Start Session state machine (front-only UI source of truth). */
   fitnessSessionStatus: FitnessSessionStatus;
   /** Wall-clock ms when the current recording segment started; null if not recording. */
   fitnessSessionStartedAt: number | null;
   /** Completed recording time (ms) from prior segments before the latest pause. */
   fitnessSessionAccumulatedMs: number;
+  /**
+   * Firestore `users/{uid}/trainingSessions/{id}` while recording/paused.
+   * Cleared on end / new start. Null until the persistence hook creates the doc.
+   */
+  fitnessSessionId: string | null;
+  /**
+   * Post-End summary for the Training Session UI.
+   * `null` = no summary yet; `calculating` while flush+compute run.
+   */
+  fitnessSessionSummary:
+    | null
+    | { status: 'calculating' }
+    | { status: 'ready'; durationSec: number; avgHr: number; maxHr: number; dominantZone: string }
+    | { status: 'too_short'; durationSec: number };
 }
 
 /** Action mutators for the Zustand store. */
@@ -141,4 +155,8 @@ export interface AppActions {
   pauseFitnessSession: () => void;
   resumeFitnessSession: () => void;
   endFitnessSession: () => void;
+  setFitnessSessionId: (id: string | null) => void;
+  setFitnessSessionSummary: (summary: AppState['fitnessSessionSummary']) => void;
+  /** After SUMMARY — back to idle so Start Session can begin a new workout. */
+  resetFitnessSessionToIdle: () => void;
 }

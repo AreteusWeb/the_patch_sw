@@ -8,6 +8,7 @@ import { AnimatePresence } from 'motion/react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useCoachInsights } from '../../hooks/useCoachInsights';
+import { useTrainingSessionPersistence } from '../../hooks/useTrainingSessionPersistence';
 import useStore from '../../store/useStore';
 import SideMenu from '../SideMenu';
 import EventBanner from '../EventBanner';
@@ -31,6 +32,8 @@ import AiCoachPanel from './AiCoachPanel';
 export default function DesktopApp() {
   const { waveforms, sessionSampleCount, recoveryTrend } = useWebSocket();
   const insights = useCoachInsights();
+  // Sync Fitness Start Session → Firestore (trainingSessions + hrSamples).
+  useTrainingSessionPersistence();
   const desktopLayout = useStore(s => s.desktopLayout);
   const isFitness = desktopLayout === 'fitness';
   const [coachOpen, setCoachOpen] = useState(false);

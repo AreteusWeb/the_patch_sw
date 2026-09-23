@@ -38,8 +38,8 @@ const PwaUpdateBanner: React.FC = () => {
     });
   }, []);
 
-  // New update while Live is on: keep needRefresh, but reset "Después" so
-  // the banner can appear once Live ends.
+  // New update while Live is on: keep needRefresh, but clear "Later" dismiss
+  // so the banner can appear once Live ends.
   useEffect(() => {
     if (needRefresh) setDismissed(false);
   }, [needRefresh]);

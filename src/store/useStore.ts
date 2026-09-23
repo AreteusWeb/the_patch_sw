@@ -123,6 +123,8 @@ const useStore = create<
   fitnessSessionStatus: 'idle',
   fitnessSessionStartedAt: null,
   fitnessSessionAccumulatedMs: 0,
+  fitnessSessionId: null,
+  fitnessSessionSummary: null,
 
   vitals: {
     heartRate: {
@@ -268,6 +270,9 @@ const useStore = create<
       fitnessSessionStatus: 'recording',
       fitnessSessionStartedAt: Date.now(),
       fitnessSessionAccumulatedMs: 0,
+      // Cleared here; useTrainingSessionPersistence assigns the Firestore id.
+      fitnessSessionId: null,
+      fitnessSessionSummary: null,
     }),
 
   pauseFitnessSession: () => {
@@ -301,8 +306,24 @@ const useStore = create<
       fitnessSessionStatus: 'ended',
       fitnessSessionStartedAt: null,
       fitnessSessionAccumulatedMs: fitnessSessionAccumulatedMs + running,
+      // Show loading in Training Session UI while flush + summary run.
+      fitnessSessionSummary: { status: 'calculating' },
+      // Keep fitnessSessionId until the persistence hook finishes flush+summary.
     });
   },
+
+  setFitnessSessionId: (id) => set({ fitnessSessionId: id }),
+
+  setFitnessSessionSummary: (summary) => set({ fitnessSessionSummary: summary }),
+
+  resetFitnessSessionToIdle: () =>
+    set({
+      fitnessSessionStatus: 'idle',
+      fitnessSessionStartedAt: null,
+      fitnessSessionAccumulatedMs: 0,
+      fitnessSessionId: null,
+      fitnessSessionSummary: null,
+    }),
 
   setNotchFilterEnabled: (enabled) =>
     set({ notchFilterEnabled: enabled }),

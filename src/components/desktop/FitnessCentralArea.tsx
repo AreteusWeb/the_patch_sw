@@ -9,6 +9,7 @@ import {
   getHrZone,
   getHrvProxyMs,
 } from '../../utils/fitnessMetrics';
+import { zoneColorForLabel } from '../../lib/sessionSummary';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
@@ -39,15 +40,18 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const zone = getHrZone(hr);
   const hrv = getHrvProxyMs(hr, isLiveData);
   const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
+  const fitnessSessionSummary = useStore(s => s.fitnessSessionSummary);
+  const resetFitnessSessionToIdle = useStore(s => s.resetFitnessSessionToIdle);
   const elapsed = useFitnessSessionElapsed();
 
   const zoneAccent = dimmed ? '#64748b' : zone.color;
   const channelsCanvasHeight = ecgGridEnabled ? undefined : 420;
+  const showSummary = fitnessSessionStatus === 'ended';
 
   const sessionStatusLabel =
     fitnessSessionStatus === 'recording' ? 'Recording'
       : fitnessSessionStatus === 'paused' ? 'Paused'
-        : fitnessSessionStatus === 'ended' ? 'Ended'
+        : fitnessSessionStatus === 'ended' ? 'Summary'
           : 'Idle';
 
   const sessionStatusColor =
@@ -127,45 +131,114 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
           </div>
         </section>
 
-        {/* Training session — driven by Start Session in the top bar (real front-only state) */}
+        {/* Training session — Start Session in the top bar; SUMMARY after End */}
         <section className="relative z-0 flex-shrink-0">
           <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">
             Training Session
           </h2>
-          <div className="bg-slate-950/60 rounded-lg border border-white/5 px-4 py-3">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-baseline gap-3 min-w-0">
-                <span className="text-3xl font-light tabular-nums text-white tracking-tight">
-                  {formatSessionClock(elapsed)}
-                </span>
+
+          {showSummary ? (
+            <div className="rounded-lg border border-white/10 bg-gradient-to-br from-slate-900/90 to-slate-950 px-4 py-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
                 <span className={cn('text-[11px] font-bold uppercase tracking-wider', sessionStatusColor)}>
                   {sessionStatusLabel}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => resetFitnessSessionToIdle()}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 transition-colors"
+                >
+                  New Session
+                </button>
               </div>
-              <div className="flex items-center gap-4 text-[11px] text-slate-500">
-                <span>
-                  Zone{' '}
-                  <span
-                    className="font-semibold uppercase tracking-wider"
-                    style={{ color: isLiveData ? zone.color : '#64748b' }}
-                  >
-                    {isLiveData && zone.label !== '—' ? zone.label : '—'}
-                  </span>
-                </span>
-                <span>
-                  HR{' '}
-                  <span className={cn('tabular-nums font-medium', isLiveData ? 'text-white' : 'text-slate-500')}>
-                    {isLiveData && freshness !== 'NO_DATA' ? `${hr} bpm` : '—'}
-                  </span>
-                </span>
-              </div>
+
+              {fitnessSessionSummary == null || fitnessSessionSummary.status === 'calculating' ? (
+                <p className="text-sm text-slate-400 animate-pulse">
+                  Calculating session summary…
+                </p>
+              ) : fitnessSessionSummary.status === 'too_short' ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-300">
+                    Session too short to generate stats
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Duration{' '}
+                    <span className="tabular-nums text-slate-300">
+                      {formatSessionClock(fitnessSessionSummary.durationSec)}
+                    </span>
+                    {' '}· need at least one HR sample (~10s LIVE)
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Duration</p>
+                    <p className="text-2xl font-light tabular-nums text-white tracking-tight">
+                      {formatSessionClock(fitnessSessionSummary.durationSec)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Avg HR</p>
+                    <p className="text-2xl font-light tabular-nums text-white tracking-tight">
+                      {fitnessSessionSummary.avgHr}
+                      <span className="text-sm text-slate-500 ml-1">bpm</span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Max HR</p>
+                    <p className="text-2xl font-light tabular-nums text-white tracking-tight">
+                      {fitnessSessionSummary.maxHr}
+                      <span className="text-sm text-slate-500 ml-1">bpm</span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Dominant zone</p>
+                    <p
+                      className="text-lg font-semibold uppercase tracking-wider"
+                      style={{ color: zoneColorForLabel(fitnessSessionSummary.dominantZone) }}
+                    >
+                      {fitnessSessionSummary.dominantZone}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            {fitnessSessionStatus === 'idle' && (
-              <p className="mt-2 text-[10px] text-slate-600">
-                Press Start Session in the top bar to begin timing your workout.
-              </p>
-            )}
-          </div>
+          ) : (
+            <div className="bg-slate-950/60 rounded-lg border border-white/5 px-4 py-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-baseline gap-3 min-w-0">
+                  <span className="text-3xl font-light tabular-nums text-white tracking-tight">
+                    {formatSessionClock(elapsed)}
+                  </span>
+                  <span className={cn('text-[11px] font-bold uppercase tracking-wider', sessionStatusColor)}>
+                    {sessionStatusLabel}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-[11px] text-slate-500">
+                  <span>
+                    Zone{' '}
+                    <span
+                      className="font-semibold uppercase tracking-wider"
+                      style={{ color: isLiveData ? zone.color : '#64748b' }}
+                    >
+                      {isLiveData && zone.label !== '—' ? zone.label : '—'}
+                    </span>
+                  </span>
+                  <span>
+                    HR{' '}
+                    <span className={cn('tabular-nums font-medium', isLiveData ? 'text-white' : 'text-slate-500')}>
+                      {isLiveData && freshness !== 'NO_DATA' ? `${hr} bpm` : '—'}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              {fitnessSessionStatus === 'idle' && (
+                <p className="mt-2 text-[10px] text-slate-600">
+                  Press Start Session in the top bar to begin timing your workout.
+                </p>
+              )}
+            </div>
+          )}
         </section>
       </div>
 

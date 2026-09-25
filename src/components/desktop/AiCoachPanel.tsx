@@ -542,6 +542,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [startingNew, setStartingNew] = useState(false);
+  /** Fetching active session from GET /api/coach/session on panel mount. */
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionLimitReached, setSessionLimitReached] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -559,6 +561,80 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
   voiceModeRef.current = voiceMode;
   loadingRef.current = loading;
+
+  /**
+   * Bootstrap: on mount, ask the server for the active coach session (same
+   * getActiveSession / idle rules as /message). Hydrate messages if present;
+   * on null / failure, leave the chat empty — never block sending.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      if (!currentUser || typeof currentUser.getIdToken !== 'function') {
+        if (!cancelled) setHistoryLoading(false);
+        return;
+      }
+
+      setHistoryLoading(true);
+      try {
+        const token = await currentUser.getIdToken();
+        const res = await fetch(`${API_BASE}/api/coach/session`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          console.warn('[AiCoach] session bootstrap failed:', res.status);
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        const session = data?.session;
+        if (!session || typeof session.sessionId !== 'string') {
+          // No active session (idle closed / never started) — empty chat.
+          return;
+        }
+
+        const hydrated: CoachChatMessage[] = Array.isArray(session.messages)
+          ? session.messages
+              .filter(
+                (m: unknown): m is CoachChatMessage =>
+                  !!m &&
+                  typeof m === 'object' &&
+                  typeof (m as CoachChatMessage).id === 'string' &&
+                  ((m as CoachChatMessage).role === 'user' ||
+                    (m as CoachChatMessage).role === 'model') &&
+                  typeof (m as CoachChatMessage).text === 'string'
+              )
+              .map((m: CoachChatMessage) => ({
+                id: m.id,
+                role: m.role,
+                text: m.text,
+                ...(Array.isArray(m.attachments) && m.attachments.length > 0
+                  ? { attachments: m.attachments as CoachAttachment[] }
+                  : {}),
+              }))
+          : [];
+
+        setSessionId(session.sessionId);
+        setMessages(hydrated);
+        stickToBottomRef.current = true;
+      } catch (err) {
+        // Network / offline — fall back to empty chat; do not alarm the user.
+        console.warn('[AiCoach] session bootstrap error:', err);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    };
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid]);
 
   const scrollChatToBottom = () => {
     const el = listRef.current;
@@ -645,7 +721,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     scrollChatToBottom();
     const id = requestAnimationFrame(() => scrollChatToBottom());
     return () => cancelAnimationFrame(id);
-  }, [messages, loading, interactionMode]);
+  }, [messages, loading, historyLoading, interactionMode]);
 
   // Live interim transcript into the composer while listening.
   useEffect(() => {
@@ -713,7 +789,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   };
 
   const startNewConversation = async () => {
-    if (startingNew || loading) return;
+    if (startingNew || loading || historyLoading) return;
 
     if (!currentUser || typeof currentUser.getIdToken !== 'function') {
       setError('Sign in required to chat with the AI Coach.');
@@ -773,7 +849,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
   const sendMessage = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
-    if (!text || loading || startingNew || sessionLimitReached) return;
+    if (!text || loading || startingNew || historyLoading || sessionLimitReached) return;
 
     if (!currentUser || typeof currentUser.getIdToken !== 'function') {
       setError('Sign in required to chat with the AI Coach.');
@@ -1026,7 +1102,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
   };
 
-  const busy = loading || startingNew;
+  const busy = loading || startingNew || historyLoading;
   const voiceState: 'idle' | 'listening' | 'speaking' | 'waiting' =
     isSpeaking
       ? 'speaking'
@@ -1146,6 +1222,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide px-4 sm:px-5 py-4 flex flex-col gap-3.5"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
+            {historyLoading && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
+                <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
+                <p className="text-[11px] text-[#A0A0A8] font-medium">
+                  Loading conversation…
+                </p>
+              </div>
+            )}
+
             {startingNew && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
                 <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
@@ -1155,7 +1240,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               </div>
             )}
 
-            {messages.length === 0 && !loading && !startingNew && (
+            {messages.length === 0 && !loading && !startingNew && !historyLoading && (
               <p className="text-[12px] text-[#6B7280] leading-[1.5] px-0.5">
                 Ask about training, recovery, hydration, or effort. This is
                 performance coaching — not medical advice.
@@ -1271,14 +1356,17 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 }}
                 onKeyDown={onKeyDown}
                 readOnly={
+                  historyLoading ||
                   startingNew ||
                   sessionLimitReached ||
                   (voiceMode && isListening) ||
                   isSpeaking
                 }
-                disabled={sessionLimitReached || startingNew}
+                disabled={sessionLimitReached || startingNew || historyLoading}
                 placeholder={
-                  sessionLimitReached
+                  historyLoading
+                    ? 'Loading conversation…'
+                    : sessionLimitReached
                     ? 'Start a new conversation to continue…'
                     : voiceState === 'listening'
                       ? 'Listening…'

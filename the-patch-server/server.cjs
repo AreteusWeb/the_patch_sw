@@ -462,6 +462,23 @@ async function closeSessionWithSummary(uid, sessionId) {
   await dbProvider.closeSession(uid, sessionId, summary);
 }
 
+/**
+ * Map a stored coach message to the UI CoachChatMessage shape
+ * ({ id, role, text, attachments? }) — same fields the panel uses after /message.
+ */
+function toCoachUiMessage(raw) {
+  const role = raw?.role === 'model' ? 'model' : 'user';
+  const text = typeof raw?.text === 'string' ? raw.text : '';
+  const id =
+    typeof raw?.id === 'string' && raw.id
+      ? raw.id
+      : `msg_${raw?.createdAt ?? Date.now()}`;
+  const attachments = Array.isArray(raw?.attachments) ? raw.attachments : [];
+  const out = { id, role, text };
+  if (attachments.length > 0) out.attachments = attachments;
+  return out;
+}
+
 async function handleCoachApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (!url.pathname.startsWith('/api/coach')) return false;
@@ -470,6 +487,36 @@ async function handleCoachApi(req, res) {
   if (!uid) {
     sendJson(req, res, 401, { error: 'unauthorized' });
     return true;
+  }
+
+  // ── Bootstrap active session + messages for the coach panel UI ───────────
+  // Reuses getActiveSession (same idle window as /message) and getRecentMessages.
+  if (req.method === 'GET' && url.pathname === '/api/coach/session') {
+    try {
+      const active = await dbProvider.getActiveSession(uid);
+      if (!active) {
+        sendJson(req, res, 200, { session: null });
+        return true;
+      }
+
+      const rawMessages = await dbProvider.getRecentMessages(
+        uid,
+        active.sessionId,
+        MAX_MESSAGES_PER_SESSION
+      );
+
+      sendJson(req, res, 200, {
+        session: {
+          sessionId: active.sessionId,
+          messages: rawMessages.map(toCoachUiMessage),
+        },
+      });
+      return true;
+    } catch (err) {
+      console.error('[coach/session] error:', err?.stack || err);
+      sendJson(req, res, 500, { error: 'coach_failed' });
+      return true;
+    }
   }
 
   // ── Start a fresh coaching conversation on demand ────────────────────────

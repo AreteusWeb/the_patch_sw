@@ -132,6 +132,7 @@ async function createSession(uid, metricsAtStart = null) {
     closedAt: null,
     summary: null,
     metricsAtStart: metricsAtStart ?? null,
+    messageCount: 0,
   };
   await newRef.set(payload);
   return { sessionId: newRef.id, ...payload };
@@ -150,6 +151,85 @@ async function getRecentMessages(uid, sessionId, limit = 20) {
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .reverse();
+}
+
+/**
+ * Fetch a single coach session under this uid (ownership = path).
+ * @returns {Promise<{ sessionId: string, startedAt: number|null, lastMessageAt: number|null, closedAt: number|null, summary: string|null, messageCount: number }|null>}
+ */
+async function getCoachSession(uid, sessionId) {
+  if (!sessionId) return null;
+  const snap = await coachSessionsRef(uid).doc(sessionId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() || {};
+  let messageCount =
+    typeof data.messageCount === 'number' ? data.messageCount : null;
+  if (messageCount == null) {
+    const countSnap = await coachMessagesRef(uid, sessionId).count().get();
+    messageCount = countSnap.data().count ?? 0;
+  }
+  return {
+    sessionId: snap.id,
+    startedAt: data.startedAt ?? null,
+    lastMessageAt: data.lastMessageAt ?? null,
+    closedAt: data.closedAt ?? null,
+    summary: data.summary ?? null,
+    metricsAtStart: data.metricsAtStart ?? null,
+    messageCount,
+  };
+}
+
+/**
+ * Paginated session list for the history sidebar (newest first).
+ * @param {{ limit?: number, before?: number|null }} opts
+ *   before = lastMessageAt cursor (exclusive) for "load more"
+ */
+async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
+  const pageSize = Math.min(50, Math.max(1, Number(limit) || 20));
+  let q = coachSessionsRef(uid).orderBy('lastMessageAt', 'desc');
+  if (typeof before === 'number' && Number.isFinite(before)) {
+    q = q.where('lastMessageAt', '<', before);
+  }
+  const snap = await q.limit(pageSize + 1).get();
+  const docs = snap.docs.slice(0, pageSize);
+
+  const sessions = [];
+  for (const doc of docs) {
+    const data = doc.data() || {};
+    let messageCount =
+      typeof data.messageCount === 'number' ? data.messageCount : null;
+    if (messageCount == null) {
+      const countSnap = await coachMessagesRef(uid, doc.id).count().get();
+      messageCount = countSnap.data().count ?? 0;
+    }
+    sessions.push({
+      sessionId: doc.id,
+      startedAt: data.startedAt ?? null,
+      lastMessageAt: data.lastMessageAt ?? null,
+      closedAt: data.closedAt ?? null,
+      summary: data.summary ?? null,
+      messageCount,
+    });
+  }
+
+  const hasMore = snap.docs.length > pageSize;
+  const nextBefore =
+    hasMore && sessions.length > 0
+      ? sessions[sessions.length - 1].lastMessageAt
+      : null;
+
+  return { sessions, nextBefore };
+}
+
+/**
+ * Reopen a closed session for continued chatting on the same thread.
+ * Clears closedAt only — keeps summary as a historical snapshot.
+ */
+async function reopenSession(uid, sessionId) {
+  await coachSessionsRef(uid).doc(sessionId).set(
+    { closedAt: null },
+    { merge: true }
+  );
 }
 
 /**
@@ -218,7 +298,14 @@ async function appendMessage(uid, sessionId, msg) {
 
   const batch = db.batch();
   batch.set(messageRef, payload);
-  batch.set(sessionRef, { lastMessageAt: now }, { merge: true });
+  batch.set(
+    sessionRef,
+    {
+      lastMessageAt: now,
+      messageCount: admin.firestore.FieldValue.increment(1),
+    },
+    { merge: true }
+  );
   await batch.commit();
 
   return { id: messageRef.id, ...payload };
@@ -441,6 +528,9 @@ module.exports = {
   createSession,
   getRecentMessages,
   getRecentSessionSummaries,
+  getCoachSession,
+  listCoachSessions,
+  reopenSession,
   appendMessage,
   appendCoachRecording,
   getLatestMetricsSnapshot,

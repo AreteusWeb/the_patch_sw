@@ -7,6 +7,7 @@ import {
   Mic,
   Volume2,
   Search,
+  PanelLeft,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
@@ -15,6 +16,9 @@ import { cn } from '../../utils/cn';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
 import LiveCoachSessionView from './LiveCoachSessionView';
+import CoachHistorySidebar, {
+  type CoachSessionListItem,
+} from './CoachHistorySidebar';
 
 interface AiCoachPanelProps {
   onClose: () => void;
@@ -74,20 +78,127 @@ interface CoachChatMessage {
   attachments?: CoachAttachment[];
 }
 
-/** Break "1. … 2. …" into lines when the model dumps a list in one paragraph. */
+/** Soft cap mirrored from server MAX_MESSAGES_PER_SESSION default. */
+const COACH_SESSION_MESSAGE_CAP = 40;
+
+function parseCoachUiMessages(raw: unknown): CoachChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (m: unknown): m is CoachChatMessage =>
+        !!m &&
+        typeof m === 'object' &&
+        typeof (m as CoachChatMessage).id === 'string' &&
+        ((m as CoachChatMessage).role === 'user' ||
+          (m as CoachChatMessage).role === 'model') &&
+        typeof (m as CoachChatMessage).text === 'string'
+    )
+    .map((m) => ({
+      id: m.id,
+      role: m.role,
+      text: m.text,
+      ...(Array.isArray(m.attachments) && m.attachments.length > 0
+        ? { attachments: m.attachments as CoachAttachment[] }
+        : {}),
+    }));
+}
+
+/**
+ * Light markdown for coach bubbles (no HTML injection).
+ * Supports: headings, bullets, numbered lists, blockquotes, hr, fenced code,
+ * **bold** / __bold__, *italic* / _italic_, ~~strike~~, `code`, [links](url), bare https URLs.
+ */
 function normalizeCoachText(text: string): string {
-  if (text.includes('\n')) return text;
-  return text.replace(/\s+(\d+)\.\s+/g, '\n$1. ');
+  let t = text.replace(/\r\n/g, '\n');
+  // Model sometimes dumps "1. a 2. b" or "- a - b" on one line.
+  if (!t.includes('\n')) {
+    t = t
+      .replace(/\s+(\d+)\.\s+/g, '\n$1. ')
+      .replace(/\s+([*\-•])\s+/g, '\n$1 ');
+  }
+  return t;
 }
 
 const SAFE_HREF_RE = /^https?:\/\//i;
 
-/** Render one text segment with **bold** and [label](url) markdown links. */
+function trimTrailingUrlPunctuation(url: string): { href: string; trailing: string } {
+  // Peel trailing ),.], etc. that models often stick to URLs.
+  let href = url;
+  let trailing = '';
+  while (/[),.\]!;:]$/.test(href)) {
+    trailing = href.slice(-1) + trailing;
+    href = href.slice(0, -1);
+  }
+  return { href, trailing };
+}
+
+/** Inline markdown inside a single line / list item. */
 function CoachTextSegment({ text, keyPrefix }: { text: string; keyPrefix: string }) {
-  // One capturing group = full [label](url) token (avoid splitting out the URL alone).
-  const chunks = text.split(/(\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g);
   const nodes: React.ReactNode[] = [];
+
+  // 1) Extract markdown links + inline code + bare URLs as atomic tokens.
+  const tokenRe =
+    /(\[[^\]]+\]\(https?:\/\/[^)\s]+\)|`[^`]+`|https?:\/\/[^\s<>\)\]"'`]+)/g;
+  const chunks = text.split(tokenRe);
+
+  const pushEmphasis = (raw: string, keyBase: string) => {
+    // Order: ***bold-italic*** / **bold** / __bold__ / *italic* / _italic_ / ~~strike~~
+    const parts = raw.split(
+      /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|~~[^~]+~~)/g
+    );
+    parts.forEach((part, partIdx) => {
+      if (!part) return;
+      let m: RegExpExecArray | null;
+      if ((m = /^\*\*\*([^*]+)\*\*\*$/.exec(part))) {
+        nodes.push(
+          <strong key={`${keyBase}_${partIdx}`} className="font-semibold text-[#F5F5F5]">
+            <em className="italic">{m[1]}</em>
+          </strong>
+        );
+        return;
+      }
+      if ((m = /^\*\*([^*]+)\*\*$/.exec(part)) || (m = /^__([^_]+)__$/.exec(part))) {
+        nodes.push(
+          <strong
+            key={`${keyBase}_${partIdx}`}
+            className="font-semibold text-[#F5F5F5]"
+          >
+            {m[1]}
+          </strong>
+        );
+        return;
+      }
+      if ((m = /^\*([^*]+)\*$/.exec(part)) || (m = /^_([^_]+)_$/.exec(part))) {
+        nodes.push(
+          <em
+            key={`${keyBase}_${partIdx}`}
+            className="italic text-[#A0A0A8]"
+          >
+            {m[1]}
+          </em>
+        );
+        return;
+      }
+      if ((m = /^~~([^~]+)~~$/.exec(part))) {
+        nodes.push(
+          <span
+            key={`${keyBase}_${partIdx}`}
+            className="line-through text-[#6B7280]"
+          >
+            {m[1]}
+          </span>
+        );
+        return;
+      }
+      nodes.push(
+        <React.Fragment key={`${keyBase}_${partIdx}`}>{part}</React.Fragment>
+      );
+    });
+  };
+
   chunks.forEach((chunk, i) => {
+    if (!chunk) return;
+
     const linkMatch = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(chunk);
     if (linkMatch && SAFE_HREF_RE.test(linkMatch[2])) {
       nodes.push(
@@ -104,41 +215,67 @@ function CoachTextSegment({ text, keyPrefix }: { text: string; keyPrefix: string
       return;
     }
 
-    const boldParts = chunk.split(/(\*\*[^*]+\*\*)/g);
-    boldParts.forEach((part, partIdx) => {
-      const bold = /^\*\*([^*]+)\*\*$/.exec(part);
-      if (bold) {
+    const inlineCode = /^`([^`]+)`$/.exec(chunk);
+    if (inlineCode) {
+      nodes.push(
+        <code
+          key={`${keyPrefix}_c_${i}`}
+          className="rounded-md bg-slate-950/90 border border-slate-700/70 px-1 py-0.5 font-mono text-[11px] text-teal-200/90"
+        >
+          {inlineCode[1]}
+        </code>
+      );
+      return;
+    }
+
+    if (/^https?:\/\//.test(chunk)) {
+      const { href, trailing } = trimTrailingUrlPunctuation(chunk);
+      if (SAFE_HREF_RE.test(href)) {
         nodes.push(
-          <strong
-            key={`${keyPrefix}_b_${i}_${partIdx}`}
-            className="font-semibold text-[#F5F5F5]"
+          <a
+            key={`${keyPrefix}_u_${i}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-teal-500/50 text-teal-300 hover:text-teal-200 break-all"
           >
-            {bold[1]}
-          </strong>
+            {href}
+          </a>
         );
-      } else if (part) {
-        nodes.push(
-          <React.Fragment key={`${keyPrefix}_t_${i}_${partIdx}`}>
-            {part}
-          </React.Fragment>
-        );
+        if (trailing) {
+          nodes.push(
+            <React.Fragment key={`${keyPrefix}_ut_${i}`}>{trailing}</React.Fragment>
+          );
+        }
+        return;
       }
-    });
+    }
+
+    pushEmphasis(chunk, `${keyPrefix}_${i}`);
   });
+
   return <>{nodes}</>;
 }
 
 type CoachTextBlock =
   | { type: 'paragraph'; lines: string[] }
   | { type: 'bullets'; items: string[] }
-  | { type: 'heading'; text: string };
+  | { type: 'numbered'; items: string[] }
+  | { type: 'heading'; text: string; level: number }
+  | { type: 'code'; lang: string | null; code: string }
+  | { type: 'quote'; lines: string[] }
+  | { type: 'hr' };
 
-/** Group plain lines vs markdown-ish headings / * / - bullet lists. */
 function parseCoachBlocks(text: string): CoachTextBlock[] {
   const lines = normalizeCoachText(text).split('\n');
   const blocks: CoachTextBlock[] = [];
   let paragraph: string[] = [];
   let bullets: string[] = [];
+  let numbered: string[] = [];
+  let quote: string[] = [];
+  let inCode = false;
+  let codeLang: string | null = null;
+  let codeLines: string[] = [];
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -150,52 +287,169 @@ function parseCoachBlocks(text: string): CoachTextBlock[] {
     blocks.push({ type: 'bullets', items: bullets });
     bullets = [];
   };
+  const flushNumbered = () => {
+    if (numbered.length === 0) return;
+    blocks.push({ type: 'numbered', items: numbered });
+    numbered = [];
+  };
+  const flushQuote = () => {
+    if (quote.length === 0) return;
+    blocks.push({ type: 'quote', lines: quote });
+    quote = [];
+  };
+  const flushLists = () => {
+    flushBullets();
+    flushNumbered();
+    flushQuote();
+  };
+  const flushCode = () => {
+    blocks.push({ type: 'code', lang: codeLang, code: codeLines.join('\n') });
+    inCode = false;
+    codeLang = null;
+    codeLines = [];
+  };
 
   for (const raw of lines) {
-    const heading = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/.exec(raw);
-    if (heading) {
-      flushBullets();
-      flushParagraph();
-      blocks.push({ type: 'heading', text: heading[1].trim() });
+    const fence = /^\s{0,3}```\s*([A-Za-z0-9_+-]*)\s*$/.exec(raw);
+    if (fence) {
+      if (inCode) {
+        flushCode();
+      } else {
+        flushLists();
+        flushParagraph();
+        inCode = true;
+        codeLang = fence[1] ? fence[1].toLowerCase() : null;
+        codeLines = [];
+      }
       continue;
     }
-    const bullet = /^\s*[\*\-•]\s+(.+)$/.exec(raw);
+    if (inCode) {
+      codeLines.push(raw);
+      continue;
+    }
+
+    if (/^\s{0,3}([-*_])\1{2,}\s*$/.test(raw)) {
+      flushLists();
+      flushParagraph();
+      blocks.push({ type: 'hr' });
+      continue;
+    }
+
+    const heading = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(raw);
+    if (heading) {
+      flushLists();
+      flushParagraph();
+      blocks.push({
+        type: 'heading',
+        level: heading[1].length,
+        text: heading[2].trim(),
+      });
+      continue;
+    }
+
+    const quoteLine = /^\s{0,3}>\s?(.*)$/.exec(raw);
+    if (quoteLine) {
+      flushBullets();
+      flushNumbered();
+      flushParagraph();
+      quote.push(quoteLine[1]);
+      continue;
+    }
+
+    const bullet = /^\s{0,3}[\*\-•]\s+(.+)$/.exec(raw);
     if (bullet) {
+      flushNumbered();
+      flushQuote();
       flushParagraph();
       bullets.push(bullet[1]);
       continue;
     }
-    if (raw.trim() === '') {
+
+    const num = /^\s{0,3}\d+[.)]\s+(.+)$/.exec(raw);
+    if (num) {
       flushBullets();
+      flushQuote();
+      flushParagraph();
+      numbered.push(num[1]);
+      continue;
+    }
+
+    if (raw.trim() === '') {
+      flushLists();
       flushParagraph();
       continue;
     }
-    flushBullets();
+
+    flushLists();
     paragraph.push(raw);
   }
-  flushBullets();
+  if (inCode) flushCode();
+  flushLists();
   flushParagraph();
   return blocks;
 }
 
-/** Render light markdown: headings, lists, **bold**, [links](url) (no HTML injection). */
 function CoachMessageBody({ text }: { text: string }) {
   const blocks = parseCoachBlocks(text);
 
   return (
     <div className="space-y-2.5">
       {blocks.map((block, blockIdx) => {
+        if (block.type === 'hr') {
+          return (
+            <hr
+              key={`hr_${blockIdx}`}
+              className="border-0 border-t border-slate-700/70 my-1"
+            />
+          );
+        }
+        if (block.type === 'code') {
+          return (
+            <div
+              key={`c_${blockIdx}`}
+              className="my-1 overflow-x-auto rounded-xl border border-slate-700/80 bg-slate-950/90"
+            >
+              {block.lang && (
+                <div className="px-3 pt-2 text-[9px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                  {block.lang}
+                </div>
+              )}
+              <pre className="m-0 px-3 py-2.5 overflow-x-auto">
+                <code className="block font-mono text-[11px] leading-[1.5] text-teal-100/90 whitespace-pre">
+                  {block.code}
+                </code>
+              </pre>
+            </div>
+          );
+        }
         if (block.type === 'heading') {
           return (
             <p
               key={`h_${blockIdx}`}
-              className="m-0 font-semibold text-[13px] text-[#F5F5F5] leading-[1.4]"
+              className={cn(
+                'm-0 font-semibold text-[#F5F5F5] leading-[1.4]',
+                block.level <= 2 ? 'text-[14px]' : 'text-[13px]'
+              )}
             >
-              <CoachTextSegment
-                text={block.text}
-                keyPrefix={`h${blockIdx}`}
-              />
+              <CoachTextSegment text={block.text} keyPrefix={`h${blockIdx}`} />
             </p>
+          );
+        }
+        if (block.type === 'quote') {
+          return (
+            <blockquote
+              key={`q_${blockIdx}`}
+              className="m-0 border-l-2 border-teal-500/40 pl-3 text-[#A0A0A8]"
+            >
+              {block.lines.map((line, lineIdx) => (
+                <p key={`q_${blockIdx}_${lineIdx}`} className="m-0 mb-1 last:mb-0">
+                  <CoachTextSegment
+                    text={line}
+                    keyPrefix={`ql${blockIdx}_${lineIdx}`}
+                  />
+                </p>
+              ))}
+            </blockquote>
           );
         }
         if (block.type === 'bullets') {
@@ -205,30 +459,54 @@ function CoachMessageBody({ text }: { text: string }) {
               className="m-0 pl-0 list-none space-y-1.5"
             >
               {block.items.map((item, itemIdx) => {
-                  // "Product Name: details" → bold the label for scannability.
-                  const labeled = /^([^:]{2,72}):\s+(.+)$/.exec(item);
-                  const display = labeled
-                    ? `**${labeled[1]}:** ${labeled[2]}`
-                    : item;
-                  return (
-                    <li
-                      key={`b_${blockIdx}_${itemIdx}`}
-                      className="flex gap-2 min-w-0"
-                    >
-                      <span
-                        className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-teal-400/80"
-                        aria-hidden
+                const labeled = /^([^:]{2,72}):\s+(.+)$/.exec(item);
+                const display = labeled
+                  ? `**${labeled[1]}:** ${labeled[2]}`
+                  : item;
+                return (
+                  <li
+                    key={`b_${blockIdx}_${itemIdx}`}
+                    className="flex gap-2 min-w-0"
+                  >
+                    <span
+                      className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-teal-400/80"
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">
+                      <CoachTextSegment
+                        text={display}
+                        keyPrefix={`bi${blockIdx}_${itemIdx}`}
                       />
-                      <span className="min-w-0 flex-1">
-                        <CoachTextSegment
-                          text={display}
-                          keyPrefix={`bi${blockIdx}_${itemIdx}`}
-                        />
-                      </span>
-                    </li>
-                  );
-                })}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
+          );
+        }
+        if (block.type === 'numbered') {
+          return (
+            <ol
+              key={`n_${blockIdx}`}
+              className="m-0 pl-0 list-none space-y-1.5"
+            >
+              {block.items.map((item, itemIdx) => (
+                <li
+                  key={`n_${blockIdx}_${itemIdx}`}
+                  className="flex gap-2 min-w-0"
+                >
+                  <span className="w-4 shrink-0 tabular-nums text-[11px] text-teal-400/90 font-semibold pt-[0.1em]">
+                    {itemIdx + 1}.
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <CoachTextSegment
+                      text={item}
+                      keyPrefix={`ni${blockIdx}_${itemIdx}`}
+                    />
+                  </span>
+                </li>
+              ))}
+            </ol>
           );
         }
 
@@ -549,6 +827,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState(false);
+  /** History sidebar visibility (toggle via header). */
+  const [historyOpen, setHistoryOpen] = useState(!isFullscreen);
+  const [sessionList, setSessionList] = useState<CoachSessionListItem[]>([]);
+  const [sessionListLoading, setSessionListLoading] = useState(false);
+  const [sessionListLoadingMore, setSessionListLoadingMore] = useState(false);
+  const [sessionListNextBefore, setSessionListNextBefore] = useState<
+    number | null
+  >(null);
+  const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -557,15 +844,128 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const prevSpeakingRef = useRef(false);
   /** Keep chat pinned to latest messages unless the user scrolls up to read history. */
   const stickToBottomRef = useRef(true);
-  const sendMessageRef = useRef<(text?: string) => Promise<void>>(async () => {});
+  const sendMessageRef = useRef<(text?: string) => Promise<void>>(
+    async () => {}
+  );
+  const sessionIdRef = useRef<string | null>(null);
 
   voiceModeRef.current = voiceMode;
   loadingRef.current = loading;
+  sessionIdRef.current = sessionId;
+
+  const authHeaders = async (): Promise<Record<string, string> | null> => {
+    if (!currentUser || typeof currentUser.getIdToken !== 'function') {
+      return null;
+    }
+    const token = await currentUser.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  };
+
+  const refreshSessionList = async (opts?: { append?: boolean }) => {
+    const append = opts?.append === true;
+    const headers = await authHeaders();
+    if (!headers) return;
+
+    if (append) {
+      if (sessionListNextBefore == null) return;
+      setSessionListLoadingMore(true);
+    } else {
+      setSessionListLoading(true);
+    }
+
+    try {
+      const qs = new URLSearchParams({ limit: '20' });
+      if (append && sessionListNextBefore != null) {
+        qs.set('before', String(sessionListNextBefore));
+      }
+      const res = await fetch(`${API_BASE}/api/coach/sessions?${qs}`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) {
+        console.warn('[AiCoach] sessions list failed:', res.status);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      const items: CoachSessionListItem[] = Array.isArray(data.sessions)
+        ? data.sessions.filter(
+            (s: unknown): s is CoachSessionListItem =>
+              !!s &&
+              typeof s === 'object' &&
+              typeof (s as CoachSessionListItem).sessionId === 'string'
+          )
+        : [];
+      setSessionList((prev) => (append ? [...prev, ...items] : items));
+      setSessionListNextBefore(
+        typeof data.nextBefore === 'number' ? data.nextBefore : null
+      );
+    } catch (err) {
+      console.warn('[AiCoach] sessions list error:', err);
+    } finally {
+      setSessionListLoading(false);
+      setSessionListLoadingMore(false);
+    }
+  };
+
+  /**
+   * Open a specific thread from the history sidebar. Explicit sessionId is
+   * kept in state so /message prefers this thread over idle auto-pick.
+   */
+  const openSessionFromHistory = async (id: string) => {
+    if (openingSessionId || loading || startingNew) return;
+    if (id === sessionId && messages.length > 0) {
+      if (isFullscreen) setHistoryOpen(false);
+      return;
+    }
+
+    const headers = await authHeaders();
+    if (!headers) {
+      setError('Sign in required to chat with the AI Coach.');
+      return;
+    }
+
+    setOpeningSessionId(id);
+    setError(null);
+    stopListening();
+    cancelSpeech();
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/coach/sessions/${encodeURIComponent(id)}`,
+        { method: 'GET', headers }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.warn('[AiCoach] open session failed:', res.status);
+        setError('Could not open that conversation.');
+        return;
+      }
+      const session = data?.session;
+      if (!session || typeof session.sessionId !== 'string') {
+        setError('Could not open that conversation.');
+        return;
+      }
+      const hydrated = parseCoachUiMessages(session.messages);
+      setSessionId(session.sessionId);
+      setMessages(hydrated);
+      setSessionLimitReached(hydrated.length >= COACH_SESSION_MESSAGE_CAP);
+      setInput('');
+      setVoiceDraft(false);
+      stickToBottomRef.current = true;
+      if (isFullscreen) setHistoryOpen(false);
+    } catch (err) {
+      console.warn('[AiCoach] open session error:', err);
+      setError('Could not open that conversation.');
+    } finally {
+      setOpeningSessionId(null);
+    }
+  };
 
   /**
    * Bootstrap: on mount, ask the server for the active coach session (same
    * getActiveSession / idle rules as /message). Hydrate messages if present;
    * on null / failure, leave the chat empty — never block sending.
+   * History sidebar is loaded in parallel (does not replace bootstrap).
    */
   useEffect(() => {
     let cancelled = false;
@@ -577,6 +977,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       }
 
       setHistoryLoading(true);
+      void refreshSessionList();
+
       try {
         const token = await currentUser.getIdToken();
         const res = await fetch(`${API_BASE}/api/coach/session`, {
@@ -598,29 +1000,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           return;
         }
 
-        const hydrated: CoachChatMessage[] = Array.isArray(session.messages)
-          ? session.messages
-              .filter(
-                (m: unknown): m is CoachChatMessage =>
-                  !!m &&
-                  typeof m === 'object' &&
-                  typeof (m as CoachChatMessage).id === 'string' &&
-                  ((m as CoachChatMessage).role === 'user' ||
-                    (m as CoachChatMessage).role === 'model') &&
-                  typeof (m as CoachChatMessage).text === 'string'
-              )
-              .map((m: CoachChatMessage) => ({
-                id: m.id,
-                role: m.role,
-                text: m.text,
-                ...(Array.isArray(m.attachments) && m.attachments.length > 0
-                  ? { attachments: m.attachments as CoachAttachment[] }
-                  : {}),
-              }))
-          : [];
-
+        const hydrated = parseCoachUiMessages(session.messages);
         setSessionId(session.sessionId);
         setMessages(hydrated);
+        setSessionLimitReached(hydrated.length >= COACH_SESSION_MESSAGE_CAP);
         stickToBottomRef.current = true;
       } catch (err) {
         // Network / offline — fall back to empty chat; do not alarm the user.
@@ -634,6 +1017,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / uid only
   }, [currentUser?.uid]);
 
   const scrollChatToBottom = () => {
@@ -798,6 +1182,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
     setStartingNew(true);
     setError(null);
+    // Clear selected thread before creating a new one so a failed request
+    // cannot leave a stale sessionId pointing at the previous conversation.
+    setSessionId(null);
+    setMessages([]);
+    setSessionLimitReached(false);
     stopListening();
     cancelSpeech();
 
@@ -823,8 +1212,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         return;
       }
 
-      setMessages([]);
-      setSessionLimitReached(false);
       setInput('');
       setVoiceDraft(false);
       stickToBottomRef.current = true;
@@ -834,6 +1221,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       } else {
         setSessionId(null);
       }
+      void refreshSessionList();
       // Don't focus the composer in voice mode — that opens the soft keyboard
       // and makes the chat pane jump while listening.
       if (!voiceModeRef.current) {
@@ -887,6 +1275,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         body: JSON.stringify({
           message: text,
           metricsSnapshot: buildMetricsSnapshot(),
+          // When the UI has an open thread (bootstrap or history pick), send it
+          // so the server appends to that doc instead of idle auto-pick.
+          ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
         }),
       });
 
@@ -1045,6 +1436,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         },
       ]);
 
+      void refreshSessionList();
+
       if (voiceModeRef.current) {
         const started = speak(replyText);
         if (!started) resumeVoiceListening();
@@ -1102,7 +1495,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
   };
 
-  const busy = loading || startingNew || historyLoading;
+  const busy = loading || startingNew || historyLoading || !!openingSessionId;
   const voiceState: 'idle' | 'listening' | 'speaking' | 'waiting' =
     isSpeaking
       ? 'speaking'
@@ -1141,20 +1534,36 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
         <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
           {interactionMode === 'text' && (
-            <button
-              type="button"
-              onClick={() => void startNewConversation()}
-              disabled={busy}
-              className="flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400 transition-colors disabled:opacity-40"
-              title="Start a new conversation"
-            >
-              {startingNew ? (
-                <Loader2 size={14} className="animate-spin text-teal-400" />
-              ) : (
-                <MessageSquarePlus size={14} />
-              )}
-              {startingNew ? 'Starting' : 'New'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((v) => !v)}
+                className={cn(
+                  'w-9 h-9 flex items-center justify-center rounded-lg transition-colors',
+                  historyOpen
+                    ? 'text-teal-400 bg-teal-500/15'
+                    : 'text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400'
+                )}
+                title={historyOpen ? 'Hide conversations' : 'Show conversations'}
+                aria-pressed={historyOpen}
+              >
+                <PanelLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => void startNewConversation()}
+                disabled={busy}
+                className="flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400 transition-colors disabled:opacity-40"
+                title="Start a new conversation"
+              >
+                {startingNew ? (
+                  <Loader2 size={14} className="animate-spin text-teal-400" />
+                ) : (
+                  <MessageSquarePlus size={14} />
+                )}
+                {startingNew ? 'Starting' : 'New'}
+              </button>
+            </>
           )}
           <button
             type="button"
@@ -1215,18 +1624,40 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           <LiveCoachSessionView embedded />
         </div>
       ) : (
-        <>
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          {historyOpen && (
+            <CoachHistorySidebar
+              className={cn(
+                'flex-shrink-0',
+                isFullscreen ? 'w-[12.5rem] sm:w-[14rem]' : 'w-[11rem] sm:w-[12.5rem]'
+              )}
+              sessions={sessionList}
+              activeSessionId={sessionId}
+              listLoading={sessionListLoading}
+              loadingMore={sessionListLoadingMore}
+              openingSessionId={openingSessionId}
+              hasMore={sessionListNextBefore != null}
+              onSelect={(id) => void openSessionFromHistory(id)}
+              onLoadMore={() => void refreshSessionList({ append: true })}
+              onNewConversation={() => void startNewConversation()}
+              newDisabled={busy}
+            />
+          )}
+
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <div
             ref={listRef}
             onScroll={onChatListScroll}
             className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide px-4 sm:px-5 py-4 flex flex-col gap-3.5"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {historyLoading && (
+            {(historyLoading || openingSessionId) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
                 <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
                 <p className="text-[11px] text-[#A0A0A8] font-medium">
-                  Loading conversation…
+                  {openingSessionId
+                    ? 'Opening conversation…'
+                    : 'Loading conversation…'}
                 </p>
               </div>
             )}
@@ -1240,7 +1671,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               </div>
             )}
 
-            {messages.length === 0 && !loading && !startingNew && !historyLoading && (
+            {messages.length === 0 &&
+              !loading &&
+              !startingNew &&
+              !historyLoading &&
+              !openingSessionId && (
               <p className="text-[12px] text-[#6B7280] leading-[1.5] px-0.5">
                 Ask about training, recovery, hydration, or effort. This is
                 performance coaching — not medical advice.
@@ -1445,7 +1880,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               </button>
             </div>
           </div>
-        </>
+          </div>
+        </div>
       )}
     </div>
   );

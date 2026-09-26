@@ -135,6 +135,7 @@ async function createSession(uid, metricsAtStart = null) {
     closedAt: null,
     summary: null,
     metricsAtStart: metricsAtStart ?? null,
+    messageCount: 0,
   };
   sessionsFor(uid).set(sessionId, payload);
   return { sessionId, ...payload };
@@ -176,6 +177,70 @@ async function getRecentSessionSummaries(uid, excludeSessionId, limit = 3) {
 }
 
 /**
+ * Fetch a single coach session under this uid (ownership = in-memory map key).
+ */
+async function getCoachSession(uid, sessionId) {
+  if (!sessionId) return null;
+  const data = sessionsFor(uid).get(sessionId);
+  if (!data) return null;
+  const messageCount =
+    typeof data.messageCount === 'number'
+      ? data.messageCount
+      : messagesFor(uid, sessionId).length;
+  return {
+    sessionId,
+    startedAt: data.startedAt ?? null,
+    lastMessageAt: data.lastMessageAt ?? null,
+    closedAt: data.closedAt ?? null,
+    summary: data.summary ?? null,
+    metricsAtStart: data.metricsAtStart ?? null,
+    messageCount,
+  };
+}
+
+/**
+ * Paginated session list (newest first).
+ * @param {{ limit?: number, before?: number|null }} opts
+ */
+async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
+  const pageSize = Math.min(50, Math.max(1, Number(limit) || 20));
+  let all = [...sessionsFor(uid).entries()].sort(
+    (a, b) => (b[1].lastMessageAt ?? 0) - (a[1].lastMessageAt ?? 0)
+  );
+  if (typeof before === 'number' && Number.isFinite(before)) {
+    all = all.filter(([, s]) => (s.lastMessageAt ?? 0) < before);
+  }
+  const page = all.slice(0, pageSize);
+  const sessions = page.map(([sessionId, data]) => ({
+    sessionId,
+    startedAt: data.startedAt ?? null,
+    lastMessageAt: data.lastMessageAt ?? null,
+    closedAt: data.closedAt ?? null,
+    summary: data.summary ?? null,
+    messageCount:
+      typeof data.messageCount === 'number'
+        ? data.messageCount
+        : messagesFor(uid, sessionId).length,
+  }));
+  const hasMore = all.length > pageSize;
+  const nextBefore =
+    hasMore && sessions.length > 0
+      ? sessions[sessions.length - 1].lastMessageAt
+      : null;
+  return { sessions, nextBefore };
+}
+
+/** Clear closedAt only — keep summary snapshot. */
+async function reopenSession(uid, sessionId) {
+  const sessions = sessionsFor(uid);
+  const session = sessions.get(sessionId);
+  if (!session) {
+    throw new Error(`coach_session_not_found:${sessionId}`);
+  }
+  sessions.set(sessionId, { ...session, closedAt: null });
+}
+
+/**
  * Appends a message and bumps the session's lastMessageAt.
  * attachments may include { type: 'image', ... } and/or { type: 'video', ... }.
  */
@@ -198,7 +263,11 @@ async function appendMessage(uid, sessionId, msg) {
   };
 
   messagesFor(uid, sessionId).push(payload);
-  sessions.set(sessionId, { ...session, lastMessageAt: now });
+  sessions.set(sessionId, {
+    ...session,
+    lastMessageAt: now,
+    messageCount: (session.messageCount ?? messagesFor(uid, sessionId).length - 1) + 1,
+  });
   return { ...payload };
 }
 
@@ -364,6 +433,9 @@ module.exports = {
   createSession,
   getRecentMessages,
   getRecentSessionSummaries,
+  getCoachSession,
+  listCoachSessions,
+  reopenSession,
   appendMessage,
   appendCoachRecording,
   getLatestMetricsSnapshot,

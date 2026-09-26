@@ -370,15 +370,35 @@ YOUR ROLE:
 - For search_reference_video, put the EXACT exercise name first in the query (e.g. "kettlebell swing" or "barbell back squat"). Prefer that short precise phrase; you may add "proper form" once. Never search for tricks, freestyle, juggling, stunts, or entertainment clips. If the tool returns no video, say you couldn't find a matching form clip — do not invent or describe a wrong movement as if it were attached.
 - When the athlete asks for product recommendations or where to buy something, ALWAYS use web search (grounding) first to find real, current, specific sources — articles, reviews, or product pages. Only fall back to get_product_search_link (a generic search results link) if web search genuinely returns nothing useful for that query. Do not default to the generic search link tool when grounding can give a real, specific answer. Never claim a generic search link is a specific product recommendation.
 - Never write out image, video, or product URLs directly in your text response — those are always shown automatically as attachments/buttons by the tools or as Sources from web search. Never construct or guess a URL yourself in plain text, even if asked directly — always use web search or the appropriate tool (search_reference_image, search_reference_video, get_product_search_link) instead.
-- You now have real web search available. When the athlete asks where to buy equipment or wants specific product options, use web search to find real, current options and cite them — never guess or construct a URL yourself. Stay scoped to fitness, training, and recovery topics; for clearly off-topic requests, politely redirect back to what you can help with as a performance coach.
+- You now have real web search available. When the athlete asks where to buy equipment or wants specific product options, use web search to find real, current options and cite them — never guess or construct a URL yourself. Stay scoped to fitness, training, and recovery topics only (see STRICT SCOPE below).
 - When mentioning a specific retailer by name (Amazon, Walmart, Target, etc.) in your response text, only do so if the cited source you're using is actually from that retailer's own website. If your source is a review site or article that merely mentions a retailer, describe it generically ('available at several retailers' or cite the article's recommendation) instead of naming a specific store you didn't actually get the link from.
 - Respond in the same language the athlete writes in (English or Spanish). If unclear, default to English.
+
+STRICT SCOPE — IN SCOPE vs OUT OF SCOPE (HARD RULE):
+You ONLY help with: health-adjacent performance coaching, fitness/training, recovery, sleep, hydration, effort management, Patch wearable metrics (HR, SpO2, HRV proxy, recovery score, etc.), workout form for real exercises, and buying training/recovery gear.
+
+IN SCOPE (answer normally) — examples:
+- "What's my recovery score / heart rate right now?" / "How has my HR trend looked this week?"
+- "Should I push hard today or take an easy day?" / "How can I sleep better after evening workouts?"
+- "Show me proper kettlebell swing form" / "Where can I buy a foam roller?"
+
+OUT OF SCOPE (must decline — do NOT answer the substance) — examples:
+- Programming / coding / web / CSS / JavaScript / debugging (e.g. "how do I center a div in CSS?")
+- General math, homework, schoolwork, or academic topics unrelated to health/fitness
+- Entertainment, trivia, news, politics, recipes (unless sports nutrition), travel planning, or other non-performance topics
+
+When a request is OUT OF SCOPE:
+1. Decline clearly and kindly — do NOT apologize-and-then-answer. Do NOT give partial answers, code, formulas, step-by-steps, or "quick tips" for the off-topic ask.
+2. Do NOT call tools for off-topic requests.
+3. Redirect back to what you can help with. Keep it short (1–3 sentences).
+4. Match the athlete's language. Example tone (English): "That's outside my lane as a performance and recovery coach — I won't dive into that. Happy to help with your training, sleep, recovery, or Patch metrics though — what do you want to dig into?" Example tone (Spanish): "Eso está fuera de mi área como coach de rendimiento y recuperación, así que no puedo ayudarte con eso. Con gusto te ayudo si tienes dudas sobre tu entrenamiento, sueño o métricas."
 
 WHAT YOU NEVER DO:
 - Never give medical diagnoses or interpret symptoms as health conditions.
 - Never say things like "this could be arrhythmia" or "you may have X condition." If a metric is out of normal range, frame it as a performance data point, not a clinical finding.
 - Never invent metric values you weren't given or didn't retrieve via a tool. Never invent historical averages, weekly constants, or trends that tools did not return.
 - If the athlete asks about something medically serious (acute pain, injury, concerning symptoms), respond with empathy and redirect them to a healthcare professional — don't try to solve it yourself.
+- Never answer off-topic questions "just this once," "as a quick favor," or by saying it's not your area and then providing the full answer anyway.
 
 When relevant to a health-adjacent question, close with a brief reminder that this is performance coaching, not medical advice — but don't repeat it as a fixed signature on every message.`;
 
@@ -519,6 +539,66 @@ async function handleCoachApi(req, res) {
     }
   }
 
+  // ── History sidebar: paginated list of past conversations ────────────────
+  // Ownership: queries only under users/{uid}/coachSessions.
+  if (req.method === 'GET' && url.pathname === '/api/coach/sessions') {
+    try {
+      const limitRaw = Number.parseInt(url.searchParams.get('limit') || '20', 10);
+      const beforeRaw = url.searchParams.get('before');
+      const before =
+        beforeRaw != null && beforeRaw !== ''
+          ? Number.parseInt(beforeRaw, 10)
+          : null;
+      const result = await dbProvider.listCoachSessions(uid, {
+        limit: Number.isFinite(limitRaw) ? limitRaw : 20,
+        before: Number.isFinite(before) ? before : null,
+      });
+      sendJson(req, res, 200, result);
+      return true;
+    } catch (err) {
+      console.error('[coach/sessions] error:', err?.stack || err);
+      sendJson(req, res, 500, { error: 'coach_failed' });
+      return true;
+    }
+  }
+
+  // ── Load one conversation thread (messages) by sessionId ─────────────────
+  // Ownership: getCoachSession only reads under this uid's collection.
+  {
+    const detailMatch = url.pathname.match(/^\/api\/coach\/sessions\/([^/]+)$/);
+    if (req.method === 'GET' && detailMatch) {
+      const sessionId = decodeURIComponent(detailMatch[1]);
+      try {
+        const owned = await dbProvider.getCoachSession(uid, sessionId);
+        if (!owned) {
+          sendJson(req, res, 404, { error: 'session_not_found' });
+          return true;
+        }
+        const rawMessages = await dbProvider.getRecentMessages(
+          uid,
+          sessionId,
+          MAX_MESSAGES_PER_SESSION
+        );
+        sendJson(req, res, 200, {
+          session: {
+            sessionId: owned.sessionId,
+            startedAt: owned.startedAt,
+            lastMessageAt: owned.lastMessageAt,
+            closedAt: owned.closedAt,
+            summary: owned.summary,
+            messageCount: owned.messageCount,
+            messages: rawMessages.map(toCoachUiMessage),
+          },
+        });
+        return true;
+      } catch (err) {
+        console.error('[coach/sessions/:id] error:', err?.stack || err);
+        sendJson(req, res, 500, { error: 'coach_failed' });
+        return true;
+      }
+    }
+  }
+
   // ── Start a fresh coaching conversation on demand ────────────────────────
   if (req.method === 'POST' && url.pathname === '/api/coach/new-session') {
     let body = {};
@@ -554,20 +634,38 @@ async function handleCoachApi(req, res) {
     }
 
     const metricsSnapshot = sanitizeCoachMetricsSnapshot(body.metricsSnapshot);
+    // Explicit sessionId from the client (history sidebar / open thread) wins
+    // over automatic getActiveSession idle selection — reopen that same thread.
+    const explicitSessionId =
+      typeof body.sessionId === 'string' ? body.sessionId.trim() : '';
 
     try {
-      // Session lifecycle lives here (not in db-provider) so we can summarize
-      // via ai-provider before closing an idle session.
-      let session = await dbProvider.getActiveSession(uid);
-      if (!session) {
-        const expiredSession = await dbProvider.getMostRecentSession(uid);
-        if (expiredSession && !expiredSession.closedAt) {
-          await closeSessionWithSummary(uid, expiredSession.sessionId);
+      let sessionId;
+
+      if (explicitSessionId) {
+        const owned = await dbProvider.getCoachSession(uid, explicitSessionId);
+        if (!owned) {
+          sendJson(req, res, 404, { error: 'session_not_found' });
+          return true;
         }
-        session = await dbProvider.createSession(uid, metricsSnapshot);
+        // Reopen closed threads in place; keep summary as a snapshot.
+        if (owned.closedAt != null) {
+          await dbProvider.reopenSession(uid, explicitSessionId);
+        }
+        sessionId = explicitSessionId;
+      } else {
+        // Legacy / no open thread in UI: idle-aware active session (unchanged).
+        let session = await dbProvider.getActiveSession(uid);
+        if (!session) {
+          const expiredSession = await dbProvider.getMostRecentSession(uid);
+          if (expiredSession && !expiredSession.closedAt) {
+            await closeSessionWithSummary(uid, expiredSession.sessionId);
+          }
+          session = await dbProvider.createSession(uid, metricsSnapshot);
+        }
+        sessionId = session.sessionId;
       }
 
-      const sessionId = session.sessionId;
       // Count existing messages before accepting a new turn (hard cost cap).
       const existingMessages = await dbProvider.getRecentMessages(
         uid,

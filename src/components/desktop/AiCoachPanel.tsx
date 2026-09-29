@@ -836,6 +836,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     number | null
   >(null);
   const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1232,6 +1233,57 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       setError('Network error — could not start a new conversation.');
     } finally {
       setStartingNew(false);
+    }
+  };
+
+  /**
+   * Delete a thread from the history sidebar (server does the recursive
+   * Firestore delete). The row is only removed after the server confirms,
+   * so a failed delete never looks like it succeeded.
+   */
+  const deleteSessionFromHistory = async (id: string) => {
+    if (deletingSessionId || loading || startingNew) return;
+
+    const confirmed = window.confirm(
+      "Delete this conversation? This can't be undone."
+    );
+    if (!confirmed) return;
+
+    const headers = await authHeaders();
+    if (!headers) {
+      setError('Sign in required to chat with the AI Coach.');
+      return;
+    }
+
+    setDeletingSessionId(id);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/coach/sessions/${encodeURIComponent(id)}`,
+        { method: 'DELETE', headers }
+      );
+      // 404 = already gone server-side; treat as deleted so the list converges.
+      if (!res.ok && res.status !== 404) {
+        console.warn('[AiCoach] delete session failed:', res.status);
+        setError('Could not delete that conversation. Try again.');
+        return;
+      }
+
+      setSessionList((prev) => prev.filter((s) => s.sessionId !== id));
+
+      if (sessionIdRef.current === id) {
+        // Same as "New conversation": clears the chat + sessionId right away,
+        // then asks the server for a fresh thread. Leaving sessionId null
+        // instead would let the next /message fall back to getActiveSession,
+        // which can land in a different open thread the user isn't looking at.
+        await startNewConversation();
+      }
+    } catch (err) {
+      console.warn('[AiCoach] delete session error:', err);
+      setError('Network error — could not delete that conversation.');
+    } finally {
+      setDeletingSessionId(null);
     }
   };
 
@@ -1636,11 +1688,14 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               listLoading={sessionListLoading}
               loadingMore={sessionListLoadingMore}
               openingSessionId={openingSessionId}
+              deletingSessionId={deletingSessionId}
               hasMore={sessionListNextBefore != null}
               onSelect={(id) => void openSessionFromHistory(id)}
+              onDelete={(id) => void deleteSessionFromHistory(id)}
               onLoadMore={() => void refreshSessionList({ append: true })}
               onNewConversation={() => void startNewConversation()}
-              newDisabled={busy}
+              newDisabled={busy || !!deletingSessionId}
+              deleteDisabled={busy}
             />
           )}
 

@@ -35,6 +35,7 @@ module.exports = {
   getCoachSession: impl.getCoachSession,
   listCoachSessions: impl.listCoachSessions,
   reopenSession: impl.reopenSession,
+  deleteCoachSession: impl.deleteCoachSession,
   appendMessage: impl.appendMessage,
   appendCoachRecording: impl.appendCoachRecording,
   getLatestMetricsSnapshot: impl.getLatestMetricsSnapshot,

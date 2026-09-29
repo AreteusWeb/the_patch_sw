@@ -233,6 +233,19 @@ async function reopenSession(uid, sessionId) {
 }
 
 /**
+ * Permanently delete a coach session and all of its messages.
+ *
+ * Firestore does NOT cascade: deleting users/{uid}/coachSessions/{id} alone
+ * leaves messages/{messageId} orphaned (still billed, still readable via
+ * collection-group queries). recursiveDelete walks every subcollection under
+ * the session doc (messages today, anything added later), deletes those docs
+ * in batches via BulkWriter, and deletes the parent doc last.
+ */
+async function deleteCoachSession(uid, sessionId) {
+  await db.recursiveDelete(coachSessionsRef(uid).doc(sessionId));
+}
+
+/**
  * Summaries from previously closed sessions (excludes excludeSessionId).
  * Skips sessions whose summary is still null.
  * @returns {Promise<Array<{ sessionId: string, summary: string, lastMessageAt: number|null, closedAt: number|null }>>}
@@ -531,6 +544,7 @@ module.exports = {
   getCoachSession,
   listCoachSessions,
   reopenSession,
+  deleteCoachSession,
   appendMessage,
   appendCoachRecording,
   getLatestMetricsSnapshot,

@@ -240,6 +240,13 @@ async function reopenSession(uid, sessionId) {
   sessions.set(sessionId, { ...session, closedAt: null });
 }
 
+/** Delete a session and its message list (mirrors recursiveDelete in gcp). */
+async function deleteCoachSession(uid, sessionId) {
+  sessionsFor(uid).delete(sessionId);
+  const bySession = coachMessagesByUid.get(uid);
+  if (bySession) bySession.delete(sessionId);
+}
+
 /**
  * Appends a message and bumps the session's lastMessageAt.
  * attachments may include { type: 'image', ... } and/or { type: 'video', ... }.
@@ -436,6 +443,7 @@ module.exports = {
   getCoachSession,
   listCoachSessions,
   reopenSession,
+  deleteCoachSession,
   appendMessage,
   appendCoachRecording,
   getLatestMetricsSnapshot,

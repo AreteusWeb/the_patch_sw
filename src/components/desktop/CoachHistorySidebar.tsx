@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
 export interface CoachSessionListItem {
@@ -17,11 +17,15 @@ interface CoachHistorySidebarProps {
   listLoading: boolean;
   loadingMore: boolean;
   openingSessionId: string | null;
+  deletingSessionId: string | null;
   hasMore: boolean;
   onSelect: (sessionId: string) => void;
+  onDelete: (sessionId: string) => void;
   onLoadMore: () => void;
   onNewConversation: () => void;
   newDisabled?: boolean;
+  /** Block deletes while a coach reply is in flight (it could re-create the doc). */
+  deleteDisabled?: boolean;
   className?: string;
 }
 
@@ -63,11 +67,14 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
   listLoading,
   loadingMore,
   openingSessionId,
+  deletingSessionId,
   hasMore,
   onSelect,
+  onDelete,
   onLoadMore,
   onNewConversation,
   newDisabled,
+  deleteDisabled,
   className,
 }) => {
   return (
@@ -105,18 +112,23 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
           sessions.map((s) => {
             const selected = s.sessionId === activeSessionId;
             const opening = openingSessionId === s.sessionId;
+            const deleting = deletingSessionId === s.sessionId;
             return (
-              <button
+              <div
                 key={s.sessionId}
-                type="button"
-                onClick={() => onSelect(s.sessionId)}
-                disabled={opening}
                 className={cn(
-                  'w-full text-left rounded-lg px-2.5 py-2 transition-colors border',
+                  'group relative flex items-stretch rounded-lg border transition-colors',
                   selected
                     ? 'bg-teal-500/10 border-teal-500/35'
-                    : 'bg-transparent border-transparent hover:bg-slate-900/80 hover:border-slate-800/80'
+                    : 'bg-transparent border-transparent hover:bg-slate-900/80 hover:border-slate-800/80',
+                  deleting && 'opacity-50'
                 )}
+              >
+              <button
+                type="button"
+                onClick={() => onSelect(s.sessionId)}
+                disabled={opening || deleting}
+                className="flex-1 min-w-0 text-left pl-2.5 pr-1 py-2"
               >
                 <div className="flex items-start gap-2">
                   <MessageSquare
@@ -155,6 +167,26 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
                   </div>
                 </div>
               </button>
+              <button
+                type="button"
+                onClick={() => onDelete(s.sessionId)}
+                disabled={deleting || opening || deleteDisabled}
+                className={cn(
+                  'shrink-0 w-7 flex items-start justify-center pt-2 rounded-r-lg text-[#6B7280] hover:text-rose-400 transition-opacity disabled:opacity-30',
+                  // Always visible on touch; reveal on hover/focus with a mouse.
+                  'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100',
+                  (selected || deleting) && 'sm:opacity-100'
+                )}
+                title="Delete conversation"
+                aria-label="Delete conversation"
+              >
+                {deleting ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <X size={13} />
+                )}
+              </button>
+              </div>
             );
           })
         )}

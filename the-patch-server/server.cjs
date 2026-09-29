@@ -597,6 +597,27 @@ async function handleCoachApi(req, res) {
         return true;
       }
     }
+
+    // ── Delete one conversation (session doc + messages subcollection) ─────
+    // Ownership: getCoachSession / deleteCoachSession only touch
+    // users/{uid}/coachSessions, so another user's id resolves to 404.
+    if (req.method === 'DELETE' && detailMatch) {
+      const sessionId = decodeURIComponent(detailMatch[1]);
+      try {
+        const owned = await dbProvider.getCoachSession(uid, sessionId);
+        if (!owned) {
+          sendJson(req, res, 404, { error: 'session_not_found' });
+          return true;
+        }
+        await dbProvider.deleteCoachSession(uid, sessionId);
+        sendJson(req, res, 200, { ok: true, sessionId });
+        return true;
+      } catch (err) {
+        console.error('[coach/sessions/:id DELETE] error:', err?.stack || err);
+        sendJson(req, res, 500, { error: 'delete_failed' });
+        return true;
+      }
+    }
   }
 
   // ── Start a fresh coaching conversation on demand ────────────────────────

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, MessageSquare, X } from 'lucide-react';
+import { Loader2, MessageSquare, MessageSquarePlus, X } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
 export interface CoachSessionListItem {
@@ -24,6 +24,7 @@ interface CoachHistorySidebarProps {
   onLoadMore: () => void;
   onNewConversation: () => void;
   newDisabled?: boolean;
+  newLoading?: boolean;
   /** Block deletes while a coach reply is in flight (it could re-create the doc). */
   deleteDisabled?: boolean;
   className?: string;
@@ -74,6 +75,7 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
   onLoadMore,
   onNewConversation,
   newDisabled,
+  newLoading,
   deleteDisabled,
   className,
 }) => {
@@ -92,9 +94,14 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
           type="button"
           onClick={onNewConversation}
           disabled={newDisabled}
-          className="w-full h-8 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 transition-colors disabled:opacity-40"
+          className="w-full h-8 inline-flex items-center justify-center gap-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 transition-colors disabled:opacity-40"
         >
-          New conversation
+          {newLoading ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <MessageSquarePlus size={13} />
+          )}
+          {newLoading ? 'Starting…' : 'New conversation'}
         </button>
       </div>
 

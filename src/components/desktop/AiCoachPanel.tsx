@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   X,
   Send,
@@ -80,6 +81,13 @@ interface CoachChatMessage {
 
 /** Soft cap mirrored from server MAX_MESSAGES_PER_SESSION default. */
 const COACH_SESSION_MESSAGE_CAP = 40;
+
+/**
+ * Below this panel width the conversation list floats over the chat as a
+ * drawer; at or above it, it docks beside the chat. Keeps the chat column
+ * usable on phones and in the default 30% desktop column.
+ */
+const HISTORY_INLINE_MIN_PX = 640;
 
 function parseCoachUiMessages(raw: unknown): CoachChatMessage[] {
   if (!Array.isArray(raw)) return [];
@@ -828,7 +836,36 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const [voiceMode, setVoiceMode] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState(false);
   /** History sidebar visibility (toggle via header). */
-  const [historyOpen, setHistoryOpen] = useState(!isFullscreen);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState(0);
+  const historyInline = panelWidth >= HISTORY_INLINE_MIN_PX;
+  const historyInlineRef = useRef(historyInline);
+  historyInlineRef.current = historyInline;
+
+  const closeHistoryIfOverlay = () => {
+    if (!historyInlineRef.current) setHistoryOpen(false);
+  };
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (typeof w === 'number') setPanelWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!historyOpen || historyInline) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHistoryOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [historyOpen, historyInline]);
   const [sessionList, setSessionList] = useState<CoachSessionListItem[]>([]);
   const [sessionListLoading, setSessionListLoading] = useState(false);
   const [sessionListLoadingMore, setSessionListLoadingMore] = useState(false);
@@ -915,7 +952,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const openSessionFromHistory = async (id: string) => {
     if (openingSessionId || loading || startingNew) return;
     if (id === sessionId && messages.length > 0) {
-      if (isFullscreen) setHistoryOpen(false);
+      closeHistoryIfOverlay();
       return;
     }
 
@@ -953,7 +990,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       setInput('');
       setVoiceDraft(false);
       stickToBottomRef.current = true;
-      if (isFullscreen) setHistoryOpen(false);
+      closeHistoryIfOverlay();
     } catch (err) {
       console.warn('[AiCoach] open session error:', err);
       setError('Could not open that conversation.');
@@ -1557,8 +1594,29 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           ? 'waiting'
           : 'idle';
 
+  const historySidebarProps = {
+    sessions: sessionList,
+    activeSessionId: sessionId,
+    listLoading: sessionListLoading,
+    loadingMore: sessionListLoadingMore,
+    openingSessionId,
+    deletingSessionId,
+    hasMore: sessionListNextBefore != null,
+    onSelect: (id: string) => void openSessionFromHistory(id),
+    onDelete: (id: string) => void deleteSessionFromHistory(id),
+    onLoadMore: () => void refreshSessionList({ append: true }),
+    onNewConversation: () => {
+      closeHistoryIfOverlay();
+      void startNewConversation();
+    },
+    newDisabled: busy || !!deletingSessionId,
+    newLoading: startingNew,
+    deleteDisabled: busy,
+  };
+
   return (
     <div
+      ref={rootRef}
       className={cn(
         'h-full min-h-0 flex flex-col overflow-hidden',
         isFullscreen ? 'bg-black pt-[env(safe-area-inset-top)]' : 'bg-slate-950/95'
@@ -1586,36 +1644,21 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
         <div className="flex items-center gap-1.5 shrink-0 p-0.5 rounded-xl bg-slate-900/50 border border-slate-800/90">
           {interactionMode === 'text' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen((v) => !v)}
-                className={cn(
-                  'w-9 h-9 flex items-center justify-center rounded-lg transition-colors',
-                  historyOpen
-                    ? 'text-teal-400 bg-teal-500/15'
-                    : 'text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400'
-                )}
-                title={historyOpen ? 'Hide conversations' : 'Show conversations'}
-                aria-pressed={historyOpen}
-              >
-                <PanelLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => void startNewConversation()}
-                disabled={busy}
-                className="flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400 transition-colors disabled:opacity-40"
-                title="Start a new conversation"
-              >
-                {startingNew ? (
-                  <Loader2 size={14} className="animate-spin text-teal-400" />
-                ) : (
-                  <MessageSquarePlus size={14} />
-                )}
-                {startingNew ? 'Starting' : 'New'}
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className={cn(
+                'flex items-center justify-center gap-1.5 h-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors',
+                historyOpen
+                  ? 'text-teal-400 bg-teal-500/15'
+                  : 'text-[#A0A0A8] hover:bg-teal-500/15 hover:text-teal-400'
+              )}
+              title={historyOpen ? 'Hide conversations' : 'Show conversations'}
+              aria-pressed={historyOpen}
+            >
+              <PanelLeft size={14} />
+              Chats
+            </button>
           )}
           <button
             type="button"
@@ -1676,28 +1719,44 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           <LiveCoachSessionView embedded />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          {historyOpen && (
+        <div className="relative flex-1 min-h-0 flex overflow-hidden">
+          {historyOpen && historyInline && (
             <CoachHistorySidebar
-              className={cn(
-                'flex-shrink-0',
-                isFullscreen ? 'w-[12.5rem] sm:w-[14rem]' : 'w-[11rem] sm:w-[12.5rem]'
-              )}
-              sessions={sessionList}
-              activeSessionId={sessionId}
-              listLoading={sessionListLoading}
-              loadingMore={sessionListLoadingMore}
-              openingSessionId={openingSessionId}
-              deletingSessionId={deletingSessionId}
-              hasMore={sessionListNextBefore != null}
-              onSelect={(id) => void openSessionFromHistory(id)}
-              onDelete={(id) => void deleteSessionFromHistory(id)}
-              onLoadMore={() => void refreshSessionList({ append: true })}
-              onNewConversation={() => void startNewConversation()}
-              newDisabled={busy || !!deletingSessionId}
-              deleteDisabled={busy}
+              {...historySidebarProps}
+              className="flex-shrink-0 w-[13.5rem]"
             />
           )}
+
+          <AnimatePresence>
+            {historyOpen && !historyInline && (
+              <>
+                <motion.button
+                  key="history-backdrop"
+                  type="button"
+                  aria-label="Close conversations"
+                  onClick={() => setHistoryOpen(false)}
+                  className="absolute inset-0 z-20 bg-black/55"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                />
+                <motion.div
+                  key="history-drawer"
+                  className="absolute inset-y-0 left-0 z-30 w-[min(17rem,85%)] flex shadow-2xl shadow-black/60"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '-100%' }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <CoachHistorySidebar
+                    {...historySidebarProps}
+                    className="flex-1 min-w-0 bg-slate-950"
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
 
           <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           <div

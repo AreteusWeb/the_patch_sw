@@ -887,6 +887,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     async () => {}
   );
   const sessionIdRef = useRef<string | null>(null);
+  /** Blank thread with no server doc yet; first /message sends newSession: true. */
+  const draftNewSessionRef = useRef(false);
 
   voiceModeRef.current = voiceMode;
   loadingRef.current = loading;
@@ -1274,6 +1276,18 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
   };
 
+  const enterDraftConversation = () => {
+    draftNewSessionRef.current = true;
+    setSessionId(null);
+    sessionIdRef.current = null;
+    setMessages([]);
+    setSessionLimitReached(false);
+    setInput('');
+    setVoiceDraft(false);
+    stopListening();
+    cancelSpeech();
+  };
+
   /**
    * Delete a thread from the history sidebar (server does the recursive
    * Firestore delete). The row is only removed after the server confirms,
@@ -1324,11 +1338,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       }
 
       if (sessionIdRef.current === id) {
-        // Same as "New conversation": clears the chat + sessionId right away,
-        // then asks the server for a fresh thread. Leaving sessionId null
-        // instead would let the next /message fall back to getActiveSession,
-        // which can land in a different open thread the user isn't looking at.
-        await startNewConversation();
+        // Blank draft, no server call: the session doc is created by the first
+        // /message (newSession: true). Eagerly calling new-session here left an
+        // empty coachSessions doc behind every time an open thread was deleted.
+        enterDraftConversation();
       }
     } catch (err) {
       console.warn('[AiCoach] delete session error:', err);
@@ -1367,6 +1380,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
+    const startsNewSession = !sessionIdRef.current && draftNewSessionRef.current;
+
     try {
       const token = await currentUser.getIdToken();
       const res = await fetch(`${API_BASE}/api/coach/message`, {
@@ -1381,12 +1396,20 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           // When the UI has an open thread (bootstrap or history pick), send it
           // so the server appends to that doc instead of idle auto-pick.
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
+          ...(startsNewSession ? { newSession: true } : {}),
         }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        if (data?.error === 'session_not_found') {
+          enterDraftConversation();
+          setError('This conversation was deleted. Send your message again to start a new one.');
+          void refreshSessionList();
+          return;
+        }
+
         if (data?.error === 'session_limit_reached') {
           setSessionLimitReached(true);
           setError(
@@ -1412,6 +1435,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
       if (typeof data.sessionId === 'string') {
         setSessionId(data.sessionId);
+        sessionIdRef.current = data.sessionId;
+        if (startsNewSession) {
+          draftNewSessionRef.current = false;
+          void refreshSessionList();
+        }
       }
 
       const replyText =

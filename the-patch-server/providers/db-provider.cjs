@@ -42,4 +42,5 @@ module.exports = {
   getSessionHistory: impl.getSessionHistory,
   getMetricTrend: impl.getMetricTrend,
   getRecentAlerts: impl.getRecentAlerts,
+  isNotFoundError: impl.isNotFoundError,
 };

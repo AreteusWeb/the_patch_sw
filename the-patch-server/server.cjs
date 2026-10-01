@@ -479,7 +479,14 @@ async function closeSessionWithSummary(uid, sessionId) {
     console.warn(`[COACH] Session summary failed for uid=${uid}:`, summaryErr.message);
     summary = null;
   }
-  await dbProvider.closeSession(uid, sessionId, summary);
+  try {
+    await dbProvider.closeSession(uid, sessionId, summary);
+  } catch (err) {
+    if (!dbProvider.isNotFoundError(err)) throw err;
+    console.warn(
+      `[COACH] closeSession skipped — session deleted meanwhile uid=${uid} sessionId=${sessionId}`
+    );
+  }
 }
 
 /**
@@ -677,11 +684,18 @@ async function handleCoachApi(req, res) {
     // over automatic getActiveSession idle selection — reopen that same thread.
     const explicitSessionId =
       typeof body.sessionId === 'string' ? body.sessionId.trim() : '';
+    // Blank draft in the UI (e.g. right after deleting the open thread):
+    // create the session on this first message instead of eagerly, and never
+    // fall back to getActiveSession, which could pick another open thread.
+    const wantsNewSession = !explicitSessionId && body.newSession === true;
 
     try {
       let sessionId;
 
-      if (explicitSessionId) {
+      if (wantsNewSession) {
+        const created = await dbProvider.createSession(uid, metricsSnapshot);
+        sessionId = created.sessionId;
+      } else if (explicitSessionId) {
         const owned = await dbProvider.getCoachSession(uid, explicitSessionId);
         if (!owned) {
           sendJson(req, res, 404, { error: 'session_not_found' });
@@ -874,6 +888,11 @@ async function handleCoachApi(req, res) {
       });
       return true;
     } catch (err) {
+      if (dbProvider.isNotFoundError(err)) {
+        console.warn(`[coach/message] session deleted mid-request uid=${uid}`);
+        sendJson(req, res, 404, { error: 'session_not_found' });
+        return true;
+      }
       console.error('[coach/message] error:', err?.stack || err);
       sendJson(req, res, 500, { error: 'coach_failed' });
       return true;

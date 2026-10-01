@@ -240,6 +240,10 @@ async function reopenSession(uid, sessionId) {
   sessions.set(sessionId, { ...session, closedAt: null });
 }
 
+function isNotFoundError(err) {
+  return String(err?.message || '').startsWith('coach_session_not_found:');
+}
+
 /** Delete a session and its message list (mirrors recursiveDelete in gcp). */
 async function deleteCoachSession(uid, sessionId) {
   const bySession = coachMessagesByUid.get(uid);
@@ -456,4 +460,5 @@ module.exports = {
   getSessionHistory,
   getMetricTrend,
   getRecentAlerts,
+  isNotFoundError,
 };

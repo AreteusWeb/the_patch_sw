@@ -242,9 +242,15 @@ async function reopenSession(uid, sessionId) {
 
 /** Delete a session and its message list (mirrors recursiveDelete in gcp). */
 async function deleteCoachSession(uid, sessionId) {
-  sessionsFor(uid).delete(sessionId);
   const bySession = coachMessagesByUid.get(uid);
+  const messagesBefore = bySession?.get(sessionId)?.length ?? 0;
+  sessionsFor(uid).delete(sessionId);
   if (bySession) bySession.delete(sessionId);
+  return {
+    messagesBefore,
+    messagesAfter: bySession?.get(sessionId)?.length ?? 0,
+    sessionDocExistsAfter: sessionsFor(uid).has(sessionId),
+  };
 }
 
 /**

@@ -874,6 +874,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   >(null);
   const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1293,21 +1294,34 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
 
     setDeletingSessionId(id);
-    setError(null);
+    setHistoryError(null);
 
     try {
       const res = await fetch(
         `${API_BASE}/api/coach/sessions/${encodeURIComponent(id)}`,
         { method: 'DELETE', headers }
       );
-      // 404 = already gone server-side; treat as deleted so the list converges.
-      if (!res.ok && res.status !== 404) {
-        console.warn('[AiCoach] delete session failed:', res.status);
-        setError('Could not delete that conversation. Try again.');
+      const data = await res.json().catch(() => ({}));
+
+      // Only an explicit confirmation counts. A bare 404 { error: 'not_found' }
+      // means the server has no DELETE route (stale deploy) — nothing was deleted.
+      const confirmed =
+        res.ok && data?.deleted === true && data?.sessionId === id;
+      const alreadyGone =
+        res.status === 404 && data?.error === 'session_not_found';
+
+      if (!confirmed && !alreadyGone) {
+        console.warn('[AiCoach] delete session failed:', res.status, data);
+        setHistoryError('Could not delete that conversation. Try again.');
         return;
       }
 
-      setSessionList((prev) => prev.filter((s) => s.sessionId !== id));
+      if (alreadyGone) {
+        console.warn('[AiCoach] delete: session already missing on server:', id);
+        await refreshSessionList();
+      } else {
+        setSessionList((prev) => prev.filter((s) => s.sessionId !== id));
+      }
 
       if (sessionIdRef.current === id) {
         // Same as "New conversation": clears the chat + sessionId right away,
@@ -1318,7 +1332,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       }
     } catch (err) {
       console.warn('[AiCoach] delete session error:', err);
-      setError('Network error — could not delete that conversation.');
+      setHistoryError('Network error — could not delete that conversation.');
     } finally {
       setDeletingSessionId(null);
     }
@@ -1612,6 +1626,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     newDisabled: busy || !!deletingSessionId,
     newLoading: startingNew,
     deleteDisabled: busy,
+    errorMessage: historyError,
+    onDismissError: () => setHistoryError(null),
   };
 
   return (

@@ -27,6 +27,8 @@ interface CoachHistorySidebarProps {
   newLoading?: boolean;
   /** Block deletes while a coach reply is in flight (it could re-create the doc). */
   deleteDisabled?: boolean;
+  errorMessage?: string | null;
+  onDismissError?: () => void;
   className?: string;
 }
 
@@ -77,6 +79,8 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
   newDisabled,
   newLoading,
   deleteDisabled,
+  errorMessage,
+  onDismissError,
   className,
 }) => {
   return (
@@ -103,6 +107,24 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
           )}
           {newLoading ? 'Starting…' : 'New conversation'}
         </button>
+        {errorMessage && (
+          <div
+            role="alert"
+            className="mt-2 flex items-start gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[10px] leading-snug text-rose-300"
+          >
+            <span className="flex-1 min-w-0">{errorMessage}</span>
+            {onDismissError && (
+              <button
+                type="button"
+                onClick={onDismissError}
+                className="shrink-0 text-rose-300/70 hover:text-rose-200"
+                aria-label="Dismiss error"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-1.5 py-2 flex flex-col gap-0.5">

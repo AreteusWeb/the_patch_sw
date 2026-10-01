@@ -240,9 +240,39 @@ async function reopenSession(uid, sessionId) {
  * collection-group queries). recursiveDelete walks every subcollection under
  * the session doc (messages today, anything added later), deletes those docs
  * in batches via BulkWriter, and deletes the parent doc last.
+ *
+ * Re-reads afterwards and throws if anything survived, so callers never
+ * report success for a delete that did not land.
+ * @returns {Promise<{ messagesBefore: number, messagesAfter: number, sessionDocExistsAfter: boolean }>}
  */
 async function deleteCoachSession(uid, sessionId) {
-  await db.recursiveDelete(coachSessionsRef(uid).doc(sessionId));
+  const sessionRef = coachSessionsRef(uid).doc(sessionId);
+  const messagesRef = coachMessagesRef(uid, sessionId);
+
+  const beforeSnap = await messagesRef.count().get();
+  const messagesBefore = beforeSnap.data().count ?? 0;
+
+  await db.recursiveDelete(sessionRef);
+
+  const [afterSnap, sessionAfter] = await Promise.all([
+    messagesRef.count().get(),
+    sessionRef.get(),
+  ]);
+  const result = {
+    messagesBefore,
+    messagesAfter: afterSnap.data().count ?? 0,
+    sessionDocExistsAfter: sessionAfter.exists,
+  };
+
+  if (result.messagesAfter > 0 || result.sessionDocExistsAfter) {
+    const err = new Error(
+      `recursiveDelete incomplete for users/${uid}/coachSessions/${sessionId}: ` +
+        JSON.stringify(result)
+    );
+    err.deleteResult = result;
+    throw err;
+  }
+  return result;
 }
 
 /**

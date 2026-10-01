@@ -603,17 +603,35 @@ async function handleCoachApi(req, res) {
     // users/{uid}/coachSessions, so another user's id resolves to 404.
     if (req.method === 'DELETE' && detailMatch) {
       const sessionId = decodeURIComponent(detailMatch[1]);
+      const startedAt = Date.now();
+      console.log(`[coach/sessions DELETE] request uid=${uid} sessionId=${sessionId}`);
       try {
         const owned = await dbProvider.getCoachSession(uid, sessionId);
         if (!owned) {
+          console.warn(
+            `[coach/sessions DELETE] not found under uid=${uid} sessionId=${sessionId}`
+          );
           sendJson(req, res, 404, { error: 'session_not_found' });
           return true;
         }
-        await dbProvider.deleteCoachSession(uid, sessionId);
-        sendJson(req, res, 200, { ok: true, sessionId });
+        const result = await dbProvider.deleteCoachSession(uid, sessionId);
+        console.log(
+          `[coach/sessions DELETE] deleted uid=${uid} sessionId=${sessionId} ` +
+            `messagesBefore=${result?.messagesBefore} messagesAfter=${result?.messagesAfter} ` +
+            `sessionDocExistsAfter=${result?.sessionDocExistsAfter} ms=${Date.now() - startedAt}`
+        );
+        sendJson(req, res, 200, {
+          ok: true,
+          deleted: true,
+          sessionId,
+          messagesDeleted: result?.messagesBefore ?? null,
+        });
         return true;
       } catch (err) {
-        console.error('[coach/sessions/:id DELETE] error:', err?.stack || err);
+        console.error(
+          `[coach/sessions DELETE] failed uid=${uid} sessionId=${sessionId}:`,
+          err?.stack || err
+        );
         sendJson(req, res, 500, { error: 'delete_failed' });
         return true;
       }

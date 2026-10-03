@@ -1,16 +1,16 @@
 import React from 'react';
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
+import { getHrZone } from '../../utils/fitnessMetrics';
 import {
-  getHrZone,
-  getHrvProxyMs,
-  getReadinessLabel,
-  getRecoveryScore,
-} from '../../utils/fitnessMetrics';
+  describeTrainingLoad,
+  TRAINING_LOAD_WINDOW_DAYS,
+  type TrainingLoadState,
+} from '../../lib/trainingLoad';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
-import DataFreshnessBadge from '../DataFreshnessBadge';
+import SidebarPanelHeader from './SidebarPanelHeader';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
@@ -111,80 +111,103 @@ function resolvePerformanceNotes(
   return ['Analyzing...'];
 }
 
+const TRAINING_LOAD_LEVEL_COLOR: Record<'high' | 'moderate' | 'low', string> = {
+  high: 'text-teal-300',
+  moderate: 'text-teal-400',
+  low: 'text-slate-300',
+};
+
+/**
+ * Last-7-days activity summary from recorded training sessions. Not live
+ * sensor data, so it is never dimmed by the LIVE/STALE badge.
+ */
+const TrainingLoadBlock: React.FC<{ trainingLoad: TrainingLoadState }> = ({
+  trainingLoad,
+}) => {
+  let body: React.ReactNode;
+  switch (trainingLoad.status) {
+    case 'ready': {
+      const { summary } = trainingLoad;
+      body = (
+        <>
+          <div className={cn('text-sm font-semibold', TRAINING_LOAD_LEVEL_COLOR[summary.level])}>
+            {summary.label}
+          </div>
+          <p className="text-[11px] text-slate-300 leading-snug mt-0.5">
+            {describeTrainingLoad(summary)}
+          </p>
+        </>
+      );
+      break;
+    }
+    case 'no_recent_activity':
+      body = (
+        <>
+          <p className="text-[11px] text-slate-300">No recent sessions recorded</p>
+          <p className="text-[10px] text-slate-600 leading-snug mt-0.5">
+            Finish a training session to see your weekly load.
+          </p>
+        </>
+      );
+      break;
+    case 'unavailable':
+      body = (
+        <p className="text-[11px] text-slate-500 leading-snug">
+          {trainingLoad.reason === 'local_mode'
+            ? "Training history isn't saved in local mode."
+            : 'Sign in to see your training load.'}
+        </p>
+      );
+      break;
+    case 'error':
+      body = (
+        <p className="text-[11px] text-slate-500 leading-snug">
+          Couldn't load your training history.
+        </p>
+      );
+      break;
+    default:
+      body = <p className="text-[11px] text-slate-600 italic">Loading…</p>;
+  }
+
+  return (
+    <div className="pb-3 mb-1 border-b border-slate-800/60">
+      <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
+        Training Load · Last {TRAINING_LOAD_WINDOW_DAYS} days
+      </h3>
+      {body}
+    </div>
+  );
+};
+
 interface FitnessRightSidebarProps {
   waveforms: number[][];
-  recoveryTrend: number[];
   insights: CoachInsightsState;
 }
 
 const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
   waveforms,
-  recoveryTrend,
   insights,
 }) => {
   const alerts = useStore(s => s.alerts);
   const vitals = useStore(s => s.vitals);
+  const trainingLoad = useStore(s => s.trainingLoad);
   const { isLiveData, dimmed, freshness, staleAgeLabel } = useDataFreshness();
   const live = isLiveData;
 
-  const recovery = getRecoveryScore(vitals, live);
-  const hrv = getHrvProxyMs(vitals.heartRate.value, live);
-  const readiness = getReadinessLabel(recovery.score, live);
   const notes = resolvePerformanceNotes(insights, vitals, live);
   const activeAlerts = alerts;
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3 flex items-center justify-between gap-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
-          Recovery Insights
-        </h2>
-        <DataFreshnessBadge
-          freshness={freshness}
-          staleAgeLabel={staleAgeLabel}
-          compact
-        />
-      </div>
+      <SidebarPanelHeader
+        title="Performance Insights"
+        freshness={freshness}
+        staleAgeLabel={staleAgeLabel}
+      />
 
       <div className="px-4 pb-4 flex flex-col">
-        <ul className={cn(
-          'flex flex-col gap-2 pb-3 mb-1 border-b border-slate-800/60 text-[11px] text-slate-300 transition-opacity duration-300',
-          dimmed && 'opacity-50'
-        )}>
-          <li className="flex items-start gap-2">
-            <span className="text-teal-500 mt-0.5">•</span>
-            <span>
-              HRV:{' '}
-              <span className="text-white font-medium tabular-nums">
-                {hrv != null ? `${hrv} ms` : '--'}
-              </span>
-              {hrv != null && (
-                <span className="text-teal-400/80">
-                  {' '}
-                  ({hrv >= 55 ? 'Good' : 'Low'})
-                </span>
-              )}
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-teal-500 mt-0.5">•</span>
-            <span>
-              Readiness: <span className="text-white font-medium">{readiness}</span>
-            </span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-teal-500 mt-0.5">•</span>
-            <span>
-              Recovery Score:{' '}
-              <span className="text-white font-medium tabular-nums">
-                {live ? `${recovery.score}/100` : '--'}
-              </span>
-              {live && (
-                <span className="text-teal-400/90"> ({recovery.label})</span>
-              )}
-            </span>
-          </li>
-        </ul>
+        <TrainingLoadBlock trainingLoad={trainingLoad} />
 
         <div className={cn(
           'py-3 border-b border-slate-800/60 transition-opacity duration-300',
@@ -253,14 +276,6 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
             label="HR Trend"
             data={waveforms[1]}
             color={dimmed ? '#64748b' : '#2dd4bf'}
-          />
-          <MiniTrendGraph
-            label="Recovery Score Trend"
-            data={recoveryTrend}
-            color={dimmed ? '#64748b' : '#5eead4'}
-            minPoints={4}
-            emptyLabel="Collecting data..."
-            window={48}
           />
         </div>
       </div>

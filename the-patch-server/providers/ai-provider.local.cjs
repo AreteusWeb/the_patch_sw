@@ -264,7 +264,7 @@ async function generateCoachReply({
     (wantsBuy
       ? 'Attached an Amazon search link for gear. '
       : '') +
-    `Keep training smart — hydrate, watch recovery score trends, and ease off if HR stays elevated at rest. ` +
+    `Keep training smart — hydrate, keep an eye on your weekly training load, and ease off if HR stays elevated at rest. ` +
     `This is performance coaching only, not medical advice.`;
 
   return { text, toolCalls, sources: [] };

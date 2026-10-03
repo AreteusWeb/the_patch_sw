@@ -13,10 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/appConfig';
 import useStore from '../store/useStore';
-import {
-  getHrvProxyMs,
-  getRecoveryScore,
-} from '../utils/fitnessMetrics';
+import { buildTrainingLoadSnapshot } from '../lib/trainingLoad';
 import type { Vitals } from '../types';
 
 export type InsightsSeverity = 'normal' | 'watch' | 'alert';
@@ -41,15 +38,13 @@ function vitalSeverityKey(vitals: Vitals): string {
 }
 
 function buildMetricsSnapshot(vitals: Vitals, hasRealData: boolean) {
-  const recovery = getRecoveryScore(vitals, hasRealData);
   return {
     heartRate: vitals.heartRate.value,
     spo2: vitals.spo2.value,
     respirationRate: vitals.respirationRate.value,
     temperature: vitals.temperature.value,
-    hrvProxyMs: getHrvProxyMs(vitals.heartRate.value, hasRealData),
-    recoveryScore: recovery.score,
     hasRealData,
+    trainingLoad: buildTrainingLoadSnapshot(useStore.getState().trainingLoad),
   };
 }
 

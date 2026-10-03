@@ -125,6 +125,7 @@ const useStore = create<
   fitnessSessionAccumulatedMs: 0,
   fitnessSessionId: null,
   fitnessSessionSummary: null,
+  trainingLoad: { status: 'idle' },
 
   vitals: {
     heartRate: {
@@ -315,6 +316,8 @@ const useStore = create<
   setFitnessSessionId: (id) => set({ fitnessSessionId: id }),
 
   setFitnessSessionSummary: (summary) => set({ fitnessSessionSummary: summary }),
+
+  setTrainingLoad: (trainingLoad) => set({ trainingLoad }),
 
   resetFitnessSessionToIdle: () =>
     set({

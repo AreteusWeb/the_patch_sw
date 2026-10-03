@@ -50,9 +50,6 @@ import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 import { auth } from '../lib/firebase';
 import { WS_URL, IS_LOCAL_MODE } from '../lib/appConfig';
-import { getRecoveryScore } from '../utils/fitnessMetrics';
-import type { Vitals } from '../types';
-
 // ─── Config ───────────────────────────────────────────────────────────────────
 // CHANGE: WS_URL is no longer hard-coded here — it comes from appConfig.ts,
 // which reads VITE_WS_URL (or uses a default based on VITE_APP_MODE). This
@@ -72,21 +69,6 @@ const RESP_SLOT = 8;
 const PPG_SLOT = 9;
 const TEMP_SLOT = 10; // RESERVED — no real data yet, see file header
 const TOTAL_SLOTS = 11;
-
-/** Session Recovery Score trend: one point / 30s, last ~24 min. */
-const RECOVERY_SAMPLE_MS = 30_000;
-const RECOVERY_TREND_MAX = 48;
-
-function recoveryScoreFromLive(hr: number, spo2: number, rr: number): number {
-  const vitals = {
-    heartRate: { value: hr, trend: 'stable', severity: 'normal' },
-    spo2: { value: spo2, trend: 'stable', severity: 'normal' },
-    respirationRate: { value: rr, trend: 'stable', severity: 'normal' },
-    temperature: { value: '--', trend: 'stable', severity: 'normal' },
-    bloodPressure: { value: '--', trend: 'stable', severity: 'normal' },
-  } satisfies Vitals;
-  return getRecoveryScore(vitals, true).score;
-}
 
 // CHANGE: exported name → slot map for the 8 ECG leads specifically (what
 // the dropdown needs). Kept separate from CHANNEL_NAME_TO_SLOT below
@@ -400,10 +382,6 @@ export const useWebSocket = () => {
   const sessionPtsRef = useRef(0);
   const sessionOpenRef = useRef(false);
   const [sessionSampleCount, setSessionSampleCount] = useState<number | null>(null);
-  /** Session Recovery Score, one point / 30s, capped. Not a 24h history. */
-  const [recoveryTrend, setRecoveryTrend] = useState<number[]>([]);
-  const recoveryTrendRef = useRef<number[]>([]);
-  const lastRecoveryAtRef = useRef(0);
   const wsRef  = useRef<WebSocket | null>(null);
   const simRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const simTime = useRef(0);
@@ -422,9 +400,6 @@ export const useWebSocket = () => {
     sessionOpenRef.current = false;
     sessionPtsRef.current = 0;
     setSessionSampleCount(null);
-    recoveryTrendRef.current = [];
-    lastRecoveryAtRef.current = 0;
-    setRecoveryTrend([]);
   }, []);
 
   const addSessionPoints = useCallback((n: number) => {
@@ -729,7 +704,7 @@ export const useWebSocket = () => {
       const liveSpo2 = estimateSpO2(ppgRing.slice(250));
       const liveRr   = estimateResp(respRing.slice(1500));
 
-      // Only advance history / recovery while samples are still arriving.
+      // Only advance vitals history while samples are still arriving.
       if (patchStreaming) {
         vitalsHistoryRef.current.push({
           atSize: leadIIRing.size,
@@ -739,26 +714,6 @@ export const useWebSocket = () => {
         });
         if (vitalsHistoryRef.current.length > MAX_VITAL_SNAPS) {
           vitalsHistoryRef.current.splice(0, vitalsHistoryRef.current.length - MAX_VITAL_SNAPS);
-        }
-
-        // Live-edge Recovery Score for the session trend chart (not scrub view).
-        // First point as soon as HR is real, then one sample every 30s.
-        if (liveHr > 0) {
-          const now = Date.now();
-          if (
-            lastRecoveryAtRef.current === 0 ||
-            now - lastRecoveryAtRef.current >= RECOVERY_SAMPLE_MS
-          ) {
-            const score = recoveryScoreFromLive(
-              liveHr,
-              liveSpo2,
-              liveRr > 0 ? liveRr : 16,
-            );
-            const nextTrend = recoveryTrendRef.current.concat(score).slice(-RECOVERY_TREND_MAX);
-            recoveryTrendRef.current = nextTrend;
-            lastRecoveryAtRef.current = now;
-            setRecoveryTrend(nextTrend);
-          }
         }
       }
 
@@ -954,5 +909,5 @@ export const useWebSocket = () => {
     }
   }, [simulationMode]);
 
-  return { waveforms, bufferedSeconds, sessionSampleCount, recoveryTrend };
+  return { waveforms, bufferedSeconds, sessionSampleCount };
 };

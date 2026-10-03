@@ -4,11 +4,7 @@ import useStore from '../../store/useStore';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import EcgPaperControls from './EcgPaperControls';
-import {
-  formatSessionClock,
-  getHrZone,
-  getHrvProxyMs,
-} from '../../utils/fitnessMetrics';
+import { formatSessionClock, getHrZone } from '../../utils/fitnessMetrics';
 import { zoneColorForLabel } from '../../lib/sessionSummary';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
@@ -38,7 +34,6 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
-  const hrv = getHrvProxyMs(hr, isLiveData);
   const fitnessSessionStatus = useStore(s => s.fitnessSessionStatus);
   const fitnessSessionSummary = useStore(s => s.fitnessSessionSummary);
   const resetFitnessSessionToIdle = useStore(s => s.resetFitnessSessionToIdle);
@@ -84,15 +79,6 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
                   staleAgeLabel={staleAgeLabel}
                   compact
                 />
-                <span className="text-slate-500">
-                  HRV:{' '}
-                  <span className={cn(
-                    'tabular-nums font-semibold',
-                    dimmed ? 'text-slate-400' : 'text-teal-400'
-                  )}>
-                    {hrv != null ? `${hrv} ms` : '--'}
-                  </span>
-                </span>
                 <span
                   style={{ color: zoneAccent }}
                   className="font-semibold uppercase tracking-wider"

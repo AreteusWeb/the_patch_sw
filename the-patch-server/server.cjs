@@ -364,7 +364,7 @@ YOUR ROLE:
 - Give practical tips on training, recovery, hydration, sleep, and effort management, based on the athlete's data.
 - Tone: motivating, direct, concise — like a coach, not a doctor or a generic chatbot. Keep responses to 2-4 sentences or short lists, never long paragraphs.
 - Use the available tools (get_current_metrics, get_trend, get_session_history, get_recent_alerts, search_reference_image, search_reference_video, get_product_search_link) whenever the question calls for data you don't already have, instead of assuming values.
-- For any live metric question (recovery, HR, SpO2, etc.), call get_current_metrics first and quote those numbers exactly.
+- For any live metric question (HR, SpO2, respiration, etc.) or a question about how much they've trained recently, call get_current_metrics first and quote those numbers exactly.
 - For trends / "this week" / averages: only use values returned by get_trend. If values is empty, average is null, or sampleCount is less than 2, say you don't have enough history yet and report only the current metric — never invent a weekly average or "constant" number.
 - When you use the search_reference_image tool and get a result, do NOT include the image URL, markdown image syntax (e.g. ![text](url) or [text](url)), or any link to the photo in your text response — the image is already displayed to the user automatically as an attachment below your message. Just reference it naturally in words, e.g. "Here's a kettlebell:" without the markdown/URL.
 - For search_reference_video, put the EXACT exercise name first in the query (e.g. "kettlebell swing" or "barbell back squat"). Prefer that short precise phrase; you may add "proper form" once. Never search for tricks, freestyle, juggling, stunts, or entertainment clips. If the tool returns no video, say you couldn't find a matching form clip — do not invent or describe a wrong movement as if it were attached.
@@ -374,11 +374,17 @@ YOUR ROLE:
 - When mentioning a specific retailer by name (Amazon, Walmart, Target, etc.) in your response text, only do so if the cited source you're using is actually from that retailer's own website. If your source is a review site or article that merely mentions a retailer, describe it generically ('available at several retailers' or cite the article's recommendation) instead of naming a specific store you didn't actually get the link from.
 - Respond in the same language the athlete writes in (English or Spanish). If unclear, default to English.
 
+TRAINING LOAD (get_current_metrics → trainingLoad):
+- trainingLoad is a summary of the athlete's own recorded training sessions over the last windowDays days: sessionCount, totalMinutes, avgSessionMinutes, minutes per heart-rate zone (zoneMinutes), dominantZone, and an overall level (high / moderate / low) based on time weighted by zone intensity.
+- It is an ACTIVITY LOG summary, NOT a physiological measurement. It does not measure recovery, readiness, fatigue, HRV, or health. Talk about it the way a coach reviews a training log — e.g. "You've put in a solid week: 3 sessions, mostly in Cardio" or "Light week so far — a good time to build some volume if you feel fresh." Never use diagnostic or clinical language about it, and never present the level as a score of how recovered or healthy they are.
+- If trainingLoad.status is "no_recent_activity", say no training sessions were recorded in that window (don't treat it as zero fitness). If trainingLoad is null or missing, say you don't have their recent training history — never invent sessions, minutes, or zones.
+- The Patch does not measure recovery or readiness yet. If asked for a recovery score, readiness, or HRV, say so plainly, then offer what you can: their recent training load plus how they feel today.
+
 STRICT SCOPE — IN SCOPE vs OUT OF SCOPE (HARD RULE):
-You ONLY help with: health-adjacent performance coaching, fitness/training, recovery, sleep, hydration, effort management, Patch wearable metrics (HR, SpO2, HRV proxy, recovery score, etc.), workout form for real exercises, and buying training/recovery gear.
+You ONLY help with: health-adjacent performance coaching, fitness/training, recovery, sleep, hydration, effort management, Patch wearable metrics (HR, SpO2, respiration, training load from recorded sessions, etc.), workout form for real exercises, and buying training/recovery gear.
 
 IN SCOPE (answer normally) — examples:
-- "What's my recovery score / heart rate right now?" / "How has my HR trend looked this week?"
+- "What's my heart rate right now?" / "How much have I trained this week?" / "How has my HR trend looked this week?"
 - "Should I push hard today or take an easy day?" / "How can I sleep better after evening workouts?"
 - "Show me proper kettlebell swing form" / "Where can I buy a foam roller?"
 
@@ -402,6 +408,52 @@ WHAT YOU NEVER DO:
 
 When relevant to a health-adjacent question, close with a brief reminder that this is performance coaching, not medical advice — but don't repeat it as a fixed signature on every message.`;
 
+const TRAINING_LOAD_ZONES = ['Recovery', 'Fat Burn', 'Cardio', 'High Intensity', 'Peak'];
+const TRAINING_LOAD_LEVELS = ['high', 'moderate', 'low'];
+
+function boundedInt(v, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.min(max, Math.round(n));
+}
+
+/**
+ * Allow-list for the client-computed Training Load (src/lib/trainingLoad.ts).
+ * Unknown keys / zones are dropped and numbers are clamped so a malformed
+ * payload can't inject text or huge values into the model context.
+ */
+function sanitizeTrainingLoad(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const status = raw.status === 'ready' || raw.status === 'no_recent_activity'
+    ? raw.status
+    : null;
+  if (!status) return null;
+
+  let zoneMinutes = null;
+  if (status === 'ready' && raw.zoneMinutes && typeof raw.zoneMinutes === 'object') {
+    zoneMinutes = {};
+    for (const z of TRAINING_LOAD_ZONES) {
+      zoneMinutes[z] = boundedInt(raw.zoneMinutes[z], 10_080) ?? 0;
+    }
+  }
+
+  return {
+    kind: 'activity_summary',
+    windowDays: boundedInt(raw.windowDays, 31) ?? 7,
+    status,
+    level: status === 'ready' && TRAINING_LOAD_LEVELS.includes(raw.level) ? raw.level : null,
+    sessionCount: status === 'ready' ? boundedInt(raw.sessionCount, 500) ?? 0 : 0,
+    totalMinutes: status === 'ready' ? boundedInt(raw.totalMinutes, 10_080) ?? 0 : 0,
+    avgSessionMinutes: status === 'ready' ? boundedInt(raw.avgSessionMinutes, 1_440) : null,
+    dominantZone:
+      status === 'ready' && TRAINING_LOAD_ZONES.includes(raw.dominantZone)
+        ? raw.dominantZone
+        : null,
+    zoneMinutes,
+    loadPoints: status === 'ready' ? boundedInt(raw.loadPoints, 50_400) : null,
+  };
+}
+
 function sanitizeCoachMetricsSnapshot(raw) {
   if (!raw || typeof raw !== 'object') return null;
   // Explicit allow-list — never persist ECG/pleth/waveform payloads.
@@ -410,9 +462,8 @@ function sanitizeCoachMetricsSnapshot(raw) {
     spo2: raw.spo2 ?? null,
     respirationRate: raw.respirationRate ?? null,
     temperature: raw.temperature ?? null,
-    hrvProxyMs: raw.hrvProxyMs ?? null,
-    recoveryScore: raw.recoveryScore ?? null,
     hasRealData: Boolean(raw.hasRealData),
+    trainingLoad: sanitizeTrainingLoad(raw.trainingLoad),
   };
 }
 
@@ -756,7 +807,10 @@ async function handleCoachApi(req, res) {
       const toolHandlers = {
         get_current_metrics: async () => {
           if (metricsSnapshot) return metricsSnapshot;
-          return dbProvider.getLatestMetricsSnapshot(uid);
+          // Older stored snapshots may still carry retired keys (recoveryScore,
+          // hrvProxyMs) — re-sanitize so they never reach the model.
+          const stored = await dbProvider.getLatestMetricsSnapshot(uid);
+          return stored ? sanitizeCoachMetricsSnapshot(stored) : null;
         },
         get_session_history: async (args = {}) =>
           dbProvider.getSessionHistory(uid, { limit: args.limit ?? 5 }),

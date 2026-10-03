@@ -1,5 +1,3 @@
-import type { Vitals } from '../types';
-
 export type HrZoneId = 'recovery' | 'fat_burn' | 'cardio' | 'high' | 'peak';
 
 export interface HrZone {
@@ -30,61 +28,6 @@ export function getHrZone(hr: number | string | undefined): HrZone {
     return { id: 'high', label: 'High Intensity', color: '#38bdf8', barClass: 'bg-sky-400', intensity: 85 };
   }
   return { id: 'peak', label: 'Peak', color: '#60a5fa', barClass: 'bg-blue-400', intensity: 100 };
-}
-
-/**
- * Lightweight recovery score from available vitals (0–100).
- * Not a clinical HRV score — UI heuristic until a real recovery model exists.
- */
-export function getRecoveryScore(vitals: Vitals, hasRealData: boolean): {
-  score: number;
-  label: string;
-} {
-  if (!hasRealData) return { score: 0, label: 'Awaiting data' };
-
-  let score = 78;
-  const hr = typeof vitals.heartRate.value === 'number' ? vitals.heartRate.value : null;
-  const spo2 = typeof vitals.spo2.value === 'number' ? vitals.spo2.value : null;
-  const rr = typeof vitals.respirationRate.value === 'number' ? vitals.respirationRate.value : null;
-
-  if (spo2 != null) {
-    if (spo2 >= 97) score += 10;
-    else if (spo2 >= 94) score += 4;
-    else score -= 18;
-  }
-  if (hr != null) {
-    if (hr >= 50 && hr <= 100) score += 8;
-    else if (hr > 140) score -= 12;
-    else if (hr > 120) score -= 4;
-  }
-  if (rr != null) {
-    if (rr >= 12 && rr <= 20) score += 4;
-    else if (rr > 28) score -= 10;
-  }
-
-  score = Math.max(0, Math.min(100, Math.round(score)));
-  const label =
-    score >= 90 ? 'Excellent' :
-    score >= 75 ? 'Good' :
-    score >= 55 ? 'Fair' :
-    'Low';
-
-  return { score, label };
-}
-
-/** Rough HRV proxy (ms) from HR — placeholder until device exposes RR intervals. */
-export function getHrvProxyMs(hr: number | string | undefined, hasRealData: boolean): number | null {
-  if (!hasRealData || typeof hr !== 'number' || hr <= 0) return null;
-  // Higher resting HR → typically lower HRV; clamp to a plausible display range.
-  const proxy = Math.round(1200 / hr + (hr < 80 ? 18 : hr < 120 ? 8 : 0));
-  return Math.max(25, Math.min(120, proxy));
-}
-
-export function getReadinessLabel(score: number, hasRealData: boolean): string {
-  if (!hasRealData) return '—';
-  if (score >= 85) return 'High';
-  if (score >= 65) return 'Moderate';
-  return 'Low';
 }
 
 export function formatDuration(totalSeconds: number): string {

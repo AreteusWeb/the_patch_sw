@@ -66,4 +66,38 @@ const DataFreshnessBadge: React.FC<DataFreshnessBadgeProps> = ({
   );
 };
 
+const STATUS_LINE: Record<DataFreshness, { dot: string; text: string; label: string }> = {
+  LIVE: { dot: 'bg-teal-400', text: 'text-teal-400/80', label: 'Live' },
+  STALE: { dot: 'bg-amber-400/80', text: 'text-amber-300/70', label: 'Last data' },
+  DEMO: { dot: 'bg-amber-400', text: 'text-amber-400/80', label: 'Demo data' },
+  NO_DATA: { dot: 'bg-slate-600', text: 'text-slate-500', label: 'No live data' },
+};
+
+/**
+ * Quiet dot + text status for panel headers (no chip border, so it doesn't
+ * read as a button). Unlike the badge, LIVE is shown too, so the header
+ * always says what state the panel is in.
+ */
+export const FreshnessStatusLine: React.FC<{
+  freshness: DataFreshness;
+  staleAgeLabel?: string | null;
+  className?: string;
+}> = ({ freshness, staleAgeLabel, className }) => {
+  const s = STATUS_LINE[freshness];
+  const label =
+    freshness === 'STALE' && staleAgeLabel ? `${s.label} ${staleAgeLabel} ago` : s.label;
+
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 text-[10px] whitespace-nowrap', s.text, className)}>
+      <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
+        {freshness === 'LIVE' && (
+          <span className={cn('absolute inset-0 rounded-full animate-ping opacity-60', s.dot)} />
+        )}
+        <span className={cn('relative h-1.5 w-1.5 rounded-full', s.dot)} />
+      </span>
+      {label}
+    </span>
+  );
+};
+
 export default DataFreshnessBadge;

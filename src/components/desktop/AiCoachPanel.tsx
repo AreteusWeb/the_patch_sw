@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
-import { getHrvProxyMs, getRecoveryScore } from '../../utils/fitnessMetrics';
+import { buildTrainingLoadSnapshot } from '../../lib/trainingLoad';
 import { cn } from '../../utils/cn';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceOutput } from '../../hooks/useVoiceOutput';
@@ -1194,18 +1194,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
   }, [isSpeaking, sessionLimitReached, startListening]);
 
-  const buildMetricsSnapshot = () => {
-    const recovery = getRecoveryScore(vitals, liveForCoach);
-    return {
-      heartRate: vitals.heartRate.value,
-      spo2: vitals.spo2.value,
-      respirationRate: vitals.respirationRate.value,
-      temperature: vitals.temperature.value,
-      hrvProxyMs: getHrvProxyMs(vitals.heartRate.value, liveForCoach),
-      recoveryScore: recovery.score,
-      hasRealData: liveForCoach,
-    };
-  };
+  const buildMetricsSnapshot = () => ({
+    heartRate: vitals.heartRate.value,
+    spo2: vitals.spo2.value,
+    respirationRate: vitals.respirationRate.value,
+    temperature: vitals.temperature.value,
+    hasRealData: liveForCoach,
+    // Recorded-session history, sent even when the patch isn't live.
+    trainingLoad: buildTrainingLoadSnapshot(useStore.getState().trainingLoad),
+  });
 
   const resumeVoiceListening = () => {
     if (!voiceModeRef.current || sessionLimitReached) return;

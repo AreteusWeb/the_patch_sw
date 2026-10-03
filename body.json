@@ -5,8 +5,18 @@
       "spo2": 97,
       "respirationRate": 14,
       "temperature": 36.6,
-      "hrvProxyMs": 55,
-      "recoveryScore": 72,
-      "hasRealData": true
+      "hasRealData": true,
+      "trainingLoad": {
+        "kind": "activity_summary",
+        "windowDays": 7,
+        "status": "ready",
+        "level": "moderate",
+        "sessionCount": 3,
+        "totalMinutes": 95,
+        "avgSessionMinutes": 32,
+        "dominantZone": "Cardio",
+        "zoneMinutes": { "Recovery": 10, "Fat Burn": 25, "Cardio": 45, "High Intensity": 15, "Peak": 0 },
+        "loadPoints": 255
+      }
     }
   }

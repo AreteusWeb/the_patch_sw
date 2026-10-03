@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
-import DataFreshnessBadge from '../DataFreshnessBadge';
+import SidebarPanelHeader from './SidebarPanelHeader';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
@@ -113,16 +113,11 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
 
   return (
     <aside className="hidden min-[1280px]:block w-56 flex-shrink-0 border-l border-slate-800/80 bg-slate-950/40 overflow-y-auto scrollbar-hide">
-      <div className="px-4 py-3 flex items-center justify-between gap-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
-          AI Insights
-        </h2>
-        <DataFreshnessBadge
-          freshness={freshness}
-          staleAgeLabel={staleAgeLabel}
-          compact
-        />
-      </div>
+      <SidebarPanelHeader
+        title="AI Insights"
+        freshness={freshness}
+        staleAgeLabel={staleAgeLabel}
+      />
 
       <div className="px-4 pb-4 flex flex-col">
         <ul className={cn(

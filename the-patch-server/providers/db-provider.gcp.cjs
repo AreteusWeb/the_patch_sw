@@ -448,7 +448,7 @@ async function getSessionHistory(uid, { limit = 5 } = {}) {
   return out;
 }
 
-const TREND_METRICS = new Set(['heartRate', 'hrvProxyMs', 'recoveryScore', 'spo2']);
+const TREND_METRICS = new Set(['heartRate', 'spo2']);
 
 function trendDirection(values) {
   if (values.length < 2) return 'stable';

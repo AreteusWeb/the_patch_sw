@@ -12,7 +12,7 @@ import {
 import useStore from '../../store/useStore';
 import { cn } from '../../utils/cn';
 import { openElectrodeGuide } from '../../lib/electrodeGuide';
-import { formatSessionClock, getRecoveryScore } from '../../utils/fitnessMetrics';
+import { formatSessionClock } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
@@ -68,7 +68,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
     setNotchFilterEnabled,
     desktopLayout,
     setDesktopLayout,
-    vitals,
     fitnessSessionStatus,
     startFitnessSession,
     pauseFitnessSession,
@@ -128,8 +127,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
       : fitnessSessionStatus === 'paused' ? 'Paused'
         : fitnessSessionStatus === 'ended' ? 'Ended'
           : 'Idle';
-
-  const recovery = getRecoveryScore(vitals, patchLive);
 
   const handleFitnessPrimary = () => {
     if (fitnessSessionStatus === 'idle' || fitnessSessionStatus === 'ended') {
@@ -202,11 +199,6 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
                   {' • '}
                   <span className="text-white font-semibold tabular-nums">
                     {formatSessionClock(sessionElapsed)}
-                  </span>
-                  {' • '}
-                  Recovery:{' '}
-                  <span className="text-teal-400 font-semibold tabular-nums">
-                    {patchLive ? `${recovery.score}/100` : '--'}
                   </span>
                 </span>
               ) : (

@@ -1,3 +1,5 @@
+import type { TrainingLoadState } from '../lib/trainingLoad';
+
 /** Available simulation signal modes. */
 export type SimulationMode = 'normal' | 'tachycardia' | 'bradycardia' | 'spo2drop' | 'fever';
 
@@ -122,6 +124,8 @@ export interface AppState {
     | { status: 'calculating' }
     | { status: 'ready'; durationSec: number; avgHr: number; maxHr: number; dominantZone: string }
     | { status: 'too_short'; durationSec: number };
+  /** Last-7-days Training Load from Firestore trainingSessions (useTrainingLoadSync). */
+  trainingLoad: TrainingLoadState;
 }
 
 /** Action mutators for the Zustand store. */
@@ -159,4 +163,5 @@ export interface AppActions {
   setFitnessSessionSummary: (summary: AppState['fitnessSessionSummary']) => void;
   /** After SUMMARY — back to idle so Start Session can begin a new workout. */
   resetFitnessSessionToIdle: () => void;
+  setTrainingLoad: (trainingLoad: TrainingLoadState) => void;
 }

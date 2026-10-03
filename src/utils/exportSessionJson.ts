@@ -3,8 +3,8 @@ import {
   estimateCalories,
   getFitnessSessionElapsedSec,
   getHrZone,
-  getRecoveryScore,
 } from './fitnessMetrics';
+import { buildTrainingLoadSnapshot } from '../lib/trainingLoad';
 
 function downloadJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -45,7 +45,6 @@ export function exportSessionJson(kind: 'fitness' | 'clinical' = 'fitness') {
   );
   const hr = s.vitals.heartRate.value;
   const zone = getHrZone(hr);
-  const recovery = getRecoveryScore(s.vitals, s.hasRealData);
   const calories = estimateCalories(durationSec, hr, s.activity.steps, s.bodyWeightKg);
 
   const sessionStartedAt =
@@ -93,13 +92,15 @@ export function exportSessionJson(kind: 'fitness' | 'clinical' = 'fitness') {
       temperature: s.vitals.temperature,
       bloodPressure: s.vitals.bloodPressure,
       hrZone: zone.label,
-      recoveryScore: recovery.score,
-      recoveryLabel: recovery.label,
     },
     activity: {
       ...s.activity,
       estimatedCalories: calories,
     },
+    // Last-7-days summary of recorded training sessions (activity log, not a
+    // physiological score). null when history isn't available (local mode,
+    // signed out, still loading, or fetch failed).
+    trainingLoad: buildTrainingLoadSnapshot(s.trainingLoad),
     alerts: s.alerts.map(a => ({
       id: a.id,
       timestamp: a.timestamp,

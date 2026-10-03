@@ -9,6 +9,7 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useCoachInsights } from '../../hooks/useCoachInsights';
 import { useTrainingSessionPersistence } from '../../hooks/useTrainingSessionPersistence';
+import { useTrainingLoadSync } from '../../hooks/useTrainingLoadSync';
 import useStore from '../../store/useStore';
 import SideMenu from '../SideMenu';
 import EventBanner from '../EventBanner';
@@ -30,10 +31,11 @@ import AiCoachPanel from './AiCoachPanel';
  * AI Coach opens as a resizable right column (not an overlay).
  */
 export default function DesktopApp() {
-  const { waveforms, sessionSampleCount, recoveryTrend } = useWebSocket();
+  const { waveforms, sessionSampleCount } = useWebSocket();
   const insights = useCoachInsights();
   // Sync Fitness Start Session → Firestore (trainingSessions + hrSamples).
   useTrainingSessionPersistence();
+  useTrainingLoadSync();
   const desktopLayout = useStore(s => s.desktopLayout);
   const isFitness = desktopLayout === 'fitness';
   const [coachOpen, setCoachOpen] = useState(false);
@@ -42,11 +44,7 @@ export default function DesktopApp() {
     <>
       <FitnessLeftSidebar waveforms={waveforms} />
       <FitnessCentralArea waveforms={waveforms} />
-      <FitnessRightSidebar
-        waveforms={waveforms}
-        recoveryTrend={recoveryTrend}
-        insights={insights}
-      />
+      <FitnessRightSidebar waveforms={waveforms} insights={insights} />
     </>
   ) : (
     <>

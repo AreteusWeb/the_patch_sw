@@ -82,9 +82,11 @@ const COACH_FUNCTION_DECLARATIONS = [
   {
     name: 'get_current_metrics',
     description:
-      'Get the athlete\'s latest computed vitals/metrics snapshot ' +
-      '(heartRate, spo2, respirationRate, temperature, hrvProxyMs, recoveryScore, hasRealData). ' +
-      'Use when you need current performance numbers. Never returns raw ECG/waveforms.',
+      'Get the athlete\'s latest vitals snapshot (heartRate, spo2, respirationRate, temperature, hasRealData) ' +
+      'plus trainingLoad: a summary of their recorded training sessions over the last 7 days ' +
+      '(sessionCount, totalMinutes, zoneMinutes, dominantZone, level). trainingLoad is an activity log, ' +
+      'not a physiological measurement. Use when you need current numbers or recent training volume. ' +
+      'Never returns raw ECG/waveforms.',
     parameters: {
       type: 'object',
       properties: {},
@@ -116,8 +118,8 @@ const COACH_FUNCTION_DECLARATIONS = [
       properties: {
         metric: {
           type: 'string',
-          description: 'One of: heartRate, hrvProxyMs, recoveryScore, spo2.',
-          enum: ['heartRate', 'hrvProxyMs', 'recoveryScore', 'spo2'],
+          description: 'One of: heartRate, spo2.',
+          enum: ['heartRate', 'spo2'],
         },
         days: {
           type: 'number',
@@ -779,14 +781,17 @@ const insightsModelName =
 const INSIGHTS_NORMAL_INSTRUCTION =
   'You write short clinical-status bullets for The Patch desktop sidebar (AI Insights). ' +
   'Language: English only. Output ONLY a JSON object: {"bullets":["...","..."]} with 3 or 4 bullets. ' +
-  'Each bullet is one short sentence about current vitals (HR, SpO2, respiration, recovery if present). ' +
+  'Each bullet is one short sentence about current vitals (HR, SpO2, respiration). Ignore trainingLoad. ' +
   'Do not diagnose disease. Do not invent numbers not in the snapshot. Do not mention severity, confidence, or alerts. ' +
   'No markdown, no preamble, no Spanish.';
 
 const INSIGHTS_FITNESS_INSTRUCTION =
   'You write short training/recovery tip bullets for The Patch fitness sidebar (AI Performance Notes). ' +
   'Language: English only. Output ONLY a JSON object: {"bullets":["...","..."]} with 3 or 4 bullets. ' +
-  'Tone: coach-like — effort, breathing, pacing, recovery. Use the snapshot numbers when relevant. ' +
+  'Tone: coach-like — effort, breathing, pacing, rest between efforts. Use the snapshot numbers when relevant. ' +
+  'trainingLoad (if present) summarizes the athlete\'s recorded sessions over the last windowDays days — an activity log, ' +
+  'not a physiological measurement. At most one bullet may reference it in coach terms (e.g. "Big week so far — keep today controlled"); ' +
+  'never call it a recovery, readiness, or health score. If it is null, do not mention training history. ' +
   'Do not diagnose disease. Do not invent numbers not in the snapshot. Do not mention severity, confidence, or alerts. ' +
   'No markdown, no preamble, no Spanish.';
 

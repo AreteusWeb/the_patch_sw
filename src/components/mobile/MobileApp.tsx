@@ -16,6 +16,7 @@ import Footer from '../Footer';
 import MobileLiveBar from './MobileLiveBar';
 import AiCoachPanel from '../desktop/AiCoachPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useTrainingLoadSync } from '../../hooks/useTrainingLoadSync';
 import useStore from '../../store/useStore';
 
 /** Soft keyboard usually shrinks the visual viewport by more than this. */
@@ -37,6 +38,8 @@ const headerMotion = {
 export default function MobileApp() {
   const viewMode = useStore(state => state.viewMode);
   const { waveforms, bufferedSeconds } = useWebSocket();
+  // AI Coach on mobile reads trainingLoad from the store for its context.
+  useTrainingLoadSync();
   const [coachOpen, setCoachOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 

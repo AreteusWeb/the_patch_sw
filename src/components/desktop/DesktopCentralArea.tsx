@@ -12,12 +12,21 @@ const MAX_HISTORY_SECONDS = 3600;
 
 interface DesktopCentralAreaProps {
   waveforms: number[][];
+  /** Seconds of waveform history actually held in the ring buffers. */
+  bufferedSeconds: number;
+}
+
+function formatBufferedDuration(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m} min`;
 }
 
 /**
- * DesktopCentralArea ? compact single-canvas multi-channel monitor + scrubber.
+ * DesktopCentralArea — compact single-canvas multi-channel monitor + scrubber.
  */
-const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) => {
+const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, bufferedSeconds }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
@@ -29,20 +38,18 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
   const paperGrid = ecgGridEnabled ? 'clinical' : 'off';
   const isLive = historyOffset === 0;
   const { freshness, dimmed, staleAgeLabel, isLiveData } = useDataFreshness();
+  const lastRealDataAt = useStore(s => s.lastRealDataAt);
 
-  const [now, setNow] = React.useState(Date.now());
-  React.useEffect(() => {
-    if (!isLive) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [isLive]);
-
+  // Span of data actually in the buffer (was a fixed 105-minute window).
+  // The buffer ends at the newest sample; if the stream had gaps the start
+  // time is approximate, since the buffer only counts received samples.
   const timeRange = React.useMemo(() => {
-    const end = new Date(isLive ? now : Date.now() - historyOffset * 1000);
-    const start = new Date(end.getTime() - 105 * 60 * 1000);
-    const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return `${fmt(start)} – ${fmt(end)}`;
-  }, [isLive, now, historyOffset]);
+    if (bufferedSeconds <= 0 || lastRealDataAt == null) return 'No data buffered yet';
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const start = lastRealDataAt - bufferedSeconds * 1000;
+    return `${fmt(start)} – ${fmt(lastRealDataAt)} · ${formatBufferedDuration(bufferedSeconds)} buffered`;
+  }, [bufferedSeconds, lastRealDataAt]);
 
   const handleSeek = (direction: 'back' | 'forward', amount: number) => {
     const next = direction === 'back'
@@ -96,10 +103,11 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms }) =>
             />
           </div>
 
-          {/* Non-waveform sensors ? numeric only until hardware sends traces */}
+          {/* Non-waveform sensors — numeric only until hardware sends traces */}
           <div className="mt-2 flex-shrink-0 grid grid-cols-3 gap-2 text-[10px]">
+            {/* The patch has no BP sensor, so "pending" would imply data is coming. */}
             <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
-              BP Trend <span className="text-slate-600">? pending</span>
+              BP Trend <span className="text-slate-600">— no sensor</span>
             </div>
             <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
               Temp <span className="text-slate-300 tabular-nums">{tempDisplay}</span>

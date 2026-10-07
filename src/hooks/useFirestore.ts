@@ -48,7 +48,7 @@ export async function saveEventWithVitals(
         // unparseable placeholder string that downstream consumers (charts,
         // exports, anything doing math on `temp`) would have to special-case.
         temp: number | null;
-        rr: number;
+        rr: number | null;
         bp: string | null;
     },
     userId: string

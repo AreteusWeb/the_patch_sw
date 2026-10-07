@@ -10,58 +10,14 @@ import {
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
+import { TREND_MIN_RANGE, type VitalsTrend } from '../../lib/vitalsTrend';
 import SidebarPanelHeader from './SidebarPanelHeader';
+import { SessionTrendRow } from './VitalTrendBars';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
   medium: 'border-yellow-500/25 bg-yellow-500/10',
   low: 'border-slate-800/80 bg-slate-900/30',
-};
-
-const MiniTrendGraph: React.FC<{
-  data: number[];
-  color: string;
-  label: string;
-  minPoints?: number;
-  emptyLabel?: string;
-  window?: number;
-}> = ({
-  data,
-  color,
-  label,
-  minPoints = 2,
-  emptyLabel = 'No data yet',
-  window = 24,
-}) => {
-  const samples = data.slice(-window);
-  const hasData = samples.length >= minPoints;
-  const min = hasData ? Math.min(...samples) : 0;
-  const max = hasData ? Math.max(...samples) : 1;
-  const range = max - min || 1;
-
-  return (
-    <div className="py-3 border-b border-slate-800/60 last:border-b-0">
-      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
-        {label}
-      </div>
-      <div className="h-6 flex items-end gap-px">
-        {hasData ? (
-          samples.map((val, i) => (
-            <div
-              key={i}
-              className="flex-1 rounded-sm opacity-80"
-              style={{
-                height: `${Math.max(8, ((val - min) / range) * 100)}%`,
-                backgroundColor: color,
-              }}
-            />
-          ))
-        ) : (
-          <span className="text-[10px] text-slate-600 italic">{emptyLabel}</span>
-        )}
-      </div>
-    </div>
-  );
 };
 
 function buildPerformanceNotes(vitals: Vitals, hasRealData: boolean): string[] {
@@ -181,12 +137,12 @@ const TrainingLoadBlock: React.FC<{ trainingLoad: TrainingLoadState }> = ({
 };
 
 interface FitnessRightSidebarProps {
-  waveforms: number[][];
+  vitalsTrend: VitalsTrend;
   insights: CoachInsightsState;
 }
 
 const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
-  waveforms,
+  vitalsTrend,
   insights,
 }) => {
   const alerts = useStore(s => s.alerts);
@@ -272,10 +228,13 @@ const FitnessRightSidebar: React.FC<FitnessRightSidebarProps> = ({
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             Session Trends
           </h3>
-          <MiniTrendGraph
+          <SessionTrendRow
             label="HR Trend"
-            data={waveforms[1]}
+            values={vitalsTrend.hr}
+            unit="bpm"
+            minRange={TREND_MIN_RANGE.hr}
             color={dimmed ? '#64748b' : '#2dd4bf'}
+            emptyLabel={live ? 'Collecting trend data…' : 'No data yet'}
           />
         </div>
       </div>

@@ -9,6 +9,16 @@
  *   set PACKETS_TO_SEND=1800&& node mock/mock-esp32-ui.cjs   # ~3 min (Windows)
  *   set PHASE_SECONDS=15&& node mock/mock-esp32-ui.cjs       # faster vital phases
  *
+ * Alert testing (values persist in that terminal until cleared or closed):
+ *   CMD:
+ *     set HR_OVERRIDE=135&& node mock/mock-esp32-ui.cjs    # "Elevated HR" should fire
+ *     set SPO2_OVERRIDE=85&& node mock/mock-esp32-ui.cjs   # no "SpO2 Drop" should fire
+ *     set HR_OVERRIDE=& set SPO2_OVERRIDE=                 # back to normal phases
+ *   PowerShell:
+ *     $env:HR_OVERRIDE=135; node mock/mock-esp32-ui.cjs
+ *     $env:SPO2_OVERRIDE=85; node mock/mock-esp32-ui.cjs
+ *     Remove-Item Env:HR_OVERRIDE, Env:SPO2_OVERRIDE
+ *
  * Requires the app MAC in profile to match MOCK_MAC (default AA:BB:CC:DD:EE:FF).
  */
 
@@ -27,6 +37,12 @@ const PACKETS_TO_SEND = Number(process.env.PACKETS_TO_SEND ?? 0);
 const SAMPLES_PER_PACKET = 25;
 const PACKET_INTERVAL_MS = 100;
 let lastLoggedPhase = -1;
+
+if (process.env.HR_OVERRIDE || process.env.SPO2_OVERRIDE) {
+  console.log(
+    `[MOCK-UI] Overrides active → HR_OVERRIDE=${process.env.HR_OVERRIDE ?? '-'} SPO2_OVERRIDE=${process.env.SPO2_OVERRIDE ?? '-'}`
+  );
+}
 
 const CHANNEL_NAMES = [
   'V6', 'V5', 'V4', 'V3', 'V2', 'V1', 'Lead II', 'Lead I', 'Resp', 'PPG',

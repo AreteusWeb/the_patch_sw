@@ -367,9 +367,10 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
               <span className="text-slate-500 font-normal">
                 {' '}
                 •{' '}
+                {/* No battery data path exists yet (setBatteryLevel is never called). */}
                 {batteryLevel != null
                   ? `${batteryLevel}% Battery`
-                  : 'Battery: waiting for sensor'}
+                  : 'Battery monitoring coming soon'}
               </span>
             )}
           </span>

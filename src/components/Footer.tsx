@@ -23,10 +23,15 @@ const Footer: React.FC = () => {
     <div className="w-full px-4 py-2 flex justify-between items-center bg-black z-[40]">
       <div className="flex items-center gap-1.5">
         <Battery size={10} className={cn("opacity-60", batteryColor)} />
+        {/* No battery data path exists yet (setBatteryLevel is never called). */}
         <span className="text-[8px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-          Battery: <span className={cn("text-slate-300", batteryColor)}>
-            {batteryLevel != null ? `${batteryLevel}%` : 'Waiting for sensor'}
-          </span>
+          {batteryLevel != null ? (
+            <>
+              Battery: <span className={cn("text-slate-300", batteryColor)}>{batteryLevel}%</span>
+            </>
+          ) : (
+            'Battery monitoring coming soon'
+          )}
         </span>
       </div>
       <div className="flex items-center gap-1.5 text-right">

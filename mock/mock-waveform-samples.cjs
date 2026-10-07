@@ -36,9 +36,20 @@ const VITAL_PHASES = [
   { label: 'moderate', hr: 82, resp: 17, spo2: 96 },
 ];
 
+/**
+ * Optional fixed values for alert testing; unset = normal phase cycle.
+ *   HR_OVERRIDE=135   → every phase streams HR 135 (> 120 → "Elevated HR")
+ *   SPO2_OVERRIDE=85  → weak PPG amplitude, which the old code turned into "SpO2 Drop"
+ */
+const HR_OVERRIDE = Number(process.env.HR_OVERRIDE) || null;
+const SPO2_OVERRIDE = Number(process.env.SPO2_OVERRIDE) || null;
+
 function vitalsAtTime(tSec) {
   const phase = Math.floor(tSec / PHASE_SECONDS) % VITAL_PHASES.length;
-  return { phase, ...VITAL_PHASES[phase] };
+  const v = { phase, ...VITAL_PHASES[phase] };
+  if (HR_OVERRIDE) v.hr = HR_OVERRIDE;
+  if (SPO2_OVERRIDE) v.spo2 = SPO2_OVERRIDE;
+  return v;
 }
 
 function mvToRaw(mv) {

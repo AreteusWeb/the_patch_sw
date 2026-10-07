@@ -5,6 +5,15 @@ import { cn } from '../../utils/cn';
 import type { VitalStatus } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
+import {
+  buildTrendBuckets,
+  formatTrendSpan,
+  QUICK_VITALS_TREND_BARS,
+  QUICK_VITALS_TREND_WINDOW_SEC,
+  TREND_MIN_RANGE,
+  type VitalsTrend,
+} from '../../lib/vitalsTrend';
+import VitalTrendBars from './VitalTrendBars';
 
 const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   if (trend === 'up') return <ArrowUp size={10} className="text-amber-400" />;
@@ -12,43 +21,13 @@ const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   return <Minus size={10} className="text-slate-600" />;
 };
 
-const MiniSparkline: React.FC<{ data: number[]; color?: string; muted?: boolean }> = ({
-  data,
-  color = '#2dd4bf',
-  muted = false,
-}) => {
-  const samples = data.slice(-24);
-  if (samples.length < 2) {
-    return <div className="h-6 flex items-end gap-px">{Array.from({ length: 12 }).map((_, i) => (
-      <div key={i} className="flex-1 bg-slate-800 rounded-sm" style={{ height: `${20 + (i % 3) * 8}%` }} />
-    ))}</div>;
-  }
-
-  const min = Math.min(...samples);
-  const max = Math.max(...samples);
-  const range = max - min || 1;
-
-  return (
-    <div className={cn('h-6 flex items-end gap-px', muted && 'opacity-45')}>
-      {samples.map((val, i) => (
-        <div
-          key={i}
-          className="flex-1 rounded-sm opacity-80"
-          style={{
-            height: `${Math.max(8, ((val - min) / range) * 100)}%`,
-            backgroundColor: muted ? '#64748b' : color,
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
 interface VitalRowProps {
   label: string;
   status: VitalStatus;
   unit?: string;
-  sparkData?: number[];
+  /** Per-second history; omit for vitals with no sensor (empty state, no fake bars). */
+  trendValues?: (number | null)[];
+  trendMinRange?: number;
   sparkColor?: string;
   barPercent?: number;
 }
@@ -57,14 +36,25 @@ const VitalRow: React.FC<VitalRowProps> = ({
   label,
   status,
   unit,
-  sparkData = [],
-  sparkColor,
+  trendValues,
+  trendMinRange = 1,
+  sparkColor = '#2dd4bf',
   barPercent,
 }) => {
   const { freshness, dimmed, isLiveData } = useDataFreshness();
   // NO_DATA → dashes; STALE/DEMO keep last numeric value (dimmed).
   const showDash = freshness === 'NO_DATA';
   const showLiveChrome = isLiveData;
+
+  const trend = React.useMemo(
+    () => trendValues
+      ? buildTrendBuckets(trendValues, QUICK_VITALS_TREND_WINDOW_SEC, QUICK_VITALS_TREND_BARS)
+      : null,
+    [trendValues]
+  );
+  const trendEmptyLabel = !trendValues
+    ? 'No sensor'
+    : isLiveData ? 'Collecting trend data…' : 'No data yet';
 
   return (
     <div
@@ -102,10 +92,16 @@ const VitalRow: React.FC<VitalRowProps> = ({
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <MiniSparkline data={sparkData} color={sparkColor} muted={dimmed} />
-        {showLiveChrome && !showDash && (
+        <VitalTrendBars
+          trend={trend}
+          minRange={trendMinRange}
+          color={sparkColor}
+          muted={dimmed}
+          emptyLabel={trendEmptyLabel}
+        />
+        {trend && (
           <span className="text-[9px] text-slate-600 uppercase tracking-wider flex-shrink-0">
-            Trend
+            Last {formatTrendSpan(trend.spanSec)}
           </span>
         )}
       </div>
@@ -118,10 +114,10 @@ const VitalRow: React.FC<VitalRowProps> = ({
  * Quick numeric vitals with mini trend sparklines.
  */
 interface DesktopLeftSidebarProps {
-  waveforms: number[][];
+  vitalsTrend: VitalsTrend;
 }
 
-const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) => {
+const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ vitalsTrend }) => {
   const vitals = useStore(s => s.vitals);
   const activity = useStore(s => s.activity);
   const { dimmed, freshness, staleAgeLabel } = useDataFreshness();
@@ -146,7 +142,8 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
           label="Heart Rate"
           status={vitals.heartRate}
           unit="bpm"
-          sparkData={waveforms[1]}
+          trendValues={vitalsTrend.hr}
+          trendMinRange={TREND_MIN_RANGE.hr}
           sparkColor="#2dd4bf"
         />
 
@@ -154,15 +151,16 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
           label="SpO2"
           status={vitals.spo2}
           unit="%"
-          sparkData={waveforms[9]}
+          trendValues={vitalsTrend.spo2}
+          trendMinRange={TREND_MIN_RANGE.spo2}
           sparkColor="#5eead4"
           barPercent={spo2Percent}
         />
 
+        {/* No BP sensor → no trend (it used to plot the ECG waveform here). */}
         <VitalRow
           label="BP (PTT)"
           status={vitals.bloodPressure}
-          sparkData={waveforms[1]}
           sparkColor="#94a3b8"
         />
 
@@ -170,7 +168,8 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ waveforms }) =>
           label="Respiration"
           status={vitals.respirationRate}
           unit="bpm"
-          sparkData={waveforms[8]}
+          trendValues={vitalsTrend.rr}
+          trendMinRange={TREND_MIN_RANGE.rr}
           sparkColor="#5eead4"
         />
 

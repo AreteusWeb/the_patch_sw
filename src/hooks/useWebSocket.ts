@@ -50,6 +50,11 @@ import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 import { auth } from '../lib/firebase';
 import { WS_URL, IS_LOCAL_MODE } from '../lib/appConfig';
+import {
+  EMPTY_VITALS_TREND,
+  TREND_HISTORY_EXPOSED_SEC,
+  type VitalsTrend,
+} from '../lib/vitalsTrend';
 // ─── Config ───────────────────────────────────────────────────────────────────
 // CHANGE: WS_URL is no longer hard-coded here — it comes from appConfig.ts,
 // which reads VITE_WS_URL (or uses a default based on VITE_APP_MODE). This
@@ -254,16 +259,21 @@ function estimateSpO2(buf: Float32Array): number {
   return Math.min(100, Math.round((88 + ((max - min) / ADC_VREF_MV) * 2500) * 10) / 10);
 }
 
-function estimateResp(buf: Float32Array): number {
-  if (buf.length < 200) return 16;
+/**
+ * Returns null when the rate can't be estimated. It used to return 16, which
+ * the UI showed as if it were a real reading.
+ */
+function estimateResp(buf: Float32Array): number | null {
+  if (buf.length < 200) return null;
   const crossings: number[] = [];
   for (let i = 1; i < buf.length; i++) {
     if (buf[i - 1] < 0 && buf[i] >= 0) crossings.push(i);
   }
-  if (crossings.length < 2) return 16;
+  if (crossings.length < 2) return null;
   let totalDist = 0;
   for (let i = 1; i < crossings.length; i++) totalDist += (crossings[i] - crossings[i - 1]);
-  return Math.round(15000 / (totalDist / (crossings.length - 1)));
+  const rate = Math.round(15000 / (totalDist / (crossings.length - 1)));
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
 // ─── SIMULATOR ────────────────────────────────────────────────────────────────
@@ -549,8 +559,10 @@ export const useWebSocket = () => {
 
   const prevVitals = useRef({ hr: 0, spo2: 0, resp: 0 });
   // Snapshots keyed by ring sample count so scrub offset maps 1:1 to past vitals
-  const vitalsHistoryRef = useRef<Array<{ atSize: number; hr: number; spo2: number; rr: number }>>([]);
+  const vitalsHistoryRef = useRef<Array<{ atSize: number; hr: number; spo2: number; rr: number | null }>>([]);
   const MAX_VITAL_SNAPS = 3600;
+  /** Recent slice of vitalsHistoryRef for the sidebar trend charts (state so they re-render). */
+  const [vitalsTrend, setVitalsTrend] = useState<VitalsTrend>(EMPTY_VITALS_TREND);
 
   const getTrend = useCallback((curr: number, prev: number, margin: number): 'up' | 'down' | 'stable' => {
     if (prev === 0) return 'stable';
@@ -574,11 +586,11 @@ export const useWebSocket = () => {
     return Math.abs(a.atSize - targetSize) <= Math.abs(b.atSize - targetSize) ? a : b;
   }, []);
 
-  const applyDisplayVitals = useCallback((hr: number, spo2: number, rr: number) => {
+  const applyDisplayVitals = useCallback((hr: number, spo2: number, rr: number | null) => {
     const hrTrend   = getTrend(hr, prevVitals.current.hr, 1);
     const spo2Trend = getTrend(spo2, prevVitals.current.spo2, 0.5);
-    const rrTrend   = getTrend(rr, prevVitals.current.resp, 1);
-    prevVitals.current = { hr, spo2, resp: rr };
+    const rrTrend   = rr == null ? 'stable' : getTrend(rr, prevVitals.current.resp, 1);
+    prevVitals.current = { hr, spo2, resp: rr ?? 0 };
 
     if (hr > 0) {
       updateVitals({
@@ -599,10 +611,12 @@ export const useWebSocket = () => {
         trend: spo2Trend,
         severity: spo2 < 90 ? 'critical' : spo2 < 94 ? 'moderate' : 'normal',
       },
+      // Unestimable respiration shows '--' (same convention as temperature)
+      // instead of a made-up 16 that looks like a real reading.
       respirationRate: {
-        value: rr > 0 ? rr : 16,
+        value: rr ?? '--',
         trend: rrTrend,
-        severity: rr > 25 || rr < 10 ? 'critical' : 'normal',
+        severity: rr != null && (rr > 25 || rr < 10) ? 'critical' : 'normal',
       },
     });
   }, [getTrend, updateVitals]);
@@ -627,7 +641,7 @@ export const useWebSocket = () => {
     applyDisplayVitals(
       pastHr > 0 ? pastHr : (snap?.hr ?? 0),
       snap && pastSpo2 === 98 ? snap.spo2 : pastSpo2,
-      pastRr > 0 ? pastRr : (snap?.rr ?? 16),
+      pastRr ?? snap?.rr ?? null,
     );
   }, [historyOffset, lookupVitalsAtSize, applyDisplayVitals]);
 
@@ -710,11 +724,17 @@ export const useWebSocket = () => {
           atSize: leadIIRing.size,
           hr: liveHr > 0 ? liveHr : prevVitals.current.hr,
           spo2: liveSpo2,
-          rr: liveRr > 0 ? liveRr : 16,
+          rr: liveRr,
         });
         if (vitalsHistoryRef.current.length > MAX_VITAL_SNAPS) {
           vitalsHistoryRef.current.splice(0, vitalsHistoryRef.current.length - MAX_VITAL_SNAPS);
         }
+        const recent = vitalsHistoryRef.current.slice(-TREND_HISTORY_EXPOSED_SEC);
+        setVitalsTrend({
+          hr: recent.map(p => (p.hr > 0 ? p.hr : null)),
+          spo2: recent.map(p => p.spo2),
+          rr: recent.map(p => p.rr),
+        });
       }
 
       let hr = liveHr;
@@ -732,7 +752,7 @@ export const useWebSocket = () => {
 
         hr   = pastHr > 0 ? pastHr : (snap?.hr ?? hr);
         spo2 = pastSpo2;
-        rr   = pastRr > 0 ? pastRr : (snap?.rr ?? rr);
+        rr   = pastRr ?? snap?.rr ?? null;
         if (snap && pastSpo2 === 98) spo2 = snap.spo2;
         applyDisplayVitals(hr, spo2, rr);
         return;
@@ -744,10 +764,12 @@ export const useWebSocket = () => {
       applyDisplayVitals(hr, spo2, rr);
 
       // New clinical alerts only while a real device is streaming (not DEMO).
+      // No SpO2 alert on purpose: estimateSpO2 is an uncalibrated estimate from
+      // a single PPG channel (see its TODO). It must not raise clinical alerts
+      // until the hardware has a dual-wavelength (red + IR) sensor.
       if (!storeSnap.isSimulatedStream) {
         if (hr > 120)          addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Elevated HR: ${hr} BPM`, severity: 'high' });
         if (hr > 0 && hr < 45) addAlert({ timestamp: new Date().toLocaleTimeString(), message: `Low HR: ${hr} BPM`, severity: 'high' });
-        if (spo2 < 90)         addAlert({ timestamp: new Date().toLocaleTimeString(), message: `SpO2 Drop: ${spo2}%`, severity: 'high' });
       }
     };
 
@@ -909,5 +931,5 @@ export const useWebSocket = () => {
     }
   }, [simulationMode]);
 
-  return { waveforms, bufferedSeconds, sessionSampleCount };
+  return { waveforms, bufferedSeconds, sessionSampleCount, vitalsTrend };
 };

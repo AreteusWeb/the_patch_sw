@@ -155,8 +155,10 @@ const useStore = create<
       trend: 'stable',
       severity: 'normal',
     },
+    // '--' until the stream yields an estimate (a numeric default would look
+    // like a real reading).
     respirationRate: {
-      value: 14,
+      value: '--',
       trend: 'stable',
       severity: 'normal',
     },
@@ -449,7 +451,8 @@ const useStore = create<
             // on `temp`) can tell "no sensor" apart from "sensor read a
             // weird value" instead of trying to parse '--' as a number.
             temp: typeof v.temperature.value === 'number' ? v.temperature.value : null,
-            rr: v.respirationRate.value as number,
+            // '--' when respiration couldn't be estimated → null, like temp.
+            rr: typeof v.respirationRate.value === 'number' ? v.respirationRate.value : null,
             bp: v.bloodPressure.value === '--' ? null : (v.bloodPressure.value as string),
           },
           userId

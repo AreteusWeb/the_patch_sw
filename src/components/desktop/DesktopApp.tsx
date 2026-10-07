@@ -31,7 +31,7 @@ import AiCoachPanel from './AiCoachPanel';
  * AI Coach opens as a resizable right column (not an overlay).
  */
 export default function DesktopApp() {
-  const { waveforms, sessionSampleCount } = useWebSocket();
+  const { waveforms, bufferedSeconds, sessionSampleCount, vitalsTrend } = useWebSocket();
   const insights = useCoachInsights();
   // Sync Fitness Start Session → Firestore (trainingSessions + hrSamples).
   useTrainingSessionPersistence();
@@ -44,13 +44,13 @@ export default function DesktopApp() {
     <>
       <FitnessLeftSidebar waveforms={waveforms} />
       <FitnessCentralArea waveforms={waveforms} />
-      <FitnessRightSidebar waveforms={waveforms} insights={insights} />
+      <FitnessRightSidebar vitalsTrend={vitalsTrend} insights={insights} />
     </>
   ) : (
     <>
-      <DesktopLeftSidebar waveforms={waveforms} />
-      <DesktopCentralArea waveforms={waveforms} />
-      <DesktopRightSidebar waveforms={waveforms} insights={insights} />
+      <DesktopLeftSidebar vitalsTrend={vitalsTrend} />
+      <DesktopCentralArea waveforms={waveforms} bufferedSeconds={bufferedSeconds} />
+      <DesktopRightSidebar vitalsTrend={vitalsTrend} insights={insights} />
     </>
   );
 

@@ -4,7 +4,9 @@ import { cn } from '../../utils/cn';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
+import { TREND_MIN_RANGE, type VitalsTrend } from '../../lib/vitalsTrend';
 import SidebarPanelHeader from './SidebarPanelHeader';
+import { SessionTrendRow } from './VitalTrendBars';
 
 const severityColor: Record<string, string> = {
   high: 'border-rose-500/30 bg-rose-500/10',
@@ -12,73 +14,34 @@ const severityColor: Record<string, string> = {
   low: 'border-slate-800/80 bg-slate-900/30',
 };
 
-const MiniTrendGraph: React.FC<{ data: number[]; color: string; label: string }> = ({
-  data,
-  color,
-  label,
-}) => {
-  const samples = data.slice(-24);
-  const hasData = samples.length >= 2;
-  const min = hasData ? Math.min(...samples) : 0;
-  const max = hasData ? Math.max(...samples) : 1;
-  const range = max - min || 1;
-
-  return (
-    <div className="py-3 border-b border-slate-800/60 last:border-b-0">
-      <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">
-        {label}
-      </div>
-      <div className="h-6 flex items-end gap-px">
-        {hasData ? samples.map((val, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-sm opacity-80"
-            style={{
-              height: `${Math.max(8, ((val - min) / range) * 100)}%`,
-              backgroundColor: color,
-            }}
-          />
-        )) : (
-          <span className="text-[10px] text-slate-600 italic">No data yet</span>
-        )}
-      </div>
-    </div>
-  );
-};
-
-/** Local fallback when the insights API fails before any successful reply. */
+/**
+ * Local fallback when the insights API fails before any successful reply.
+ * Only echoes measured numbers: no rhythm claims (rhythm is never analyzed),
+ * no temperature (no sensor), no diagnoses. SpO2 is omitted because
+ * estimateSpO2 is an uncalibrated single-channel PPG estimate.
+ */
 function buildAiInsights(vitals: Vitals, hasRealData: boolean): string[] {
   if (!hasRealData) {
     return ['Awaiting live sensor data…'];
   }
 
-  const insights: string[] = [];
+  const lines = ['AI insights unavailable — showing current readings.'];
 
-  if (vitals.heartRate.severity === 'normal') {
-    insights.push('Normal sinus rhythm');
-  } else if (vitals.heartRate.trend === 'up') {
-    insights.push('Elevated heart rate detected');
-  } else {
-    insights.push('Bradycardia pattern noted');
+  const hr = vitals.heartRate.value;
+  if (typeof hr === 'number' && hr > 0) {
+    lines.push(`Heart rate: ${hr} bpm`);
   }
 
-  if (vitals.respirationRate.severity === 'normal') {
-    insights.push('Respiration stable');
-  } else {
-    insights.push('Abnormal respiratory pattern');
+  const rr = vitals.respirationRate.value;
+  if (typeof rr === 'number' && rr > 0) {
+    lines.push(`Respiration: ${rr} breaths/min`);
   }
 
-  if (vitals.temperature.trend === 'up' && vitals.temperature.severity !== 'normal') {
-    insights.push('Mild temp rise noted');
-  } else if (vitals.temperature.severity === 'normal') {
-    insights.push('Temperature within range');
+  if (lines.length === 1) {
+    lines.push('No readings available yet.');
   }
 
-  if (vitals.spo2.severity !== 'normal') {
-    insights.push('SpO2 below threshold');
-  }
-
-  return insights.slice(0, 4);
+  return lines;
 }
 
 function resolveInsightLines(
@@ -96,12 +59,12 @@ function resolveInsightLines(
 }
 
 interface DesktopRightSidebarProps {
-  waveforms: number[][];
+  vitalsTrend: VitalsTrend;
   insights: CoachInsightsState;
 }
 
 const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
-  waveforms,
+  vitalsTrend,
   insights,
 }) => {
   const alerts = useStore(s => s.alerts);
@@ -178,9 +141,23 @@ const DesktopRightSidebar: React.FC<DesktopRightSidebarProps> = ({
           <h3 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 pt-2">
             Session Trends
           </h3>
-          {/* 0: Lead I | 1: Lead II | 2-7: V1-V6 | 8: Resp | 9: PPG (SpO2 Pleth) | 10: Temp (unused) */}
-          <MiniTrendGraph label="Heart Rate" data={waveforms[1]} color={dimmed ? '#64748b' : '#2dd4bf'} />
-          <MiniTrendGraph label="SpO2" data={waveforms[9]} color={dimmed ? '#64748b' : '#5eead4'} />
+          <SessionTrendRow
+            label="Heart Rate"
+            values={vitalsTrend.hr}
+            unit="bpm"
+            minRange={TREND_MIN_RANGE.hr}
+            color={dimmed ? '#64748b' : '#2dd4bf'}
+            emptyLabel={isLiveData ? 'Collecting trend data…' : 'No data yet'}
+          />
+          {/* Same uncalibrated SpO2 estimate shown in Quick Vitals, plotted over time. */}
+          <SessionTrendRow
+            label="SpO2"
+            values={vitalsTrend.spo2}
+            unit="%"
+            minRange={TREND_MIN_RANGE.spo2}
+            color={dimmed ? '#64748b' : '#5eead4'}
+            emptyLabel={isLiveData ? 'Collecting trend data…' : 'No data yet'}
+          />
         </div>
       </div>
     </aside>

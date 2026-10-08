@@ -4,8 +4,8 @@
  *
  * Env:
  *   GOOGLE_CLOUD_PROJECT   (required — already used by auth-provider)
- *   VERTEX_AI_LOCATION     (optional, default us-central1)
- *   VERTEX_AI_MODEL        (optional, default gemini-3.6-flash)
+ *   VERTEX_AI_LOCATION     (optional, default global)
+ *   VERTEX_AI_MODEL        (optional, default gemini-3.8-flash)
  *
  * Function calling: tool *declarations* live here; tool *execution* is
  * injected via `toolHandlers` from server.cjs (db-provider functions),
@@ -26,7 +26,7 @@ if (!project) {
   );
 }
 
-const modelName = process.env.VERTEX_AI_MODEL || 'gemini-3.6-flash';
+const modelName = process.env.VERTEX_AI_MODEL || 'gemini-3.8-flash';
 /**
  * Gemini 3.x publisher models are served on `global` / multi-region `us`|`eu`,
  * not single regions like us-central1 (404 NOT_FOUND if pinned regionally).
@@ -555,6 +555,7 @@ function extractTextAndCalls(parts) {
     }
     if (part.functionCall) {
       functionCalls.push({
+        id: part.functionCall.id,
         name: part.functionCall.name,
         args: part.functionCall.args || {},
       });
@@ -666,8 +667,11 @@ async function generateCoachReply({
         args: call.args || {},
         result: toolResult,
       });
+      // Gemini 3.8+ rejects a functionResponse whose id/name don't match the
+      // functionCall it answers (one response per call, same order).
       responseParts.push({
         functionResponse: {
+          ...(call.id ? { id: call.id } : {}),
           name: call.name,
           response: { content: toolResult },
         },

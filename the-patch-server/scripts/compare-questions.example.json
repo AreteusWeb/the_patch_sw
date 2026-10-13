@@ -1,0 +1,7 @@
+[
+  { "id": "general-en", "question": "Explain in two sentences what an API is." },
+  { "id": "general-es", "question": "¿Cuál es la diferencia entre una lista y un diccionario en Python?" },
+  { "id": "writing", "question": "Write a short, friendly reminder message for a team meeting tomorrow at 10am." },
+  { "id": "health-general", "question": "In one paragraph, what is heart rate variability?" },
+  { "id": "personal-metrics", "question": "What is my heart rate right now?" }
+]

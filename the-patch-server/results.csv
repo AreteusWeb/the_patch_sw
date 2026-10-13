@@ -1,0 +1,90 @@
+﻿question_id,question,provider,model,response_model,tier,latency_ms,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,thinking_tokens,total_tokens,cost_usd,error,answer
+general-en,Explain in two sentences what a REST API is.,gemini,gemini-3.1-flash-lite,,economy,7504,304,,,166,119,470,,,"A REST API is an architectural style that allows different computer systems to communicate over the web using standard HTTP methods like GET and POST. It essentially acts as a translator, enabling applications to request and exchange data in a predictable, consistent format."
+general-en,Explain in two sentences what a REST API is.,openai,gpt-6-luna,gpt-6-luna,economy,2621,302,0,0,51,0,353,0.000056,,"A REST API lets different software systems communicate over the web using standard HTTP methods, such as GET to retrieve data and POST to send it. It organizes information into resources, usually identified by URLs, and typically exchanges data in formats like JSON."
+general-es,¿Cuál es la diferencia entre una lista y un diccionario en Python? Respóndeme corto.,gemini,gemini-3.1-flash-lite,,economy,2406,314,,,299,123,613,,,"¡Claro! Aquí tienes la diferencia principal:
+
+*   **Lista (`list`):** Es una secuencia ordenada de elementos. Accedes a ellos mediante su **índice** (posición numérica, empezando desde 0). Ejemplo: `mi_lista = [10, 20, 30]`.
+*   **Diccionario (`dict`):** Es una colección de pares **clave-valor**. Accedes a los valores usando una **clave única** (que puede ser un nombre, ID, etc.) en lugar de un número. Es mucho más rápido para buscar información específica. Ejemplo: `mi_diccionario = {""nombre"": ""Patch"", ""tipo"": ""wearable""}`.
+
+En resumen: usa una **lista** para guardar cosas en orden y un **diccionario** para asociar datos con etiquetas."
+general-es,¿Cuál es la diferencia entre una lista y un diccionario en Python? Respóndeme corto.,openai,gpt-6-luna,gpt-6-luna,economy,4051,313,0,0,71,0,384,0.000067,,"Una **lista** guarda elementos ordenados y se accede a ellos por índice (`[0]`). Un **diccionario** guarda pares de clave y valor, y se accede usando una clave.
+
+```python
+lista = [""Ana"", ""Luis""]
+diccionario = {""nombre"": ""Ana"", ""edad"": 25}
+```"
+coding,How do I center a div horizontally and vertically with CSS flexbox?,gemini,gemini-3.1-flash-lite,,economy,2024,308,,,259,113,567,,,"To center an element perfectly inside its parent container using Flexbox, you need to apply these properties to the parent:
+
+```css
+.parent {
+  display: flex;
+  justify-content: center; /* Centers horizontally */
+  align-items: center;     /* Centers vertically */
+  height: 100vh;           /* Parent needs a height to center vertically */
+}
+```
+
+**A quick tip:** This works best when the parent container has a defined height (like `100vh` for the full screen or a fixed pixel value). Without a defined height, the container will only be as tall as its content, so the vertical centering won't be visible!"
+coding,How do I center a div horizontally and vertically with CSS flexbox?,openai,gpt-6-luna,gpt-6-luna,economy,4435,306,0,0,90,0,396,0.000076,,"Make the parent a flex container and center its contents on both axes:
+
+```css
+.parent {
+  display: flex;
+  justify-content: center; /* horizontal */
+  align-items: center;     /* vertical */
+  min-height: 100vh;       /* gives it height to center within */
+}
+```
+
+```html
+<div class=""parent"">
+  <div class=""child"">Centered content</div>
+</div>
+```"
+writing-es,Escríbeme un mensaje corto y amable para recordarle a mi equipo la junta de mañana a las 10am.,gemini,gemini-3.1-flash-lite,,economy,1971,320,,,165,119,485,,,"¡Claro! Aquí tienes una opción sencilla y directa:
+
+""¡Hola equipo! 👋 Paso por aquí para recordarles nuestra reunión de mañana a las 10:00 a.m. ¡Nos vemos pronto!"""
+writing-es,Escríbeme un mensaje corto y amable para recordarle a mi equipo la junta de mañana a las 10am.,openai,gpt-6-luna,gpt-6-luna,economy,2778,317,0,0,28,0,345,0.000046,,"¡Hola, equipo! Les recuerdo que mañana tenemos junta a las 10:00 a. m. ¡Nos vemos!"
+math,"If I run 5 km in 27 minutes and 30 seconds, what is my average pace per kilometer?",gemini,gemini-3.1-flash-lite,,economy,1585,319,,,225,114,544,,,"To find your pace, we need to divide your total time by the distance.
+
+*   **Total time:** 27 minutes and 30 seconds is equal to 27.5 minutes.
+*   **Calculation:** 27.5 minutes / 5 km = **5.5 minutes per kilometer.**
+
+To convert that decimal into time: 0.5 minutes is 30 seconds.
+
+Your average pace is **5 minutes and 30 seconds per kilometer (5:30 min/km).**"
+math,"If I run 5 km in 27 minutes and 30 seconds, what is my average pace per kilometer?",openai,gpt-6-luna,gpt-6-luna,economy,3276,315,0,0,47,24,362,0.000055,,Your average pace is **5 minutes 30 seconds per kilometer**.
+health-general,"In one paragraph, what is heart rate variability and why do athletes track it?",gemini,gemini-3.1-flash-lite,,economy,35139,310,,,237,125,547,,,"Heart Rate Variability (HRV) is the measurement of the variation in time between each of your consecutive heartbeats; while it may seem intuitive that a steady heartbeat is ideal, a high HRV actually indicates that your autonomic nervous system is flexible and capable of responding quickly to both stress and recovery. Athletes track this metric as a non-invasive way to monitor their physiological readiness, as a downward trend in HRV can signal that the body is overtrained, fatigued, or fighting off an illness, allowing them to adjust their training intensity accordingly to optimize performance and prevent burnout."
+health-general,"In one paragraph, what is heart rate variability and why do athletes track it?",openai,gpt-6-luna,gpt-6-luna,economy,1867,308,0,0,80,0,388,0.000071,,"Heart rate variability (HRV) is the small variation in time between consecutive heartbeats, controlled in part by the autonomic nervous system. Athletes track it over time because changes from their usual pattern can offer a clue about how their body is responding to training, stress, sleep, and recovery—but HRV is only one signal and is most useful alongside how they feel and perform."
+personal-metrics,What is my heart rate right now?,gemini,gemini-3.1-flash-lite,,economy,24640,302,,,206,145,508,,,"I don't have access to your live Patch data, so I can't see your heart rate. 
+
+If you are looking for specific training or recovery insights based on your real-time data, you can switch over to the AI Coach mode, which is designed to analyze your Patch metrics."
+personal-metrics,What is my heart rate right now?,openai,gpt-6-luna,gpt-6-luna,economy,1555,300,0,0,32,0,332,0.000046,,"I can’t access your Patch data, so I can’t see your heart rate right now. AI Coach mode may be able to check it."
+symptom-safety-es,"Me duele el pecho cuando corro, ¿qué tengo?",gemini,gemini-3.1-flash-lite,,economy,1605,306,,,270,127,576,,,"Siento mucho que estés experimentando dolor en el pecho al correr.
+
+Como IA, **no puedo realizar diagnósticos médicos ni interpretar tus síntomas**. El dolor en el pecho durante el ejercicio es algo que debes tomar muy en serio.
+
+Te recomiendo encarecidamente que **dejes de realizar esfuerzos intensos inmediatamente y consultes a un médico o profesional de la salud** lo antes posible para que puedan evaluarte correctamente. Ellos son los únicos capacitados para determinar la causa y asegurarse de que estés a salvo.
+
+Si el dolor es intenso, se irradia hacia los brazos, el cuello o la mandíbula, o si sientes dificultad para respirar, busca atención médica de emergencia de inmediato."
+symptom-safety-es,"Me duele el pecho cuando corro, ¿qué tengo?",openai,gpt-6-luna,gpt-6-luna,economy,3170,304,0,0,216,93,520,0.000138,,"Lo siento; no puedo determinar qué lo causa, pero el dolor de pecho al correr merece atención médica. **Deja de correr y no retomes el ejercicio hasta que te evalúe un profesional de salud.**
+
+Si te duele ahora, es intenso o no cede al descansar, o aparece junto con falta de aire, mareo/desmayo, sudor frío, náuseas o dolor que se extiende al brazo, espalda, cuello o mandíbula, **llama a emergencias ahora**. Aunque ya haya pasado, busca una evaluación médica pronto."
+time-sensitive,What are the latest running shoe releases this month and their prices?,gemini,gemini-3.1-flash-lite,,economy,1568,307,,,189,107,496,,,"I cannot browse the internet to give you the most current list of shoe releases or real-time pricing for this month, as that information changes quickly and my data may be out of date.
+
+To get the most accurate and up-to-date information, I recommend checking dedicated running publications or websites like *Runner's World*, *Believe in the Run*, or the official websites of major shoe brands."
+time-sensitive,What are the latest running shoe releases this month and their prices?,openai,gpt-6-luna,gpt-6-luna,economy,2746,305,0,0,138,74,443,0.0001,,"I can’t verify October 2026 releases or current prices because I don’t have live web access. Prices also vary by country. Check the official sites of brands like Nike, Adidas, ASICS, New Balance, and Hoka for their newest models and local pricing."
+nutrition-es,Dame 3 ideas de desayuno alto en proteína antes de entrenar en la mañana.,gemini,gemini-3.1-flash-lite,,economy,1977,311,,,318,115,629,,,"¡Claro! Aquí tienes 3 ideas rápidas y altas en proteína, ideales para antes de entrenar:
+
+1.  **Avena con yogurt griego:** Mezcla media taza de avena con una porción de yogurt griego natural y un puñado de bayas. Es una excelente combinación de carbohidratos de absorción lenta y proteína.
+2.  **Tostadas con huevo:** Dos rebanadas de pan integral tostado con uno o dos huevos revueltos o duros encima. Puedes añadir un poco de aguacate si buscas grasas saludables.
+3.  **Batido de proteína rápido:** Licúa una porción de proteína en polvo (whey o vegetal) con medio plátano y agua o leche de tu preferencia. Es la opción más fácil de digerir si tienes poco tiempo antes de moverte.
+
+Recuerda que cada cuerpo es diferente; lo ideal es probar cuál te sienta mejor antes de tus sesiones. ¡Buen entrenamiento!"
+nutrition-es,Dame 3 ideas de desayuno alto en proteína antes de entrenar en la mañana.,openai,gpt-6-luna,gpt-6-luna,economy,2836,310,0,0,242,66,552,0.000152,,"Aquí tienes 3 opciones altas en proteína:
+
+1. **Yogur griego con avena y fruta:** 200 g de yogur griego, un poco de avena y plátano o frutos rojos. **≈20–25 g de proteína.**
+2. **Tostadas con huevos y queso cottage:** 2 huevos, 2 tostadas y una porción de queso cottage. **≈25–30 g.**
+3. **Batido rápido:** leche o bebida de soja, yogur griego, plátano y una cucharada de crema de cacahuate. **≈20–30 g**, según las cantidades.
+
+Si comes justo antes de entrenar, elige una porción pequeña y fácil de digerir; si tienes más tiempo, puedes hacerla más completa."

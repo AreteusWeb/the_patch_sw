@@ -77,6 +77,25 @@ const apiEndpoint =
 
 const vertexAI = new VertexAI({ project, location, apiEndpoint });
 
+/** Extra clients for models that resolve to a different location (cached). */
+const vertexClientsByLocation = new Map([[location, vertexAI]]);
+
+/**
+ * VertexAI client for an arbitrary model, with the same location / global
+ * endpoint resolution as the coach and insights calls. Used by llm/adapters/gemini.cjs.
+ */
+function getVertexClientForModel(model) {
+  const loc = resolveVertexLocation(model, process.env.VERTEX_AI_LOCATION);
+  if (!vertexClientsByLocation.has(loc)) {
+    vertexClientsByLocation.set(loc, new VertexAI({
+      project,
+      location: loc,
+      apiEndpoint: loc === 'global' ? 'aiplatform.googleapis.com' : undefined,
+    }));
+  }
+  return vertexClientsByLocation.get(loc);
+}
+
 /** Vertex AI functionDeclarations for the AI Coach. */
 const COACH_FUNCTION_DECLARATIONS = [
   {
@@ -946,4 +965,8 @@ module.exports = {
   getProductSearchLink,
   COACH_FUNCTION_DECLARATIONS,
   MAX_TOOL_ROUNDS,
+  // Shared with llm/adapters/gemini.cjs (multi-provider layer).
+  COACH_GENERATION_CONFIG,
+  toGeminiContents,
+  getVertexClientForModel,
 };

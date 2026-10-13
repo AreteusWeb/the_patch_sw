@@ -51,6 +51,71 @@ const MAX_MESSAGES_PER_SESSION = Math.max(
   Number.parseInt(process.env.MAX_MESSAGES_PER_SESSION || '40', 10) || 40
 );
 
+// ─── Multi-provider LLM layer (llm/) — feature flag, off by default ─────────
+// llm/ and prompts/ are required lazily, so with the flag off the server never
+// loads them and /api/coach/message behaves exactly as before.
+const COACH_MULTI_PROVIDER =
+  String(process.env.COACH_MULTI_PROVIDER || '').trim().toLowerCase() === 'true';
+const COACH_MULTI_PROVIDER_UIDS = new Set(
+  String(process.env.COACH_MULTI_PROVIDER_UIDS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+);
+
+/** Input cap for mode='general' (paid per token; the coach path has no cap today). */
+const GENERAL_ASSISTANT_MAX_MESSAGE_CHARS = 8000;
+
+function isMultiProviderEnabledFor(uid) {
+  return COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.has(uid);
+}
+
+/**
+ * Same shape as logGeminiUsage (ai-provider.gcp.cjs) so both can be queried
+ * together in Cloud Logging. responseTokens = visible answer only (like
+ * candidatesTokenCount); thinkingTokens are reported separately. Token counts
+ * are measured (from the API response); costUsd is an estimate from
+ * llm/config.cjs prices and is null for models without a verified price.
+ * Never log message text here.
+ */
+function logLlmUsage(rec) {
+  const outputTokens = rec.outputTokens ?? null;
+  const thinkingTokens = rec.thinkingTokens ?? null;
+  console.log(JSON.stringify({
+    event: 'llm_usage',
+    timestamp: new Date().toISOString(),
+    kind: rec.purpose ?? null,
+    uid: rec.userId ?? null,
+    sessionId: rec.conversationId ?? null,
+    provider: rec.provider ?? null,
+    model: rec.model ?? null,
+    responseModel: rec.responseModel ?? null,
+    tier: rec.tier ?? null,
+    promptTokens: rec.inputTokens ?? null,
+    cachedInputTokens: rec.cachedInputTokens ?? null,
+    cacheWriteTokens: rec.cacheWriteTokens ?? null,
+    responseTokens:
+      outputTokens != null ? outputTokens - (thinkingTokens || 0) : null,
+    thinkingTokens,
+    totalTokens: rec.totalTokens ?? null,
+    costUsd: rec.costUsd ?? null,
+    latencyMs: rec.latencyMs ?? null,
+    attempts: rec.attempts ?? null,
+    fellBack: Boolean(rec.fellBack),
+    routeReason: rec.routeReason ?? null,
+    firstError: rec.firstError ?? null,
+  }));
+}
+
+let llmModule = null;
+function getLlm() {
+  if (!llmModule) {
+    llmModule = require('./llm/index.cjs');
+    llmModule.setUsageLogger(logLlmUsage);
+  }
+  return llmModule;
+}
+
 // Dev origins always allowed (Vite --port=3000 --host=0.0.0.0).
 // CORS_ALLOWED_ORIGINS adds production (or other) origins; it does not replace these.
 const DEFAULT_CORS_ORIGINS = [
@@ -73,18 +138,69 @@ const ALLOWED_ORIGINS = new Set([
 
 console.log(`[BOOT] APP_MODE=${APP_MODE}${APP_MODE === 'local' ? ' (no Firebase/GCS — data in memory/disk)' : ''}`);
 console.log(`[BOOT] CORS origins: ${[...ALLOWED_ORIGINS].join(', ')}`);
+if (COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.size > 0) {
+  console.log(
+    `[BOOT] Coach multi-provider (mode=general) enabled for ` +
+      (COACH_MULTI_PROVIDER ? 'all users' : `${COACH_MULTI_PROVIDER_UIDS.size} allowlisted uid(s)`)
+  );
+}
+
+/**
+ * Cap for JSON request bodies (coach message / new-session / insights, devices,
+ * OTA trigger). Real payloads are a chat message plus a <1 KB metrics snapshot,
+ * and a coach message is stored as one Firestore document (1 MiB max), so a
+ * bigger body could never be saved anyway. Multipart uploads don't use this.
+ */
+const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', chunk => { raw += chunk; });
+    const tooLarge = () => Object.assign(new Error('payload_too_large'), { code: 'payload_too_large' });
+    const declared = Number(req.headers['content-length']);
+    if (Number.isFinite(declared) && declared > MAX_JSON_BODY_BYTES) {
+      req.resume(); // drain without buffering
+      reject(tooLarge());
+      return;
+    }
+
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+    req.on('data', chunk => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > MAX_JSON_BODY_BYTES) {
+        settled = true;
+        chunks.length = 0;
+        reject(tooLarge());
+        return;
+      }
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
     req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      // Decode once at the end so multi-byte characters split across chunks stay intact.
+      const raw = Buffer.concat(chunks).toString('utf8');
       if (!raw) return resolve({});
       try { resolve(JSON.parse(raw)); }
       catch (e) { reject(new Error('invalid_json')); }
     });
-    req.on('error', reject);
+    req.on('error', err => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
   });
+}
+
+/** 413 for an oversized body, otherwise the existing 400 invalid_json. */
+function sendJsonBodyError(req, res, err) {
+  if (err && err.code === 'payload_too_large') {
+    sendJson(req, res, 413, { error: 'payload_too_large' });
+  } else {
+    sendJson(req, res, 400, { error: 'invalid_json' });
+  }
 }
 
 /**
@@ -237,7 +353,7 @@ async function handleDevicesApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/devices') {
     let body;
     try { body = await readJsonBody(req); }
-    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+    catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const deviceMac = normalizeMac(body.deviceMac);
     if (!deviceMac || deviceMac.length !== 12) {
@@ -305,7 +421,7 @@ async function handleOtaApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/ota/trigger') {
     let body;
     try { body = await readJsonBody(req); }
-    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+    catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const mac = normalizeMac(body.mac);
     const version = (body.version || '').trim();
@@ -700,7 +816,7 @@ async function handleCoachApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/coach/new-session') {
     let body = {};
     try { body = await readJsonBody(req); }
-    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+    catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const metricsSnapshot = sanitizeCoachMetricsSnapshot(body.metricsSnapshot);
 
@@ -722,7 +838,7 @@ async function handleCoachApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/coach/message') {
     let body;
     try { body = await readJsonBody(req); }
-    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+    catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     if (!message) {
@@ -739,6 +855,14 @@ async function handleCoachApi(req, res) {
     // create the session on this first message instead of eagerly, and never
     // fall back to getActiveSession, which could pick another open thread.
     const wantsNewSession = !explicitSessionId && body.newSession === true;
+    // mode='general' is honored only when the multi-provider flag is on for this
+    // uid; otherwise (and for any other mode) the health coach path runs as before.
+    const useGeneralAssistant =
+      body.mode === 'general' && isMultiProviderEnabledFor(uid);
+    if (useGeneralAssistant && message.length > GENERAL_ASSISTANT_MAX_MESSAGE_CHARS) {
+      sendJson(req, res, 400, { error: 'message_too_long' });
+      return true;
+    }
 
     try {
       let sessionId;
@@ -800,6 +924,44 @@ async function handleCoachApi(req, res) {
         role: m.role === 'model' ? 'model' : 'user',
         text: m.text,
       }));
+
+      // General assistant: plain text via llm.generate() (no tools, no metrics).
+      if (useGeneralAssistant) {
+        const { GENERAL_ASSISTANT_SYSTEM_PROMPT } = require('./prompts/general-assistant.cjs');
+        const llmReply = await getLlm().generate({
+          mode: 'general',
+          system: GENERAL_ASSISTANT_SYSTEM_PROMPT,
+          messages: [
+            ...history
+              .filter(m => typeof m.text === 'string' && m.text.trim())
+              .map(m => ({
+                role: m.role === 'model' ? 'assistant' : 'user',
+                content: m.text,
+              })),
+            { role: 'user', content: message },
+          ],
+          userId: uid,
+          conversationId: sessionId,
+          purpose: 'coach_general',
+        });
+        const replyText =
+          llmReply.text || 'I could not generate a reply right now. Try again in a moment.';
+
+        await dbProvider.appendMessage(uid, sessionId, {
+          role: 'model',
+          text: replyText,
+          metricsSnapshot: null,
+          toolCalls: [],
+          attachments: [],
+        });
+
+        sendJson(req, res, 200, {
+          sessionId,
+          reply: replyText,
+          attachments: [],
+        });
+        return true;
+      }
 
       // Tool handlers are injected from db-provider (bound to this uid).
       // ai-provider must not import db-provider itself.
@@ -1023,7 +1185,7 @@ async function handleCoachApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/coach/insights') {
     let body;
     try { body = await readJsonBody(req); }
-    catch { sendJson(req, res, 400, { error: 'invalid_json' }); return true; }
+    catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const mode = body.mode === 'fitness' ? 'fitness' : body.mode === 'normal' ? 'normal' : null;
     if (!mode) {

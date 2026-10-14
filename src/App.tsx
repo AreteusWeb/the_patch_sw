@@ -13,7 +13,8 @@ import MobileApp from './components/mobile/MobileApp';
 import DesktopApp from './components/desktop/DesktopApp';
 import DeviceSelectionScreen from './components/DeviceSelectionScreen';
 import LiveCoachPOC from './pages/LiveCoachPOC';
-import { DEV_SHOW_ANY_DEVICE } from './lib/appConfig';
+import StandaloneAgentScreen from './components/StandaloneAgentScreen';
+import { DEV_SHOW_ANY_DEVICE, STANDALONE_AGENT_ENABLED } from './lib/appConfig';
 import PwaUpdateBanner from './components/PwaUpdateBanner';
 
 /**
@@ -31,6 +32,7 @@ export default function App() {
   const currentUser = useStore(s => s.currentUser);
   const authLoading = useStore(s => s.authLoading);
   const isDeviceSelected = useStore(s => s.isDeviceSelected);
+  const standaloneAgentActive = useStore(s => s.standaloneAgentActive);
   useFirestore();
 
   const isDesktop = useIsDesktop();
@@ -61,6 +63,9 @@ export default function App() {
   } else if (isLivePoc) {
     // Isolated Live POC — skip device selection / dashboard entirely.
     body = <LiveCoachPOC />;
+  } else if (STANDALONE_AGENT_ENABLED && standaloneAgentActive && !isDeviceSelected) {
+    // Chosen from "My Devices" for this page load only (not persisted).
+    body = <StandaloneAgentScreen />;
   } else if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {
     body = <DeviceSelectionScreen />;
   } else {

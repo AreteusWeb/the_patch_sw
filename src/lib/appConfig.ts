@@ -25,6 +25,17 @@ export const IS_LOCAL_MODE = APP_MODE === 'local';
 export const DEV_SHOW_ANY_DEVICE =
   IS_LOCAL_MODE && import.meta.env.VITE_DEV_SHOW_ANY_DEVICE === 'true';
 
+// Standalone AI agent: lets a signed-in user without a Patch open the chat
+// from "My Devices". Off unless explicitly enabled.
+export const STANDALONE_AGENT_ENABLED =
+  import.meta.env.VITE_ENABLE_STANDALONE_AGENT === 'true';
+
+// Coach / General switch in the standalone agent. General replies only when
+// the server also has COACH_MULTI_PROVIDER on for this user; otherwise the
+// server silently answers with the health coach.
+export const GENERAL_MODE_ENABLED =
+  import.meta.env.VITE_ENABLE_GENERAL_MODE === 'true';
+
 /**
  * Staging / local-cloud auto-login (real Firebase email+password).
  * Only active when BOTH are set. Leave unset in production builds so

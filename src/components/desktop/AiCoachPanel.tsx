@@ -9,9 +9,12 @@ import {
   Volume2,
   Search,
   PanelLeft,
+  Sparkles,
+  Cpu,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
+import { GENERAL_MESSAGE_MAX_CHARS } from '../../lib/agent';
 import { buildTrainingLoadSnapshot } from '../../lib/trainingLoad';
 import { cn } from '../../utils/cn';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
@@ -22,12 +25,31 @@ import CoachHistorySidebar, {
 } from './CoachHistorySidebar';
 
 interface AiCoachPanelProps {
-  onClose: () => void;
-  /** embedded = desktop resizable column; fullscreen = mobile full-screen sheet */
-  presentation?: 'embedded' | 'fullscreen';
+  /** Omit to hide the close button (standalone agent page). */
+  onClose?: () => void;
+  /**
+   * embedded = desktop resizable column; fullscreen = mobile full-screen sheet;
+   * page = standalone agent (parent owns safe areas, chat column is centered).
+   */
+  presentation?: 'embedded' | 'fullscreen' | 'page';
+  /**
+   * No Patch connected: metrics go out as null with hasRealData false, and
+   * Voice & Video (live coach) is hidden.
+   */
+  noDevice?: boolean;
+  /** Shows the Coach / General switch; switching opens a fresh conversation. */
+  enableGeneralMode?: boolean;
+  /** Header title (defaults to "AI Coach"). */
+  title?: string;
+  /** page only: extra buttons rendered at the right of the header. */
+  headerActions?: React.ReactNode;
+  /** page + noDevice: shows a "Connect your Patch" card in the empty state. */
+  onConnectDevice?: () => void;
 }
 
 type CoachInteractionMode = 'text' | 'live';
+
+type CoachChatMode = 'coach' | 'general';
 
 type CoachRole = 'user' | 'model';
 
@@ -88,6 +110,28 @@ const COACH_SESSION_MESSAGE_CAP = 40;
  * usable on phones and in the default 30% desktop column.
  */
 const HISTORY_INLINE_MIN_PX = 640;
+
+/** Starter prompts on the standalone page's empty state. */
+const COACH_SUGGESTIONS = [
+  'Plan a 20-minute recovery session',
+  'How much water should I drink on training days?',
+  'What are signs I might be overtraining?',
+  'Give me a warm-up routine before a run',
+];
+
+const GENERAL_SUGGESTIONS = [
+  'Help me write a short, friendly email',
+  'Explain how sleep affects focus',
+  'Give me a quick, healthy dinner idea',
+  'Summarize the pros and cons of remote work',
+];
+
+function messageTooLongText(length: number): string {
+  return (
+    `Message is too long (${length.toLocaleString()} characters). ` +
+    `Keep it under ${GENERAL_MESSAGE_MAX_CHARS.toLocaleString()} characters and try again.`
+  );
+}
 
 function parseCoachUiMessages(raw: unknown): CoachChatMessage[] {
   if (!Array.isArray(raw)) return [];
@@ -812,8 +856,16 @@ function CoachAttachmentView({
 const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   onClose,
   presentation = 'embedded',
+  noDevice = false,
+  enableGeneralMode = false,
+  title = 'AI Coach',
+  headerActions,
+  onConnectDevice,
 }) => {
   const isFullscreen = presentation === 'fullscreen';
+  const isPage = presentation === 'page';
+  /** Larger paddings / composer (fullscreen sheet and standalone page). */
+  const isRoomy = isFullscreen || isPage;
   const currentUser = useStore(s => s.currentUser);
   const vitals = useStore(s => s.vitals);
   const hasRealData = useStore(s => s.hasRealData);
@@ -824,6 +876,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
   const [interactionMode, setInteractionMode] =
     useState<CoachInteractionMode>('text');
+  const [chatMode, setChatMode] = useState<CoachChatMode>('coach');
+  const isGeneral = enableGeneralMode && chatMode === 'general';
   const [messages, setMessages] = useState<CoachChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -857,6 +911,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Standalone page: show the history column by default when it fits inline
+  // (never auto-open the overlay drawer on narrow screens).
+  const historyAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!isPage || historyAutoOpenedRef.current || panelWidth === 0) return;
+    historyAutoOpenedRef.current = true;
+    if (panelWidth >= HISTORY_INLINE_MIN_PX) setHistoryOpen(true);
+  }, [isPage, panelWidth]);
 
   useEffect(() => {
     if (!historyOpen || historyInline) return;
@@ -1108,7 +1171,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     el.style.height = '0px';
     // Embedded stays shorter; while dictating allow more lines so text isn't clipped.
     const dictating = voiceMode || voiceDraft;
-    const maxPx = isFullscreen
+    const maxPx = isRoomy
       ? dictating
         ? 10 * 16
         : 6.25 * 16
@@ -1131,7 +1194,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   useLayoutEffect(() => {
     if (interactionMode !== 'text') return;
     resizeComposer();
-  }, [input, voiceMode, voiceDraft, isListening, interactionMode, isFullscreen]);
+  }, [input, voiceMode, voiceDraft, isListening, interactionMode, isRoomy]);
 
   useEffect(() => {
     if (voiceMode && stickToBottomRef.current) {
@@ -1194,7 +1257,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
   }, [isSpeaking, sessionLimitReached, startListening]);
 
-  const buildMetricsSnapshot = () => ({
+  // No device: the store still holds placeholder vitals (e.g. HR 72) that must
+  // never reach the model as if they were the user's numbers.
+  const buildMetricsSnapshot = () => noDevice ? {
+    heartRate: null,
+    spo2: null,
+    respirationRate: null,
+    temperature: null,
+    hasRealData: false,
+    trainingLoad: null,
+  } : {
     heartRate: vitals.heartRate.value,
     spo2: vitals.spo2.value,
     respirationRate: vitals.respirationRate.value,
@@ -1202,7 +1274,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     hasRealData: liveForCoach,
     // Recorded-session history, sent even when the patch isn't live.
     trainingLoad: buildTrainingLoadSnapshot(useStore.getState().trainingLoad),
-  });
+  };
 
   const resumeVoiceListening = () => {
     if (!voiceModeRef.current || sessionLimitReached) return;
@@ -1285,6 +1357,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     cancelSpeech();
   };
 
+  const selectChatMode = (mode: CoachChatMode) => {
+    if (mode === chatMode || busy) return;
+    setChatMode(mode);
+    setError(null);
+    setVoiceMode(false);
+    voiceModeRef.current = false;
+    enterDraftConversation();
+  };
+
   /**
    * Delete a thread from the history sidebar (server does the recursive
    * Firestore delete). The row is only removed after the server confirms,
@@ -1357,6 +1438,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       return;
     }
 
+    if (isGeneral && text.length > GENERAL_MESSAGE_MAX_CHARS) {
+      setError(messageTooLongText(text.length));
+      return;
+    }
+
     // Never listen while waiting for the coach reply.
     stopListening();
     setVoiceDraft(false);
@@ -1394,12 +1480,21 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           // so the server appends to that doc instead of idle auto-pick.
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
           ...(startsNewSession ? { newSession: true } : {}),
+          ...(isGeneral ? { mode: 'general' } : {}),
         }),
       });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        if (data?.error === 'message_too_long') {
+          // Rejected before it was stored — put the text back so it can be edited.
+          setMessages(prev => prev.filter(m => m.id !== userMsg.id));
+          setInput(text);
+          setError(messageTooLongText(text.length));
+          return;
+        }
+
         if (data?.error === 'session_not_found') {
           enterDraftConversation();
           setError('This conversation was deleted. Send your message again to start a new one.');
@@ -1655,31 +1750,119 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     onDismissError: () => setHistoryError(null),
   };
 
+  const chatModeSwitch = enableGeneralMode ? (
+    <div
+      className="flex bg-slate-900/60 p-1 rounded-full border border-slate-800/50 gap-1"
+      role="group"
+      aria-label="Assistant mode"
+    >
+      {(['coach', 'general'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => selectChatMode(mode)}
+          disabled={busy}
+          aria-pressed={chatMode === mode}
+          title={
+            mode === 'coach'
+              ? 'Training and wellness coaching'
+              : 'General questions — starts a new conversation'
+          }
+          className={cn(
+            'flex-1 px-3 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-[0.1em] transition-all disabled:cursor-not-allowed',
+            chatMode === mode
+              ? 'bg-slate-700 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-300'
+          )}
+        >
+          {mode === 'coach' ? 'Coach' : 'General'}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  const showEmptyState =
+    messages.length === 0 &&
+    !loading &&
+    !startingNew &&
+    !historyLoading &&
+    !openingSessionId;
+  const suggestions = isGeneral ? GENERAL_SUGGESTIONS : COACH_SUGGESTIONS;
+
   return (
     <div
       ref={rootRef}
       className={cn(
         'h-full min-h-0 flex flex-col overflow-hidden',
-        isFullscreen ? 'bg-black pt-[env(safe-area-inset-top)]' : 'bg-slate-950/95'
+        isFullscreen
+          ? 'bg-black pt-[env(safe-area-inset-top)]'
+          : isPage
+            ? 'bg-transparent'
+            : 'bg-slate-950/95'
       )}
     >
+      {isPage ? (
+        <div className="flex-shrink-0 border-b border-slate-900/80">
+          <div className="relative flex items-center gap-3 h-14 px-3 sm:px-5">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className={cn(
+                'w-9 h-9 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                historyOpen
+                  ? 'text-teal-400 bg-teal-500/15'
+                  : 'text-[#A0A0A8] hover:bg-slate-800/80 hover:text-[#F5F5F5]'
+              )}
+              title={historyOpen ? 'Hide conversations' : 'Show conversations'}
+              aria-label={historyOpen ? 'Hide conversations' : 'Show conversations'}
+              aria-pressed={historyOpen}
+            >
+              <PanelLeft size={16} />
+            </button>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-teal-500/10 border border-teal-500/25 text-teal-400 flex items-center justify-center shrink-0">
+                <Sparkles size={15} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-bold text-teal-400/80 uppercase tracking-[0.3em] leading-none truncate">
+                  Areteus · The Patch
+                </p>
+                <p className="text-[15px] font-semibold text-[#F5F5F5] leading-tight mt-1 truncate">
+                  {title}
+                </p>
+              </div>
+            </div>
+            {chatModeSwitch && (
+              <div className="hidden md:block absolute left-1/2 -translate-x-1/2 w-60">
+                {chatModeSwitch}
+              </div>
+            )}
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              {headerActions}
+            </div>
+          </div>
+          {chatModeSwitch && (
+            <div className="md:hidden px-3 pb-3">{chatModeSwitch}</div>
+          )}
+        </div>
+      ) : (
       <div
         className={cn(
           'flex items-center justify-between border-b border-slate-800/80 flex-shrink-0 gap-3',
-          isFullscreen ? 'px-4 sm:px-5 pt-4 sm:pt-5 pb-3' : 'px-3 pt-2.5 pb-2'
+          isRoomy ? 'px-4 sm:px-5 pt-4 sm:pt-5 pb-3' : 'px-3 pt-2.5 pb-2'
         )}
       >
         <div className="min-w-0">
           <p className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-[0.22em]">
-            Performance
+            {isGeneral ? 'General' : 'Performance'}
           </p>
           <p
             className={cn(
               'font-bold text-[#F5F5F5] mt-0.5 truncate leading-tight',
-              isFullscreen ? 'text-base' : 'text-[14px]'
+              isRoomy ? 'text-base' : 'text-[14px]'
             )}
           >
-            AI Coach
+            {title}
           </p>
         </div>
 
@@ -1701,21 +1884,37 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               Chats
             </button>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] hover:bg-slate-800/80 transition-colors"
-            aria-label="Close AI Coach"
-          >
-            <X size={15} />
-          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] hover:bg-slate-800/80 transition-colors"
+              aria-label="Close AI Coach"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       </div>
+      )}
 
+      {chatModeSwitch && !isPage && (
+        <div
+          className={cn(
+            'flex-shrink-0',
+            isRoomy ? 'px-4 sm:px-5 pt-3' : 'px-3 pt-2',
+            noDevice && (isRoomy ? 'pb-2' : 'pb-1.5')
+          )}
+        >
+          {chatModeSwitch}
+        </div>
+      )}
+
+      {!noDevice && (
       <div
         className={cn(
           'flex-shrink-0',
-          isFullscreen ? 'px-4 sm:px-5 pt-3 pb-2' : 'px-3 pt-2 pb-1.5'
+          isRoomy ? 'px-4 sm:px-5 pt-3 pb-2' : 'px-3 pt-2 pb-1.5'
         )}
       >
         <div
@@ -1749,12 +1948,13 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           </button>
         </div>
       </div>
+      )}
 
       {interactionMode === 'live' ? (
         <div
           className={cn(
             'flex-1 min-h-0 flex flex-col overflow-hidden',
-            isFullscreen ? 'px-4 sm:px-5 pb-4' : 'px-3 pb-2.5'
+            isRoomy ? 'px-4 sm:px-5 pb-4' : 'px-3 pb-2.5'
           )}
         >
           <LiveCoachSessionView embedded />
@@ -1764,7 +1964,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           {historyOpen && historyInline && (
             <CoachHistorySidebar
               {...historySidebarProps}
-              className="flex-shrink-0 w-[13.5rem]"
+              className={cn(
+                'flex-shrink-0',
+                isPage ? 'w-64 bg-slate-950/50 border-slate-900' : 'w-[13.5rem]'
+              )}
             />
           )}
 
@@ -1799,15 +2002,28 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             )}
           </AnimatePresence>
 
-          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          <div
+            className={cn(
+              'flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden',
+              isPage && 'w-full max-w-3xl mx-auto'
+            )}
+          >
           <div
             ref={listRef}
             onScroll={onChatListScroll}
-            className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide px-4 sm:px-5 py-4 flex flex-col gap-3.5"
+            className={cn(
+              'relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col',
+              isPage ? 'px-4 sm:px-6 py-6 gap-4' : 'px-4 sm:px-5 py-4 gap-3.5'
+            )}
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {(historyLoading || openingSessionId) && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
+              <div
+                className={cn(
+                  'absolute inset-0 z-10 flex flex-col items-center justify-center gap-3',
+                  isPage ? 'bg-black/60' : 'bg-slate-950/70 backdrop-blur-[2px]'
+                )}
+              >
                 <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
                 <p className="text-[11px] text-[#A0A0A8] font-medium">
                   {openingSessionId
@@ -1818,7 +2034,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             )}
 
             {startingNew && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-950/70 backdrop-blur-[2px]">
+              <div
+                className={cn(
+                  'absolute inset-0 z-10 flex flex-col items-center justify-center gap-3',
+                  isPage ? 'bg-black/60' : 'bg-slate-950/70 backdrop-blur-[2px]'
+                )}
+              >
                 <Loader2 size={28} className="animate-spin text-[#A0A0A8]" />
                 <p className="text-[11px] text-[#A0A0A8] font-medium">
                   Starting new conversation…
@@ -1826,14 +2047,77 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               </div>
             )}
 
-            {messages.length === 0 &&
-              !loading &&
-              !startingNew &&
-              !historyLoading &&
-              !openingSessionId && (
+            {showEmptyState && isPage && (
+              <div className="my-auto w-full max-w-xl mx-auto flex flex-col items-center text-center gap-6 py-6">
+                <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-teal-400 flex items-center justify-center shadow-[0_0_40px_rgba(20,184,166,0.15)]">
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-semibold text-[#F5F5F5] tracking-tight">
+                    {isGeneral ? 'What can I help with?' : 'How can I help your training today?'}
+                  </h2>
+                  <p className="mt-2 text-[13px] text-[#6B7280] leading-relaxed max-w-md mx-auto">
+                    {isGeneral
+                      ? "Ask about anything — writing, ideas, how things work. This assistant can't see Patch data and isn't medical advice."
+                      : noDevice
+                        ? "Ask about training, recovery, hydration, or effort. Without a Patch I can't see your vitals. Performance coaching — not medical advice."
+                        : 'Ask about training, recovery, hydration, or effort. Performance coaching — not medical advice.'}
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => void sendMessage(s)}
+                      disabled={busy || sessionLimitReached}
+                      className="text-left px-4 py-3 rounded-2xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 hover:border-teal-500/30 text-[13px] text-[#A0A0A8] hover:text-[#F5F5F5] leading-snug transition-colors disabled:opacity-40"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                {noDevice && onConnectDevice && (
+                  <div className="w-full flex items-center justify-between gap-3 rounded-2xl border border-teal-500/20 bg-teal-500/[0.06] px-4 py-3 text-left">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-teal-500/10 text-teal-400 flex items-center justify-center shrink-0">
+                        <Cpu size={15} />
+                      </div>
+                      <p className="text-[12px] text-slate-300 leading-snug">
+                        Connect your Patch to access your vitals.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onConnectDevice}
+                      className="shrink-0 px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-[10px] font-bold uppercase tracking-widest transition-colors active:scale-95"
+                    >
+                      Connect
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showEmptyState && !isPage && (
               <p className="text-[12px] text-[#6B7280] leading-[1.5] px-0.5">
-                Ask about training, recovery, hydration, or effort. This is
-                performance coaching — not medical advice.
+                {isGeneral ? (
+                  <>
+                    Ask about anything — writing, ideas, how things work. This
+                    assistant can't see Patch data and isn't medical advice.
+                  </>
+                ) : noDevice ? (
+                  <>
+                    No Patch connected, so live vitals aren't available. Ask
+                    about training, recovery, hydration, or effort. This is
+                    performance coaching — not medical advice.
+                  </>
+                ) : (
+                  <>
+                    Ask about training, recovery, hydration, or effort. This is
+                    performance coaching — not medical advice.
+                  </>
+                )}
                 {voiceSupported && (
                   <>
                     {' '}
@@ -1853,7 +2137,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               >
                 <div
                   className={cn(
-                    'max-w-[85%] min-w-0 px-3.5 py-3 text-[13px] leading-[1.45] break-words [overflow-wrap:anywhere] text-[#F5F5F5]',
+                    'max-w-[85%] min-w-0 break-words [overflow-wrap:anywhere] text-[#F5F5F5]',
+                    isPage
+                      ? 'px-4 py-3 text-[14px] leading-[1.6]'
+                      : 'px-3.5 py-3 text-[13px] leading-[1.45]',
                     msg.role === 'user'
                       ? 'bg-slate-700/90 border border-slate-600/50 font-medium rounded-[16px] rounded-br-[4px]'
                       : 'bg-slate-800/70 border border-slate-700/60 rounded-[16px] rounded-bl-[4px]'
@@ -1882,7 +2169,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               <div className="flex justify-start">
                 <div className="bg-slate-800/70 border border-slate-700/60 text-[#A0A0A8] text-[12px] px-3.5 py-3 rounded-[16px] rounded-bl-[4px] italic flex items-center gap-2 leading-[1.45]">
                   <Loader2 size={13} className="animate-spin text-[#A0A0A8]" />
-                  Coach thinking…
+                  {isGeneral ? `${title} thinking…` : 'Coach thinking…'}
                 </div>
               </div>
             )}
@@ -1890,10 +2177,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
           <div
             className={cn(
-              'flex-shrink-0 border-t border-slate-800/80',
+              'flex-shrink-0',
               isFullscreen
-                ? 'px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
-                : 'px-3 py-2.5'
+                ? 'border-t border-slate-800/80 px-4 sm:px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+                : isPage
+                  ? 'px-4 sm:px-6 pt-1 pb-4'
+                  : 'border-t border-slate-800/80 px-3 py-2.5'
             )}
           >
             {error && (
@@ -1916,13 +2205,13 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 )}
               </div>
             )}
-            {sessionId && (
+            {sessionId && !isPage && (
               <p className="text-[8px] text-[#6B7280] uppercase tracking-wider mb-2 truncate">
                 Session {sessionId}
               </p>
             )}
             {/* Fixed-height status slot — never grow/wrap or the chat scrollbar flashes */}
-            <div className="h-4 mb-2 overflow-hidden">
+            <div className={cn('h-4 overflow-hidden', isPage ? 'mb-1 px-2' : 'mb-2')}>
               {voiceMode && (
                 <p className="text-[9px] text-teal-400/80 tracking-wide truncate leading-4">
                   {voiceState === 'listening' && 'Listening…'}
@@ -1930,8 +2219,25 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   {voiceState === 'waiting' && 'Waiting for coach…'}
                 </p>
               )}
+              {!voiceMode && isGeneral && input.length > GENERAL_MESSAGE_MAX_CHARS * 0.9 && (
+                <p
+                  className={cn(
+                    'text-[9px] tracking-wide truncate leading-4 tabular-nums text-right',
+                    input.length > GENERAL_MESSAGE_MAX_CHARS ? 'text-rose-400' : 'text-[#6B7280]'
+                  )}
+                >
+                  {input.length.toLocaleString()} / {GENERAL_MESSAGE_MAX_CHARS.toLocaleString()}
+                </p>
+              )}
             </div>
-            <div className="flex items-end gap-2.5">
+            <div
+              className={cn(
+                'flex items-end',
+                isPage
+                  ? 'gap-2 p-2 rounded-3xl border border-slate-800 bg-slate-900/70 shadow-[0_8px_30px_rgba(0,0,0,0.45)] focus-within:border-teal-500/50 transition-colors'
+                  : 'gap-2.5'
+              )}
+            >
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -1960,18 +2266,23 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                     ? 'Start a new conversation to continue…'
                     : voiceState === 'listening'
                       ? 'Listening…'
-                      : 'Ask your coach…'
+                      : isGeneral
+                        ? `Ask ${title} anything…`
+                        : 'Ask your coach…'
                 }
                 className={cn(
-                  'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide bg-slate-900/80 border border-slate-700/80 rounded-2xl px-3.5 py-2.5 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45] transition-[border-color,box-shadow]',
+                  'flex-1 min-w-0 resize-none overflow-y-auto scrollbar-hide px-3.5 py-2.5 focus:outline-none placeholder:text-[#6B7280] disabled:opacity-50 leading-[1.45]',
+                  isPage
+                    ? 'bg-transparent border-0'
+                    : 'bg-slate-900/80 border border-slate-700/80 rounded-2xl focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 shadow-[inset_0_1px_0_rgba(245,245,245,0.04)] transition-[border-color,box-shadow]',
                   // 16px always — avoids iOS zoom that blows up the mobile split layout
                   'text-base',
                   // Taller while dictating so long STT drafts stay readable
                   voiceMode || voiceDraft
-                    ? isFullscreen
+                    ? isRoomy
                       ? 'max-h-[10rem]'
                       : 'max-h-[7.5rem]'
-                    : isFullscreen
+                    : isRoomy
                       ? 'max-h-[6.25rem]'
                       : 'max-h-[3.25rem]',
                   // readOnly (not disabled) while listening so the box can grow with STT text
@@ -1996,7 +2307,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   voiceState === 'waiting' &&
                     'bg-teal-500/80 text-slate-950',
                   voiceState === 'idle' &&
-                    'bg-teal-500 text-slate-950 hover:bg-teal-400 active:bg-teal-600 active:scale-[0.97]'
+                    (isPage
+                      ? 'bg-slate-800/80 text-[#A0A0A8] hover:bg-slate-700 hover:text-teal-300 active:scale-[0.97]'
+                      : 'bg-teal-500 text-slate-950 hover:bg-teal-400 active:bg-teal-600 active:scale-[0.97]')
                 )}
                 title={
                   !voiceSupported

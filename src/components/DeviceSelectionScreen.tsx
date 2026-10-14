@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Cpu, Plus, Trash2, LogOut, Activity, X, Check, AlertCircle, Smartphone } from 'lucide-react';
+import { Cpu, Plus, Trash2, LogOut, Activity, X, Check, AlertCircle, Smartphone, Sparkles } from 'lucide-react';
 import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { IS_LOCAL_MODE, AUTO_LOGIN_ENABLED } from '../lib/appConfig';
+import { IS_LOCAL_MODE, AUTO_LOGIN_ENABLED, STANDALONE_AGENT_ENABLED } from '../lib/appConfig';
+import { AGENT_PRODUCT_NAME } from '../lib/agent';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
 import { cn } from '../utils/cn';
@@ -47,6 +48,7 @@ export default function DeviceSelectionScreen() {
   const currentUser = useStore((s) => s.currentUser);
   const setDeviceMac = useStore((s) => s.setDeviceMac);
   const setIsDeviceSelected = useStore((s) => s.setIsDeviceSelected);
+  const setStandaloneAgentActive = useStore((s) => s.setStandaloneAgentActive);
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
@@ -366,6 +368,19 @@ export default function DeviceSelectionScreen() {
             </div>
           )}
         </div>
+
+        {STANDALONE_AGENT_ENABLED && (
+          <div className="flex justify-center pt-6 sm:pt-8">
+            <button
+              type="button"
+              onClick={() => setStandaloneAgentActive(true)}
+              className="inline-flex items-center gap-1.5 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-teal-500/30 text-slate-300 hover:text-white font-bold px-4 py-2.5 rounded-xl transition-all text-[10px] uppercase tracking-widest active:scale-95"
+            >
+              <Sparkles size={13} className="text-teal-400" />
+              Go to the {AGENT_PRODUCT_NAME} (no device)
+            </button>
+          </div>
+        )}
       </main>
 
       {/* ── FOOTER ───────────────────────────────────────────────────────────── */}

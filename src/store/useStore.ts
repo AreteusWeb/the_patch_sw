@@ -68,6 +68,8 @@ interface AuthState {
   deviceMac: string | null;
   authLoading: boolean;
   isDeviceSelected: boolean;
+  /** User chose the AI agent without a device. In-memory only — never persisted. */
+  standaloneAgentActive: boolean;
   /**
    * users/{uid}.createdAt — account creation, used as the only available
    * monitoring start until a real session.startDate exists.
@@ -84,6 +86,7 @@ interface AuthActions {
   setDeviceMac: (mac: string | null) => void;
   setAuthLoading: (loading: boolean) => void;
   setIsDeviceSelected: (selected: boolean) => void;
+  setStandaloneAgentActive: (active: boolean) => void;
   setAccountCreatedAt: (ms: number | null) => void;
   setBodyWeightKg: (kg: number | null) => void;
 }
@@ -203,6 +206,7 @@ const useStore = create<
   patchConnectedAt: null,
   authLoading: true,
   isDeviceSelected: false,
+  standaloneAgentActive: false,
 
   // ── Base Actions ───────────────────────────────────────────────────────────
 
@@ -358,7 +362,13 @@ const useStore = create<
     set({
       currentUser: user,
       ...(user === null
-        ? { isDeviceSelected: false, deviceMac: null, accountCreatedAt: null, bodyWeightKg: null }
+        ? {
+            isDeviceSelected: false,
+            standaloneAgentActive: false,
+            deviceMac: null,
+            accountCreatedAt: null,
+            bodyWeightKg: null,
+          }
         : {}),
     }),
 
@@ -376,6 +386,9 @@ const useStore = create<
 
   setIsDeviceSelected: (selected) =>
     set({ isDeviceSelected: selected }),
+
+  setStandaloneAgentActive: (active) =>
+    set({ standaloneAgentActive: active }),
 
   setActivityType: (type) =>
     set((state) => ({

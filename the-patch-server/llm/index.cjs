@@ -3,19 +3,42 @@
  * Single entry point: generate({ messages, system, mode|provider, tier, ... })
  * Returns { text, provider, model, tier, usage, costUsd, latencyMs, attempts, fellBack, routeReason }
  * - Same message format for every provider: [{ role: 'user'|'assistant', content: '...' }]
- * - One retry on 429 / 5xx / timeout, then fallback to the other provider (same tier).
+ * - One retry on 429 / 5xx / timeout, then fallback:
+ *     LLM_USE_LITELLM off → the other provider (same tier), unchanged.
+ *     LLM_USE_LITELLM on  → LiteLLM first, then the direct adapter for the same logical provider.
  *   Any other error (400, auth, missing config) is thrown without fallback.
  * - Overall deadline (LLM_DEADLINE_MS, default 30 s) across all attempts; a timed-out
  *   attempt is aborted via AbortSignal. Throws code 'EDEADLINE' when time runs out.
  * - Logs one structured line per call (swap in your own logger with setUsageLogger)
  */
-const { MODELS, PRICES, MODEL_PRICES, TIMEOUT_MS, DEADLINE_MS, OTHER } = require('./config.cjs');
+const {
+  MODELS, PRICES, MODEL_PRICES, TIMEOUT_MS, DEADLINE_MS, OTHER, USE_LITELLM,
+} = require('./config.cjs');
 const { route } = require('./router.cjs');
+
+if (USE_LITELLM) {
+  const base = String(process.env.LITELLM_BASE_URL || '').trim();
+  if (!base) {
+    throw new Error(
+      '[llm] LLM_USE_LITELLM=true but LITELLM_BASE_URL is not set. ' +
+        'Set LITELLM_BASE_URL (e.g. http://localhost:4000/v1). ' +
+        'If requests 404, try with or without the /v1 suffix.'
+    );
+  }
+}
 
 let adapters = {
   get gemini() { return require('./adapters/gemini.cjs'); },
   get openai() { return require('./adapters/openai.cjs'); },
 };
+// Register 'litellm' only when the flag is on — flag-off never loads the file.
+if (USE_LITELLM) {
+  Object.defineProperty(adapters, 'litellm', {
+    configurable: true,
+    enumerable: true,
+    get() { return require('./adapters/litellm.cjs'); },
+  });
+}
 function _setAdapters(a) { adapters = a; } // for tests
 
 let usageLogger = (rec) => console.log('[llm-usage]', JSON.stringify(rec));
@@ -76,9 +99,22 @@ function computeCost(provider, model, tier, usage) {
   ) / 1e6;
 }
 
+/** Prefer the upstream model id for pricing (LiteLLM aliases are not in MODEL_PRICES). */
+function priceModelId(result, underlyingProvider, tier) {
+  if (result.responseModel && MODEL_PRICES[result.responseModel]) {
+    return result.responseModel;
+  }
+  if (result.responseModel) return result.responseModel;
+  if (underlyingProvider && MODELS[underlyingProvider] && MODELS[underlyingProvider][tier]) {
+    return MODELS[underlyingProvider][tier];
+  }
+  return result.model;
+}
+
 async function callOnce(provider, tier, args, state) {
   const model = MODELS[provider] && MODELS[provider][tier];
   if (!model) throw new Error(`No model configured for ${provider}:${tier} (set the env var)`);
+  if (!adapters[provider]) throw new Error(`No adapter registered for provider "${provider}"`);
   const budgetMs = Math.min(state.timeoutMs, remainingMs(state));
   if (budgetMs <= 0) throw deadlineError(state);
   const controller = new AbortController();
@@ -107,14 +143,76 @@ async function tryProvider(provider, tier, args, state) {
   }
 }
 
+/**
+ * When LiteLLM is on, primary = litellm with the tier's proxy alias; fallback =
+ * the direct adapter for the routed provider (openai/gemini). Flag off: unchanged.
+ */
+function resolveProviders(args, messages) {
+  const routed = args.provider
+    ? { provider: args.provider, tier: args.tier || 'mid', reason: 'explicit' }
+    : route({ mode: args.mode || 'auto', messages });
+  const tier = args.tier || routed.tier;
+
+  if (!USE_LITELLM) {
+    return {
+      primary: routed.provider,
+      fallback: OTHER[routed.provider] || null,
+      tier,
+      reason: routed.reason,
+      underlying: routed.provider,
+    };
+  }
+
+  // Explicit provider:'litellm' (compare script) — fallback to openai for economy, gemini for mid.
+  if (routed.provider === 'litellm') {
+    const underlying = tier === 'mid' || tier === 'premium' ? 'gemini' : 'openai';
+    return {
+      primary: 'litellm',
+      fallback: underlying,
+      tier,
+      reason: routed.reason,
+      underlying,
+    };
+  }
+
+  // preferDirect: compare script / explicit bypass — hit the raw adapter.
+  if (args.preferDirect) {
+    return {
+      primary: routed.provider,
+      fallback: OTHER[routed.provider] || null,
+      tier,
+      reason: `${routed.reason}+direct`,
+      underlying: routed.provider,
+    };
+  }
+
+  // Router / explicit openai|gemini → LiteLLM first, then the same direct adapter.
+  if (routed.provider === 'openai' || routed.provider === 'gemini') {
+    return {
+      primary: 'litellm',
+      fallback: routed.provider,
+      tier,
+      reason: `${routed.reason}+litellm`,
+      underlying: routed.provider,
+    };
+  }
+
+  return {
+    primary: routed.provider,
+    fallback: OTHER[routed.provider] || null,
+    tier,
+    reason: routed.reason,
+    underlying: routed.provider,
+  };
+}
+
 async function generate(args) {
-  const { messages, mode = 'auto', userId, conversationId, purpose = 'coach', allowFallback = true } = args;
+  const { messages, userId, conversationId, purpose = 'coach', allowFallback = true } = args;
   if (!Array.isArray(messages) || !messages.length) throw new Error('messages is required');
   const deadlineMs = args.deadlineMs || DEADLINE_MS;
 
-  const routed = args.provider ? { provider: args.provider, tier: args.tier || 'mid', reason: 'explicit' }
-    : route({ mode, messages });
-  const tier = args.tier || routed.tier;
+  const resolved = resolveProviders(args, messages);
+  const tier = resolved.tier;
   const state = {
     attempts: 0,
     timeoutMs: args.timeoutMs || TIMEOUT_MS,
@@ -124,19 +222,23 @@ async function generate(args) {
   let result, fellBack = false, firstError = null;
 
   try {
-    result = await tryProvider(routed.provider, tier, args, state);
+    result = await tryProvider(resolved.primary, tier, args, state);
   } catch (err) {
     firstError = err;
-    const other = OTHER[routed.provider];
+    const other = resolved.fallback;
     // Only transient failures (429 / 5xx / timeout) fall back; a 400, auth or
     // config error would fail the same way and must not be hidden.
-    if (!allowFallback || !isRetryable(err) || !(MODELS[other] && MODELS[other][tier])) throw err;
+    if (!allowFallback || !isRetryable(err) || !(other && MODELS[other] && MODELS[other][tier])) {
+      throw err;
+    }
     if (remainingMs(state) < MIN_ATTEMPT_MS) throw deadlineError(state, err);
     result = await tryProvider(other, tier, args, state);
     fellBack = true;
   }
 
-  const costUsd = computeCost(result.provider, result.model, tier, result.usage);
+  const pricedModel = priceModelId(result, resolved.underlying, tier);
+  const costProvider = result.provider === 'litellm' ? resolved.underlying : result.provider;
+  const costUsd = computeCost(costProvider, pricedModel, tier, result.usage);
   const rec = {
     userId, conversationId, purpose, provider: result.provider, model: result.model,
     responseModel: result.responseModel ?? null, tier,
@@ -144,11 +246,11 @@ async function generate(args) {
     cachedInputTokens: result.usage.cachedInputTokens ?? null, cacheWriteTokens: result.usage.cacheWriteTokens ?? null,
     thinkingTokens: result.usage.thinkingTokens ?? null, totalTokens: result.usage.totalTokens ?? null,
     costUsd, latencyMs: result.latencyMs, attempts: state.attempts, fellBack,
-    routeReason: routed.reason, firstError: firstError ? String(firstError.message).slice(0, 200) : undefined,
+    routeReason: resolved.reason, firstError: firstError ? String(firstError.message).slice(0, 200) : undefined,
   };
   try { usageLogger(rec); } catch (_) { /* logging must never break a request */ }
   return { text: result.text, provider: result.provider, model: result.model, responseModel: result.responseModel ?? null, tier,
-    usage: result.usage, costUsd, latencyMs: result.latencyMs, attempts: state.attempts, fellBack, routeReason: routed.reason };
+    usage: result.usage, costUsd, latencyMs: result.latencyMs, attempts: state.attempts, fellBack, routeReason: resolved.reason };
 }
 
-module.exports = { generate, setUsageLogger, _setAdapters };
+module.exports = { generate, setUsageLogger, _setAdapters, computeCost, priceModelId };

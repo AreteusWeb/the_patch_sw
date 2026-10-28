@@ -17,6 +17,25 @@ const { GoogleAuth } = require('google-auth-library');
 
 const DEFAULT_GEMINI_ALIAS = 'general-gemini';
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/**
+ * True only when the URL hostname is loopback. Uses new URL() — never
+ * substring-match the raw string (localhost.evil.com and ?x=localhost stay remote).
+ * Invalid URLs throw; they are not treated as local.
+ */
+function isLocalHost(baseUrl) {
+  let hostname;
+  try {
+    hostname = new URL(String(baseUrl || '').trim()).hostname;
+  } catch {
+    throw new Error(
+      'LITELLM_BASE_URL is not a valid URL. ' +
+        'Example: http://localhost:4000/v1 or https://your-gateway.run.app/v1'
+    );
+  }
+  return LOCAL_HOSTS.has(hostname);
+}
 
 let _client;
 let _googleAuth;
@@ -87,28 +106,40 @@ function client() {
     if (!apiKey) {
       throw new Error('LITELLM_API_KEY is not set (LiteLLM virtual key or master key).');
     }
-    const audience = audienceFromBaseUrl(baseURL);
-    if (!audience) {
-      throw new Error('LITELLM_BASE_URL could not be turned into a Cloud Run audience (strip /v1).');
-    }
+    const local = isLocalHost(baseURL);
 
     // maxRetries 0: index.cjs owns retry + fallback; SDK retries would multiply attempts.
-    // apiKey is a placeholder: Cloud Run IAM needs the Google ID token in Authorization.
-    // The LiteLLM key goes in x-litellm-api-key (not Authorization).
-    _client = new OpenAI({
-      apiKey: 'unused',
-      baseURL,
-      maxRetries: 0,
-      defaultHeaders: {
-        'x-litellm-api-key': `Bearer ${apiKey}`,
-      },
-      fetch: async (url, init = {}) => {
-        const idToken = await getGoogleIdToken(audience);
-        const headers = new Headers(init.headers || undefined);
-        headers.set('Authorization', `Bearer ${idToken}`);
-        return fetch(url, { ...init, headers });
-      },
-    });
+    if (local) {
+      // Docker / localhost proxy: no Cloud Run IAM. Key in Authorization and x-litellm-api-key.
+      _client = new OpenAI({
+        apiKey,
+        baseURL,
+        maxRetries: 0,
+        defaultHeaders: {
+          'x-litellm-api-key': `Bearer ${apiKey}`,
+        },
+      });
+    } else {
+      const audience = audienceFromBaseUrl(baseURL);
+      if (!audience) {
+        throw new Error('LITELLM_BASE_URL could not be turned into a Cloud Run audience (strip /v1).');
+      }
+      // Private Cloud Run: IAM ID token in Authorization; LiteLLM key in x-litellm-api-key.
+      _client = new OpenAI({
+        apiKey: 'unused',
+        baseURL,
+        maxRetries: 0,
+        defaultHeaders: {
+          'x-litellm-api-key': `Bearer ${apiKey}`,
+        },
+        fetch: async (url, init = {}) => {
+          const idToken = await getGoogleIdToken(audience);
+          const headers = new Headers(init.headers || undefined);
+          headers.set('Authorization', `Bearer ${idToken}`);
+          return fetch(url, { ...init, headers });
+        },
+      });
+    }
   }
   return _client;
 }
@@ -165,4 +196,4 @@ async function generate({ model, system, messages, maxOutputTokens, signal }) {
   };
 }
 
-module.exports = { generate, name: 'litellm' };
+module.exports = { generate, name: 'litellm', isLocalHost };

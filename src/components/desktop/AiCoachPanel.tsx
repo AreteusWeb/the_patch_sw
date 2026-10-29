@@ -1829,22 +1829,20 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               {headerActions}
             </div>
+            {chatModeSwitch && (
+              <div className="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex">
+                <div className="pointer-events-auto w-56">{chatModeSwitch}</div>
+              </div>
+            )}
           </div>
-          {(chatModeSwitch || !isGeneral) && (
-            <div className="flex flex-col items-center px-4 pb-3 pt-1">
-              {chatModeSwitch && (
-                <div className="w-full max-w-[16rem]">{chatModeSwitch}</div>
-              )}
-              {!isGeneral && (
-                <p className={cn(
-                  'max-w-md text-center text-[9px] leading-snug text-[#6B7280]',
-                  chatModeSwitch && 'mt-2'
-                )}>
-                  AI coaching is not medical advice. Consult a doctor about health
-                  concerns.
-                </p>
-              )}
-            </div>
+          {chatModeSwitch && (
+            <div className="md:hidden px-4 pb-2">{chatModeSwitch}</div>
+          )}
+          {isPage && !isGeneral && (
+            <p className="px-4 pb-2 text-center text-[9px] leading-snug text-[#6B7280]">
+              AI coaching is not medical advice. Consult a doctor about health
+              concerns.
+            </p>
           )}
         </div>
       ) : (

@@ -9,7 +9,6 @@ import {
   Volume2,
   Search,
   PanelLeft,
-  Sparkles,
   Cpu,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
@@ -1819,30 +1818,33 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             >
               <PanelLeft size={16} />
             </button>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-teal-500/10 border border-teal-500/25 text-teal-400 flex items-center justify-center shrink-0">
-                <Sparkles size={15} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-bold text-teal-400/80 uppercase tracking-[0.3em] leading-none truncate">
-                  Areteus · The Patch
-                </p>
-                <p className="text-[15px] font-semibold text-[#F5F5F5] leading-tight mt-1 truncate">
-                  {title}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <p className="text-[9px] font-bold text-teal-400/80 uppercase tracking-[0.3em] leading-none truncate">
+                Areteus · The Patch
+              </p>
+              <p className="text-[15px] font-semibold text-[#F5F5F5] leading-tight mt-1 truncate">
+                {title}
+              </p>
             </div>
-            {chatModeSwitch && (
-              <div className="hidden md:block absolute left-1/2 -translate-x-1/2 w-60">
-                {chatModeSwitch}
-              </div>
-            )}
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               {headerActions}
             </div>
           </div>
-          {chatModeSwitch && (
-            <div className="md:hidden px-3 pb-3">{chatModeSwitch}</div>
+          {(chatModeSwitch || !isGeneral) && (
+            <div className="flex flex-col items-center px-4 pb-3 pt-1">
+              {chatModeSwitch && (
+                <div className="w-full max-w-[16rem]">{chatModeSwitch}</div>
+              )}
+              {!isGeneral && (
+                <p className={cn(
+                  'max-w-md text-center text-[9px] leading-snug text-[#6B7280]',
+                  chatModeSwitch && 'mt-2'
+                )}>
+                  AI coaching is not medical advice. Consult a doctor about health
+                  concerns.
+                </p>
+              )}
+            </div>
           )}
         </div>
       ) : (
@@ -2049,9 +2051,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
             {showEmptyState && isPage && (
               <div className="my-auto w-full max-w-xl mx-auto flex flex-col items-center text-center gap-6 py-6">
-                <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-teal-400 flex items-center justify-center shadow-[0_0_40px_rgba(20,184,166,0.15)]">
-                  <Sparkles size={24} />
-                </div>
                 <div>
                   <h2 className="text-xl sm:text-2xl font-semibold text-[#F5F5F5] tracking-tight">
                     {isGeneral ? 'What can I help with?' : 'How can I help your training today?'}

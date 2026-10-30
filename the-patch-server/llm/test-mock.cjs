@@ -17,7 +17,14 @@ const ok = (name, text) => ({ name, generate: async ({ model }) => ({ text: `${t
   assert.strictEqual(r.provider, 'openai'); assert.strictEqual(r.tier, 'economy');
   assert.ok(Math.abs(r.costUsd - (1000 * 0.2 + 500 * 1.2) / 1e6) < 1e-12);
   r = await llm.generate({ messages: [{ role: 'user', content: 'Should I train hard after bad sleep?' }], mode: 'auto' });
-  assert.strictEqual(r.provider, 'gemini'); assert.strictEqual(r.costUsd, null);
+  assert.strictEqual(r.provider, 'gemini');
+  {
+    // ok() mock: 1000 input + 500 output, no cache. gemini-3.8-flash: 0.75 in / 3.75 out
+    // → (1000 * 0.75 + 500 * 3.75) / 1e6 = 0.002625
+    const p = cfg.MODEL_PRICES[r.model];
+    assert.ok(p && p.in != null && p.out != null, `expected MODEL_PRICES for ${r.model}`);
+    assert.ok(Math.abs(r.costUsd - (1000 * p.in + 500 * p.out) / 1e6) < 1e-12);
+  }
   // 2) fallback on 5xx
   let calls = 0;
   llm._setAdapters({
@@ -47,11 +54,18 @@ const ok = (name, text) => ({ name, generate: async ({ model }) => ({ text: `${t
   r = await llm.generate({ messages: [{ role: 'user', content: 'hi' }], mode: 'general' });
   assert.ok(Math.abs(r.costUsd - (300000 * 0.20 + 1000 * 0.75) / 1e6) < 1e-12);
   // 3f) placeholder price entry (null rates) reports null cost instead of a guess
+  // (MODEL_PRICES wins over a filled PRICES tier map)
+  const savedGeminiFlash = cfg.MODEL_PRICES['gemini-3.8-flash'];
   cfg.MODELS.gemini.mid = 'gemini-3.8-flash';
+  cfg.MODEL_PRICES['gemini-3.8-flash'] = {
+    in: null, cachedIn: null, cacheWrite: null, out: null,
+    longContextAbove: null, long: null,
+  };
   cfg.PRICES['gemini:mid'] = { in: 1, out: 1 };
   llm._setAdapters({ gemini: ok('gemini', 'G'), openai: ok('openai', 'O') });
   r = await llm.generate({ messages: [{ role: 'user', content: 'sleep' }], mode: 'coach' });
   assert.strictEqual(r.provider, 'gemini'); assert.strictEqual(r.costUsd, null);
+  cfg.MODEL_PRICES['gemini-3.8-flash'] = savedGeminiFlash;
   cfg.PRICES['gemini:mid'] = null;
   // 3g) overall deadline: the hung attempt is aborted and no retry/fallback starts without time left
   let seenSignal = null, openaiCalled = false;

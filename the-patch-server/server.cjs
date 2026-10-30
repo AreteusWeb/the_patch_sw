@@ -65,6 +65,9 @@ const COACH_MULTI_PROVIDER_UIDS = new Set(
 
 /** Input cap for mode='general' (paid per token; the coach path has no cap today). */
 const GENERAL_ASSISTANT_MAX_MESSAGE_CHARS = 8000;
+const GENERAL_AI_MODELS = ['standard', 'low'];
+const DEEPSEEK_ENABLED =
+  String(process.env.DEEPSEEK_ENABLED || '').trim().toLowerCase() === 'true';
 
 function isMultiProviderEnabledFor(uid) {
   return COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.has(uid);
@@ -864,6 +867,25 @@ async function handleCoachApi(req, res) {
       return true;
     }
 
+    let generalAiModel = 'standard';
+    if (useGeneralAssistant && body.aiModel != null && body.aiModel !== '') {
+      if (typeof body.aiModel !== 'string' || !GENERAL_AI_MODELS.includes(body.aiModel)) {
+        sendJson(req, res, 400, {
+          error: 'invalid_ai_model',
+          message: 'aiModel must be "standard" or "low".',
+        });
+        return true;
+      }
+      generalAiModel = body.aiModel;
+      if (generalAiModel === 'low' && !DEEPSEEK_ENABLED) {
+        sendJson(req, res, 400, {
+          error: 'ai_model_unavailable',
+          message: 'Low cost model is not enabled.',
+        });
+        return true;
+      }
+    }
+
     try {
       let sessionId;
 
@@ -930,6 +952,7 @@ async function handleCoachApi(req, res) {
         const { GENERAL_ASSISTANT_SYSTEM_PROMPT } = require('./prompts/general-assistant.cjs');
         const llmReply = await getLlm().generate({
           mode: 'general',
+          ...(generalAiModel === 'low' ? { aiModel: 'low' } : {}),
           system: GENERAL_ASSISTANT_SYSTEM_PROMPT,
           messages: [
             ...history
@@ -1107,6 +1130,13 @@ async function handleCoachApi(req, res) {
       if (dbProvider.isNotFoundError(err)) {
         console.warn(`[coach/message] session deleted mid-request uid=${uid}`);
         sendJson(req, res, 404, { error: 'session_not_found' });
+        return true;
+      }
+      if (err && err.code === 'ai_model_unavailable') {
+        sendJson(req, res, 400, {
+          error: 'ai_model_unavailable',
+          message: err.message || 'Low cost model is not enabled.',
+        });
         return true;
       }
       console.error('[coach/message] error:', err?.stack || err);

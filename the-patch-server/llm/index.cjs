@@ -6,6 +6,7 @@
  * - One retry on 429 / 5xx / timeout, then fallback:
  *     LLM_USE_LITELLM off → the other provider (same tier), unchanged.
  *     LLM_USE_LITELLM on  → LiteLLM first, then the direct adapter for the same logical provider.
+ *     aiModel='low' (DEEPSEEK_ENABLED) → LiteLLM general-deepseek, then OpenAI economy.
  *   Any other error (400, auth, missing config) is thrown without fallback.
  * - Overall deadline (LLM_DEADLINE_MS, default 30 s) across all attempts; a timed-out
  *   attempt is aborted via AbortSignal. Throws code 'EDEADLINE' when time runs out.
@@ -13,6 +14,7 @@
  */
 const {
   MODELS, PRICES, MODEL_PRICES, TIMEOUT_MS, DEADLINE_MS, OTHER, USE_LITELLM,
+  DEEPSEEK_ENABLED,
 } = require('./config.cjs');
 const { route } = require('./router.cjs');
 
@@ -148,6 +150,30 @@ async function tryProvider(provider, tier, args, state) {
  * the direct adapter for the routed provider (openai/gemini). Flag off: unchanged.
  */
 function resolveProviders(args, messages) {
+  if (args.aiModel === 'low') {
+    if (!DEEPSEEK_ENABLED) {
+      const e = new Error('aiModel "low" is not enabled (set DEEPSEEK_ENABLED=true)');
+      e.status = 400;
+      e.code = 'ai_model_unavailable';
+      throw e;
+    }
+    if (!USE_LITELLM || !(MODELS.litellm && MODELS.litellm.low)) {
+      const e = new Error('aiModel "low" requires LiteLLM (LLM_USE_LITELLM and alias general-deepseek)');
+      e.status = 400;
+      e.code = 'ai_model_unavailable';
+      throw e;
+    }
+    // Low = LiteLLM general-deepseek; 429/5xx/timeout fall back to standard OpenAI.
+    return {
+      primary: 'litellm',
+      fallback: 'openai',
+      fallbackTier: 'economy',
+      tier: 'low',
+      reason: 'mode=general+aiModel=low',
+      underlying: 'deepseek',
+    };
+  }
+
   const routed = args.provider
     ? { provider: args.provider, tier: args.tier || 'mid', reason: 'explicit' }
     : route({ mode: args.mode || 'auto', messages });
@@ -226,22 +252,29 @@ async function generate(args) {
   } catch (err) {
     firstError = err;
     const other = resolved.fallback;
+    const otherTier = resolved.fallbackTier || tier;
     // Only transient failures (429 / 5xx / timeout) fall back; a 400, auth or
     // config error would fail the same way and must not be hidden.
-    if (!allowFallback || !isRetryable(err) || !(other && MODELS[other] && MODELS[other][tier])) {
+    if (!allowFallback || !isRetryable(err) || !(other && MODELS[other] && MODELS[other][otherTier])) {
       throw err;
     }
     if (remainingMs(state) < MIN_ATTEMPT_MS) throw deadlineError(state, err);
-    result = await tryProvider(other, tier, args, state);
+    result = await tryProvider(other, otherTier, args, state);
     fellBack = true;
   }
 
-  const pricedModel = priceModelId(result, resolved.underlying, tier);
+  // Price + log the provider/tier that actually answered (e.g. openai:economy after a low fallback).
+  const usedTier = result.tier || tier;
+  const pricedModel = priceModelId(
+    result,
+    result.provider === 'litellm' ? resolved.underlying : result.provider,
+    usedTier
+  );
   const costProvider = result.provider === 'litellm' ? resolved.underlying : result.provider;
-  const costUsd = computeCost(costProvider, pricedModel, tier, result.usage);
+  const costUsd = computeCost(costProvider, pricedModel, usedTier, result.usage);
   const rec = {
     userId, conversationId, purpose, provider: result.provider, model: result.model,
-    responseModel: result.responseModel ?? null, tier,
+    responseModel: result.responseModel ?? null, tier: usedTier,
     inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens,
     cachedInputTokens: result.usage.cachedInputTokens ?? null, cacheWriteTokens: result.usage.cacheWriteTokens ?? null,
     thinkingTokens: result.usage.thinkingTokens ?? null, totalTokens: result.usage.totalTokens ?? null,
@@ -249,7 +282,7 @@ async function generate(args) {
     routeReason: resolved.reason, firstError: firstError ? String(firstError.message).slice(0, 200) : undefined,
   };
   try { usageLogger(rec); } catch (_) { /* logging must never break a request */ }
-  return { text: result.text, provider: result.provider, model: result.model, responseModel: result.responseModel ?? null, tier,
+  return { text: result.text, provider: result.provider, model: result.model, responseModel: result.responseModel ?? null, tier: usedTier,
     usage: result.usage, costUsd, latencyMs: result.latencyMs, attempts: state.attempts, fellBack, routeReason: resolved.reason };
 }
 

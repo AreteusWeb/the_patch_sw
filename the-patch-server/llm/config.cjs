@@ -13,6 +13,10 @@ function env(name, fallback = null) {
 const USE_LITELLM =
   String(process.env.LLM_USE_LITELLM || '').trim().toLowerCase() === 'true';
 
+/** Opt-in: General aiModel='low' (LiteLLM alias general-deepseek). Off by default. */
+const DEEPSEEK_ENABLED =
+  String(process.env.DEEPSEEK_ENABLED || '').trim().toLowerCase() === 'true';
+
 const MODELS = {
   gemini: {
     economy: env('GEMINI_MODEL_ECONOMY', env('VERTEX_AI_INSIGHTS_MODEL', 'gemini-3.1-flash-lite')),
@@ -35,6 +39,8 @@ if (USE_LITELLM) {
     economy: env('LITELLM_MODEL_GENERAL_OPENAI', 'general-openai'),
     // mode='coach' / gemini mid → litellm:mid (fallback path; coach tools stay on Vertex)
     mid: env('LITELLM_MODEL_GENERAL_GEMINI', 'general-gemini'),
+    // General aiModel='low' → LiteLLM alias (upstream: deepseek-v4-flash, not deepseek-chat)
+    low: env('LITELLM_MODEL_GENERAL_DEEPSEEK', 'general-deepseek'),
     premium: env('LITELLM_MODEL_PREMIUM', null),
   };
 }
@@ -52,6 +58,7 @@ const PRICES = {
   'openai:economy': null,
   'openai:mid': null,
   'openai:premium': null,
+  'deepseek:low': null,
 };
 
 /**
@@ -86,6 +93,15 @@ const MODEL_PRICES = {
     longContextAbove: null,
     long: null,
   },
+  // LiteLLM alias general-deepseek → deepseek-v4-flash (not deepseek-chat).
+  // https://api-docs.deepseek.com/quick_start/pricing — checked 2026-10-30.
+  // Stored rates are PICO (conservative for quotas); real cost varies by time of day.
+  // VALLE: in 0.15 / cachedIn 0.003 / out 0.60. cacheWrite is not billed separately.
+  'deepseek-v4-flash': {
+    in: 0.30, cachedIn: 0.006, cacheWrite: null, out: 1.20,
+    longContextAbove: null,
+    long: null,
+  },
 };
 
 function positiveMs(name, fallback) {
@@ -108,5 +124,6 @@ module.exports = {
   DEADLINE_MS,
   OTHER,
   USE_LITELLM,
+  DEEPSEEK_ENABLED,
   env,
 };

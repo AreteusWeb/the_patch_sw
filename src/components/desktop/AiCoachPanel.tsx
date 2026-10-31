@@ -2273,30 +2273,25 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                     aria-label="Select model"
                     onClick={() => setModelMenuOpen((open) => !open)}
                     className={cn(
-                      'h-11 min-w-[6.5rem] px-2.5 rounded-2xl flex flex-col justify-center gap-0.5',
-                      'bg-black border border-teal-500/25 text-left',
+                      'h-11 min-w-[6.5rem] px-2.5 rounded-2xl inline-flex items-center justify-center gap-1',
+                      'bg-black border border-teal-500/25',
                       'hover:border-teal-500/50 transition-colors',
                       'focus:outline-none focus-visible:border-teal-400/70',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                       modelMenuOpen && 'border-teal-400/60'
                     )}
                   >
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-[#6B7280] leading-none">
-                        Select
-                      </span>
-                      <ChevronDown
-                        size={12}
-                        strokeWidth={2.25}
-                        className={cn(
-                          'text-teal-400/80 shrink-0 transition-transform',
-                          modelMenuOpen && 'rotate-180'
-                        )}
-                      />
-                    </span>
                     <span className="text-[12px] font-semibold text-[#F5F5F5] leading-none">
                       {generalAiModel === 'low' ? 'Low' : 'Standard'}
                     </span>
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={2.25}
+                      className={cn(
+                        'text-teal-400/80 shrink-0 transition-transform',
+                        modelMenuOpen && 'rotate-180'
+                      )}
+                    />
                   </button>
                   {modelMenuOpen && (
                     <ul

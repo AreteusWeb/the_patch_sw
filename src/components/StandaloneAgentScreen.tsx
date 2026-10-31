@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { Cpu, LogOut, User } from 'lucide-react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
-import { AUTO_LOGIN_ENABLED, GENERAL_MODE_ENABLED } from '../lib/appConfig';
+import { AUTO_LOGIN_ENABLED, GENERAL_MODE_ENABLED, LOW_COST_MODEL_ENABLED } from '../lib/appConfig';
 import { AGENT_PRODUCT_NAME, DEVELOPMENT_DISCLAIMER } from '../lib/agent';
 import AiCoachPanel from './desktop/AiCoachPanel';
 import ProfileDrawer from './ProfileDrawer';
 import { cn } from '../utils/cn';
 
 const iconButtonClass =
-  'flex items-center justify-center gap-1.5 h-9 min-w-9 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors';
+  'flex items-center justify-center gap-1.5 h-8 min-w-8 px-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors';
 
 /**
  * StandaloneAgentScreen
@@ -87,13 +87,17 @@ export default function StandaloneAgentScreen() {
           presentation="page"
           noDevice
           enableGeneralMode={GENERAL_MODE_ENABLED}
+          enableLowCostModel={LOW_COST_MODEL_ENABLED}
           title={AGENT_PRODUCT_NAME}
           headerActions={headerActions}
           onConnectDevice={goToDevices}
         />
       </main>
 
-      <footer className="relative flex-shrink-0 px-4 pb-2.5 pt-1">
+      <footer className="relative flex-shrink-0 px-4 pb-2 pt-1 space-y-0.5">
+        <p className="text-[9px] text-[#6B7280] leading-snug text-center">
+          AI coaching is not medical advice. Consult a doctor about health concerns.
+        </p>
         <p className="text-[9px] text-slate-600 uppercase tracking-wider text-center">
           {DEVELOPMENT_DISCLAIMER}
         </p>

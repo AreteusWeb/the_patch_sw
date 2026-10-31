@@ -9,6 +9,7 @@ import {
   Volume2,
   Search,
   PanelLeft,
+  Menu,
   Cpu,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
@@ -38,6 +39,8 @@ interface AiCoachPanelProps {
   noDevice?: boolean;
   /** Shows the Coach / General switch; switching opens a fresh conversation. */
   enableGeneralMode?: boolean;
+  /** General-only Standard / Low cost selector. Sends aiModel with the message. */
+  enableLowCostModel?: boolean;
   /** Header title (defaults to "AI Coach"). */
   title?: string;
   /** page only: extra buttons rendered at the right of the header. */
@@ -49,6 +52,7 @@ interface AiCoachPanelProps {
 type CoachInteractionMode = 'text' | 'live';
 
 type CoachChatMode = 'coach' | 'general';
+type GeneralAiModel = 'standard' | 'low';
 
 type CoachRole = 'user' | 'model';
 
@@ -857,6 +861,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   presentation = 'embedded',
   noDevice = false,
   enableGeneralMode = false,
+  enableLowCostModel = false,
   title = 'AI Coach',
   headerActions,
   onConnectDevice,
@@ -877,6 +882,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     useState<CoachInteractionMode>('text');
   const [chatMode, setChatMode] = useState<CoachChatMode>('coach');
   const isGeneral = enableGeneralMode && chatMode === 'general';
+  const [generalAiModel, setGeneralAiModel] = useState<GeneralAiModel>('standard');
   const [messages, setMessages] = useState<CoachChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -892,7 +898,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const [historyOpen, setHistoryOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = useState(0);
-  const historyInline = panelWidth >= HISTORY_INLINE_MIN_PX;
+  // Page view is always an overlay drawer so the chat canvas can go full width.
+  const historyInline = !isPage && panelWidth >= HISTORY_INLINE_MIN_PX;
   const historyInlineRef = useRef(historyInline);
   historyInlineRef.current = historyInline;
 
@@ -910,15 +917,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // Standalone page: show the history column by default when it fits inline
-  // (never auto-open the overlay drawer on narrow screens).
-  const historyAutoOpenedRef = useRef(false);
-  useEffect(() => {
-    if (!isPage || historyAutoOpenedRef.current || panelWidth === 0) return;
-    historyAutoOpenedRef.current = true;
-    if (panelWidth >= HISTORY_INLINE_MIN_PX) setHistoryOpen(true);
-  }, [isPage, panelWidth]);
 
   useEffect(() => {
     if (!historyOpen || historyInline) return;
@@ -1480,6 +1478,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
           ...(startsNewSession ? { newSession: true } : {}),
           ...(isGeneral ? { mode: 'general' } : {}),
+          ...(isGeneral && enableLowCostModel ? { aiModel: generalAiModel } : {}),
         }),
       });
 
@@ -1515,6 +1514,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         const msg =
           data?.error === 'unauthorized' ? 'Session expired — sign in again.' :
           data?.error === 'missing_message' ? 'Message was empty.' :
+          data?.error === 'invalid_ai_model' ? 'That model option is not valid.' :
+          data?.error === 'ai_model_unavailable'
+            ? (typeof data.message === 'string' && data.message.trim()
+              ? data.message
+              : 'Low cost model is not enabled.') :
           data?.error === 'coach_failed' ? 'Coach could not reply. Try again.' :
           'Could not reach the AI Coach.';
         setError(msg);
@@ -1735,7 +1739,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     openingSessionId,
     deletingSessionId,
     hasMore: sessionListNextBefore != null,
-    onSelect: (id: string) => void openSessionFromHistory(id),
+    onSelect: (id: string) => {
+      closeHistoryIfOverlay();
+      void openSessionFromHistory(id);
+    },
     onDelete: (id: string) => void deleteSessionFromHistory(id),
     onLoadMore: () => void refreshSessionList({ append: true }),
     onNewConversation: () => {
@@ -1748,6 +1755,43 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     errorMessage: historyError,
     onDismissError: () => setHistoryError(null),
   };
+
+  const generalAiModelSwitch =
+    isGeneral && enableLowCostModel ? (
+      <div className="flex flex-col gap-1">
+        <div
+          className="flex w-fit bg-slate-900/60 p-1 rounded-full border border-slate-800/50 gap-1"
+          role="group"
+          aria-label="Model cost"
+        >
+          {([
+            { id: 'standard', label: 'Standard' },
+            { id: 'low', label: 'Low cost' },
+          ] as const).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setGeneralAiModel(opt.id)}
+              disabled={busy}
+              aria-pressed={generalAiModel === opt.id}
+              className={cn(
+                'px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.1em] transition-all disabled:cursor-not-allowed',
+                generalAiModel === opt.id
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-300'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {generalAiModel === 'low' && (
+          <p className="text-[9px] text-[#6B7280] leading-snug">
+            Low cost uses an external provider. Replies may differ from Standard.
+          </p>
+        )}
+      </div>
+    ) : null;
 
   const chatModeSwitch = enableGeneralMode ? (
     <div
@@ -1802,47 +1846,39 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     >
       {isPage ? (
         <div className="flex-shrink-0 border-b border-slate-900/80">
-          <div className="relative flex items-center gap-3 h-14 px-3 sm:px-5">
+          <div className="flex items-center gap-2 h-11 px-3 sm:px-5">
             <button
               type="button"
               onClick={() => setHistoryOpen((v) => !v)}
               className={cn(
-                'w-9 h-9 flex items-center justify-center rounded-lg transition-colors shrink-0',
+                'w-8 h-8 flex items-center justify-center rounded-lg transition-colors shrink-0',
                 historyOpen
-                  ? 'text-teal-400 bg-teal-500/15'
-                  : 'text-[#A0A0A8] hover:bg-slate-800/80 hover:text-[#F5F5F5]'
+                  ? 'text-teal-400'
+                  : 'text-[#A0A0A8] hover:text-[#F5F5F5]'
               )}
               title={historyOpen ? 'Hide conversations' : 'Show conversations'}
               aria-label={historyOpen ? 'Hide conversations' : 'Show conversations'}
               aria-pressed={historyOpen}
             >
-              <PanelLeft size={16} />
+              <Menu size={16} strokeWidth={1.75} />
             </button>
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold text-teal-400/80 uppercase tracking-[0.3em] leading-none truncate">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="hidden sm:block text-[9px] font-bold text-teal-400/80 uppercase tracking-[0.3em] leading-none truncate">
                 Areteus · The Patch
               </p>
-              <p className="text-[15px] font-semibold text-[#F5F5F5] leading-tight mt-1 truncate">
+              <p className="text-[15px] font-semibold text-[#F5F5F5] leading-none truncate">
                 {title}
               </p>
             </div>
-            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {chatModeSwitch && (
+                <div className="hidden sm:block w-52">{chatModeSwitch}</div>
+              )}
               {headerActions}
             </div>
-            {chatModeSwitch && (
-              <div className="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex">
-                <div className="pointer-events-auto w-56">{chatModeSwitch}</div>
-              </div>
-            )}
           </div>
           {chatModeSwitch && (
-            <div className="md:hidden px-4 pb-2">{chatModeSwitch}</div>
-          )}
-          {isPage && !isGeneral && (
-            <p className="px-4 pb-2 text-center text-[9px] leading-snug text-[#6B7280]">
-              AI coaching is not medical advice. Consult a doctor about health
-              concerns.
-            </p>
+            <div className="sm:hidden px-3 pb-2">{chatModeSwitch}</div>
           )}
         </div>
       ) : (
@@ -1995,7 +2031,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 >
                   <CoachHistorySidebar
                     {...historySidebarProps}
-                    className="flex-1 min-w-0 bg-slate-950"
+                    onClose={() => setHistoryOpen(false)}
+                    className={cn(
+                      'flex-1 min-w-0 bg-slate-950',
+                      isPage && 'border-slate-900'
+                    )}
                   />
                 </motion.div>
               </>
@@ -2206,6 +2246,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               <p className="text-[8px] text-[#6B7280] uppercase tracking-wider mb-2 truncate">
                 Session {sessionId}
               </p>
+            )}
+            {generalAiModelSwitch && (
+              <div className={cn(isPage ? 'mb-2 px-2' : 'mb-2')}>
+                {generalAiModelSwitch}
+              </div>
             )}
             {/* Fixed-height status slot — never grow/wrap or the chat scrollbar flashes */}
             <div className={cn('h-4 overflow-hidden', isPage ? 'mb-1 px-2' : 'mb-2')}>

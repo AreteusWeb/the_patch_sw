@@ -29,6 +29,8 @@ interface CoachHistorySidebarProps {
   deleteDisabled?: boolean;
   errorMessage?: string | null;
   onDismissError?: () => void;
+  /** Optional collapse control for overlay/drawer mode. Does not affect sessions. */
+  onClose?: () => void;
   className?: string;
 }
 
@@ -81,6 +83,7 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
   deleteDisabled,
   errorMessage,
   onDismissError,
+  onClose,
   className,
 }) => {
   return (
@@ -91,9 +94,22 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
       )}
     >
       <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-slate-800/60">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6B7280] mb-2">
-          Conversations
-        </p>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6B7280]">
+            Conversations
+          </p>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#A0A0A8] hover:text-[#F5F5F5] transition-colors"
+              title="Hide conversations"
+              aria-label="Hide conversations"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={onNewConversation}

@@ -1756,43 +1756,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     onDismissError: () => setHistoryError(null),
   };
 
-  const generalAiModelSwitch =
-    isGeneral && enableLowCostModel ? (
-      <div className="flex flex-col gap-1">
-        <div
-          className="flex w-fit bg-slate-900/60 p-1 rounded-full border border-slate-800/50 gap-1"
-          role="group"
-          aria-label="Model cost"
-        >
-          {([
-            { id: 'standard', label: 'Standard' },
-            { id: 'low', label: 'Low cost' },
-          ] as const).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setGeneralAiModel(opt.id)}
-              disabled={busy}
-              aria-pressed={generalAiModel === opt.id}
-              className={cn(
-                'px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.1em] transition-all disabled:cursor-not-allowed',
-                generalAiModel === opt.id
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-500 hover:text-slate-300'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {generalAiModel === 'low' && (
-          <p className="text-[9px] text-[#6B7280] leading-snug">
-            Low cost uses an external provider. Replies may differ from Standard.
-          </p>
-        )}
-      </div>
-    ) : null;
-
   const chatModeSwitch = enableGeneralMode ? (
     <div
       className="flex bg-slate-900/60 p-1 rounded-full border border-slate-800/50 gap-1"
@@ -2002,7 +1965,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               {...historySidebarProps}
               className={cn(
                 'flex-shrink-0',
-                isPage ? 'w-64 bg-slate-950/50 border-slate-900' : 'w-[13.5rem]'
+                isPage ? 'w-64' : 'w-[13.5rem]'
               )}
             />
           )}
@@ -2032,10 +1995,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   <CoachHistorySidebar
                     {...historySidebarProps}
                     onClose={() => setHistoryOpen(false)}
-                    className={cn(
-                      'flex-1 min-w-0 bg-slate-950',
-                      isPage && 'border-slate-900'
-                    )}
+                    className="flex-1 min-w-0"
                   />
                 </motion.div>
               </>
@@ -2247,11 +2207,6 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 Session {sessionId}
               </p>
             )}
-            {generalAiModelSwitch && (
-              <div className={cn(isPage ? 'mb-2 px-2' : 'mb-2')}>
-                {generalAiModelSwitch}
-              </div>
-            )}
             {/* Fixed-height status slot — never grow/wrap or the chat scrollbar flashes */}
             <div className={cn('h-4 overflow-hidden', isPage ? 'mb-1 px-2' : 'mb-2')}>
               {voiceMode && (
@@ -2280,6 +2235,46 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   : 'gap-2.5'
               )}
             >
+              {isGeneral && enableLowCostModel && (
+                <label
+                  className={cn(
+                    'flex flex-col justify-end shrink-0',
+                    isPage ? 'pl-1 pb-1' : 'pb-0.5'
+                  )}
+                >
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#6B7280] leading-none mb-1">
+                    Select
+                  </span>
+                  <span className="relative inline-flex">
+                    <select
+                      value={generalAiModel}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (next === 'standard' || next === 'low') {
+                          setGeneralAiModel(next);
+                        }
+                      }}
+                      disabled={busy}
+                      aria-label="Model"
+                      className={cn(
+                        'appearance-none bg-slate-800/80 text-[#F5F5F5] text-[11px] font-semibold',
+                        'rounded-lg border border-slate-700/80 pl-2 pr-6 py-1.5',
+                        'focus:outline-none focus:border-teal-500/50 cursor-pointer',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                    >
+                      <option value="standard">Standard</option>
+                      <option value="low">Low</option>
+                    </select>
+                    <span
+                      className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[#6B7280] text-[8px] leading-none"
+                      aria-hidden
+                    >
+                      ▾
+                    </span>
+                  </span>
+                </label>
+              )}
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -2389,6 +2384,11 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 <Send size={16} strokeWidth={2.5} />
               </button>
             </div>
+            {isGeneral && enableLowCostModel && generalAiModel === 'low' && (
+              <p className={cn('text-[9px] text-[#6B7280] leading-snug mt-1.5', isPage && 'px-2')}>
+                Low uses an external provider. Replies may differ from Standard.
+              </p>
+            )}
           </div>
           </div>
         </div>

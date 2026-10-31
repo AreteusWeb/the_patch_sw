@@ -89,11 +89,11 @@ const CoachHistorySidebar: React.FC<CoachHistorySidebarProps> = ({
   return (
     <aside
       className={cn(
-        'flex flex-col min-h-0 border-r border-slate-800/80 bg-slate-950/80',
+        'flex flex-col min-h-0 border-r border-white/5 bg-black',
         className
       )}
     >
-      <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-slate-800/60">
+      <div className="flex-shrink-0 px-3 pt-3 pb-2 border-b border-white/5">
         <div className="flex items-center justify-between gap-2 mb-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6B7280]">
             Conversations

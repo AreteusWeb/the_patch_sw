@@ -11,6 +11,7 @@ import {
   PanelLeft,
   Menu,
   Cpu,
+  ChevronDown,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { API_BASE } from '../../lib/appConfig';
@@ -883,6 +884,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const [chatMode, setChatMode] = useState<CoachChatMode>('coach');
   const isGeneral = enableGeneralMode && chatMode === 'general';
   const [generalAiModel, setGeneralAiModel] = useState<GeneralAiModel>('standard');
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<CoachChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -926,6 +929,28 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [historyOpen, historyInline]);
+
+  useEffect(() => {
+    if (!isGeneral || !enableLowCostModel) setModelMenuOpen(false);
+  }, [isGeneral, enableLowCostModel]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!modelMenuRef.current?.contains(e.target as Node)) {
+        setModelMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModelMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [modelMenuOpen]);
   const [sessionList, setSessionList] = useState<CoachSessionListItem[]>([]);
   const [sessionListLoading, setSessionListLoading] = useState(false);
   const [sessionListLoadingMore, setSessionListLoadingMore] = useState(false);
@@ -2236,44 +2261,79 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
               )}
             >
               {isGeneral && enableLowCostModel && (
-                <label
-                  className={cn(
-                    'flex flex-col justify-end shrink-0',
-                    isPage ? 'pl-1 pb-1' : 'pb-0.5'
-                  )}
+                <div
+                  ref={modelMenuRef}
+                  className="relative shrink-0"
                 >
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#6B7280] leading-none mb-1">
-                    Select
-                  </span>
-                  <span className="relative inline-flex">
-                    <select
-                      value={generalAiModel}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        if (next === 'standard' || next === 'low') {
-                          setGeneralAiModel(next);
-                        }
-                      }}
-                      disabled={busy}
-                      aria-label="Model"
-                      className={cn(
-                        'appearance-none bg-slate-800/80 text-[#F5F5F5] text-[11px] font-semibold',
-                        'rounded-lg border border-slate-700/80 pl-2 pr-6 py-1.5',
-                        'focus:outline-none focus:border-teal-500/50 cursor-pointer',
-                        'disabled:opacity-50 disabled:cursor-not-allowed'
-                      )}
-                    >
-                      <option value="standard">Standard</option>
-                      <option value="low">Low</option>
-                    </select>
-                    <span
-                      className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[#6B7280] text-[8px] leading-none"
-                      aria-hidden
-                    >
-                      ▾
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-haspopup="listbox"
+                    aria-expanded={modelMenuOpen}
+                    aria-label="Select model"
+                    onClick={() => setModelMenuOpen((open) => !open)}
+                    className={cn(
+                      'h-11 min-w-[6.5rem] px-2.5 rounded-2xl flex flex-col justify-center gap-0.5',
+                      'bg-black border border-teal-500/25 text-left',
+                      'hover:border-teal-500/50 transition-colors',
+                      'focus:outline-none focus-visible:border-teal-400/70',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      modelMenuOpen && 'border-teal-400/60'
+                    )}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-[#6B7280] leading-none">
+                        Select
+                      </span>
+                      <ChevronDown
+                        size={12}
+                        strokeWidth={2.25}
+                        className={cn(
+                          'text-teal-400/80 shrink-0 transition-transform',
+                          modelMenuOpen && 'rotate-180'
+                        )}
+                      />
                     </span>
-                  </span>
-                </label>
+                    <span className="text-[12px] font-semibold text-[#F5F5F5] leading-none">
+                      {generalAiModel === 'low' ? 'Low' : 'Standard'}
+                    </span>
+                  </button>
+                  {modelMenuOpen && (
+                    <ul
+                      role="listbox"
+                      aria-label="Model"
+                      className="absolute bottom-full left-0 mb-1.5 z-40 min-w-full py-1 rounded-xl bg-black border border-teal-500/30 shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
+                    >
+                      {([
+                        { id: 'standard', label: 'Standard' },
+                        { id: 'low', label: 'Low' },
+                      ] as const).map((opt) => {
+                        const selected = generalAiModel === opt.id;
+                        return (
+                          <li key={opt.id} role="none">
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              onClick={() => {
+                                setGeneralAiModel(opt.id);
+                                setModelMenuOpen(false);
+                              }}
+                              className={cn(
+                                'w-full text-left px-3 py-2 text-[12px] font-medium transition-colors',
+                                selected
+                                  ? 'bg-teal-500/15 text-teal-200'
+                                  : 'text-[#F5F5F5] hover:bg-white/5 hover:text-teal-200'
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               )}
               <textarea
                 ref={inputRef}

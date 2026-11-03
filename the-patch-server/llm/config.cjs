@@ -116,6 +116,20 @@ const DEADLINE_MS = positiveMs('LLM_DEADLINE_MS', 30000);
 /** Cross-provider fallback when LLM_USE_LITELLM is off. */
 const OTHER = { gemini: 'openai', openai: 'gemini' };
 
+/**
+ * LiteLLM end-user max_budget (USD) per Firestore users/{uid}.plan.
+ * Placeholder nulls until Jason sets real numbers — null means "no limit created".
+ * Keys are lowercase plan ids (default plan when missing: 'free').
+ */
+const PLAN_BUDGETS = {
+  free: null,
+  plus: null,
+  pro: null,
+};
+
+/** Rolling budget window sent to LiteLLM /customer/new. */
+const BUDGET_DURATION = '30d';
+
 module.exports = {
   MODELS,
   PRICES,
@@ -125,5 +139,7 @@ module.exports = {
   OTHER,
   USE_LITELLM,
   DEEPSEEK_ENABLED,
+  PLAN_BUDGETS,
+  BUDGET_DURATION,
   env,
 };

@@ -950,6 +950,15 @@ async function handleCoachApi(req, res) {
       // General assistant: plain text via llm.generate() (no tools, no metrics).
       if (useGeneralAssistant) {
         const { GENERAL_ASSISTANT_SYSTEM_PROMPT } = require('./prompts/general-assistant.cjs');
+        let userPlan = 'free';
+        try {
+          const userDoc = await dbProvider.getUser(uid);
+          if (userDoc && typeof userDoc.plan === 'string' && userDoc.plan.trim()) {
+            userPlan = userDoc.plan.trim().toLowerCase();
+          }
+        } catch (_) {
+          /* default free — never block chat on a profile read */
+        }
         const llmReply = await getLlm().generate({
           mode: 'general',
           ...(generalAiModel === 'low' ? { aiModel: 'low' } : {}),
@@ -964,6 +973,7 @@ async function handleCoachApi(req, res) {
             { role: 'user', content: message },
           ],
           userId: uid,
+          plan: userPlan,
           conversationId: sessionId,
           purpose: 'coach_general',
         });
@@ -1132,12 +1142,12 @@ async function handleCoachApi(req, res) {
         sendJson(req, res, 404, { error: 'session_not_found' });
         return true;
       }
-      if (err && err.code === 'ai_model_unavailable') {
-        sendJson(req, res, 400, {
-          error: 'ai_model_unavailable',
-          message: err.message || 'Low cost model is not enabled.',
-        });
-        return true;
+      {
+        const mapped = getLlm().httpErrorFromLlm(err);
+        if (mapped) {
+          sendJson(req, res, mapped.status, mapped.body);
+          return true;
+        }
       }
       console.error('[coach/message] error:', err?.stack || err);
       sendJson(req, res, 500, { error: 'coach_failed' });

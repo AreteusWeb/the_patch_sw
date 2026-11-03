@@ -8,6 +8,7 @@
  *     LLM_USE_LITELLM on  → LiteLLM first, then the direct adapter for the same logical provider.
  *     aiModel='low' (DEEPSEEK_ENABLED) → LiteLLM general-deepseek, then OpenAI economy.
  *   Any other error (400, auth, missing config) is thrown without fallback.
+ *   LiteLLM 422 budget_exceeded → code 'quota_exceeded' (no retry, no fallback).
  * - Overall deadline (LLM_DEADLINE_MS, default 30 s) across all attempts; a timed-out
  *   attempt is aborted via AbortSignal. Throws code 'EDEADLINE' when time runs out.
  * - Logs one structured line per call (swap in your own logger with setUsageLogger)
@@ -73,10 +74,49 @@ function deadlineError(state, cause) {
 }
 
 function isRetryable(err) {
+  // Budget / provisioning failures must never retry or fall back (would bypass the quota).
+  if (err && (err.code === 'quota_exceeded' || err.code === 'quota_unavailable')) {
+    return false;
+  }
   const s = err && (err.status || err.code || (err.response && err.response.status));
   if (s === 429 || s === 'ETIMEDOUT') return true;
   if (typeof s === 'number' && s >= 500) return true;
   return false;
+}
+
+/** Map llm errors the coach HTTP layer should return to the client (or null). */
+function httpErrorFromLlm(err) {
+  if (err && err.code === 'quota_exceeded') {
+    return {
+      status: 429,
+      body: {
+        error: 'quota_exceeded',
+        message:
+          err.message ||
+          'Your AI usage quota for this period has been reached. Try again later or upgrade your plan.',
+      },
+    };
+  }
+  if (err && err.code === 'quota_unavailable') {
+    return {
+      status: 503,
+      body: {
+        error: 'quota_unavailable',
+        message:
+          'AI usage limits are temporarily unavailable. Please try again later.',
+      },
+    };
+  }
+  if (err && err.code === 'ai_model_unavailable') {
+    return {
+      status: 400,
+      body: {
+        error: 'ai_model_unavailable',
+        message: err.message || 'Low cost model is not enabled.',
+      },
+    };
+  }
+  return null;
 }
 
 /**
@@ -125,6 +165,9 @@ async function callOnce(provider, tier, args, state) {
     adapters[provider].generate({
       model, system: args.system, messages: args.messages, maxOutputTokens: args.maxOutputTokens,
       timeoutMs: budgetMs, signal: controller.signal,
+      // LiteLLM end-user budget tracking (opaque Firebase uid; ignored by other adapters).
+      user: args.userId || undefined,
+      plan: args.plan || 'free',
     }),
     budgetMs,
     controller
@@ -286,4 +329,19 @@ async function generate(args) {
     usage: result.usage, costUsd, latencyMs: result.latencyMs, attempts: state.attempts, fellBack, routeReason: resolved.reason };
 }
 
-module.exports = { generate, setUsageLogger, _setAdapters, computeCost, priceModelId };
+function updateUserPlan(uid, plan) {
+  if (!USE_LITELLM) {
+    return Promise.resolve({ ok: false, reason: 'litellm_disabled' });
+  }
+  return require('./adapters/litellm.cjs').updateUserPlan(uid, plan);
+}
+
+module.exports = {
+  generate,
+  setUsageLogger,
+  _setAdapters,
+  computeCost,
+  priceModelId,
+  httpErrorFromLlm,
+  updateUserPlan,
+};

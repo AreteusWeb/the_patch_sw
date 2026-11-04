@@ -25,6 +25,8 @@ module.exports = {
   createDevice: impl.createDevice,
   deleteDevice: impl.deleteDevice,
   getUser: impl.getUser,
+  incrementLlmUsage: impl.incrementLlmUsage,
+  getLlmUsage: impl.getLlmUsage,
   setUserOtaTriggered: impl.setUserOtaTriggered,
   getActiveSession: impl.getActiveSession,
   getMostRecentSession: impl.getMostRecentSession,

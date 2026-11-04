@@ -46,6 +46,39 @@ async function getUser(uid) {
   return snap.exists ? snap.data() : null;
 }
 
+function usageDocRef(uid, periodStart) {
+  return db.collection('users').doc(uid).collection('usage').doc(periodStart);
+}
+
+/**
+ * Atomically add cost/tokens for one General-mode LLM call.
+ * Does not store message content. costUsd skipped when null.
+ */
+async function incrementLlmUsage(uid, periodStart, { provider, costUsd, inputTokens, outputTokens }) {
+  const p = String(provider || 'openai');
+  const inTok = Math.max(0, Number(inputTokens) || 0);
+  const outTok = Math.max(0, Number(outputTokens) || 0);
+  const updates = {
+    periodStart: String(periodStart),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    [`${p}.inputTokens`]: admin.firestore.FieldValue.increment(inTok),
+    [`${p}.outputTokens`]: admin.firestore.FieldValue.increment(outTok),
+    'total.inputTokens': admin.firestore.FieldValue.increment(inTok),
+    'total.outputTokens': admin.firestore.FieldValue.increment(outTok),
+  };
+  if (costUsd != null && Number.isFinite(Number(costUsd))) {
+    const c = Number(costUsd);
+    updates[`${p}.costUsd`] = admin.firestore.FieldValue.increment(c);
+    updates['total.costUsd'] = admin.firestore.FieldValue.increment(c);
+  }
+  await usageDocRef(uid, periodStart).set(updates, { merge: true });
+}
+
+async function getLlmUsage(uid, periodStart) {
+  const snap = await usageDocRef(uid, periodStart).get();
+  return snap.exists ? snap.data() : null;
+}
+
 async function setUserOtaTriggered(uid, fields) {
   await db.collection('users').doc(uid).set(fields, { merge: true });
 }
@@ -566,6 +599,8 @@ module.exports = {
   createDevice,
   deleteDevice,
   getUser,
+  incrementLlmUsage,
+  getLlmUsage,
   setUserOtaTriggered,
   getActiveSession,
   getMostRecentSession,

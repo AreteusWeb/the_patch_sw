@@ -118,13 +118,18 @@ const OTHER = { gemini: 'openai', openai: 'gemini' };
 
 /**
  * LiteLLM end-user max_budget (USD) per Firestore users/{uid}.plan.
- * Placeholder nulls until Jason sets real numbers — null means "no limit created".
- * Keys are lowercase plan ids (default plan when missing: 'free').
+ * Keys must match the lowercase plan string stored on the user doc
+ * (server reads userDoc.plan → toLowerCase; default when missing: 'free').
+ * In this repo nothing else writes plan yet — confirmed alignment target:
+ *   essential | pro | free | patch_pro
+ * free: $0.50 so users without a paid plan still get a LiteLLM cap
+ * (null would skip /customer/new and leave them unlimited).
  */
 const PLAN_BUDGETS = {
-  free: null,
-  plus: null,
-  pro: null,
+  free: 0.50,
+  essential: 6.99,
+  pro: 13.99,
+  patch_pro: 13.99,
 };
 
 /** Rolling budget window sent to LiteLLM /customer/new. */

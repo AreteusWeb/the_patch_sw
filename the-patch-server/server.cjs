@@ -676,6 +676,73 @@ function toCoachUiMessage(raw) {
   return out;
 }
 
+/**
+ * GET /api/usage — current-period General-mode spend for the signed-in user.
+ * Returns totals, per-provider breakdown, plan limit, and reset time.
+ * Never includes message content.
+ */
+async function handleUsageApi(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  if (!url.pathname.startsWith('/api/usage')) return false;
+
+  const uid = await verifyAuthHeader(req);
+  if (!uid) {
+    sendJson(req, res, 401, { error: 'unauthorized' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/usage') {
+    try {
+      const {
+        periodStartKey,
+        periodResetsAt,
+        planLimitUsd,
+        normalizeUsageDoc,
+      } = require('./llm/usage.cjs');
+
+      let plan = 'free';
+      try {
+        const userDoc = await dbProvider.getUser(uid);
+        if (userDoc && typeof userDoc.plan === 'string' && userDoc.plan.trim()) {
+          plan = userDoc.plan.trim().toLowerCase();
+        }
+      } catch (_) { /* default free */ }
+
+      const periodStart = periodStartKey();
+      let resetsAt = periodResetsAt();
+      // Prefer LiteLLM's budget_reset_at when the gateway is in use.
+      try {
+        const { USE_LITELLM } = require('./llm/config.cjs');
+        if (USE_LITELLM) {
+          const litellm = require('./llm/adapters/litellm.cjs');
+          const fromGateway = await litellm.fetchBudgetResetAt(uid);
+          if (fromGateway) resetsAt = fromGateway;
+        }
+      } catch (_) { /* keep calendar reset */ }
+
+      const raw = await dbProvider.getLlmUsage(uid, periodStart);
+      const { total, byProvider } = normalizeUsageDoc(raw);
+
+      sendJson(req, res, 200, {
+        periodStart,
+        resetsAt,
+        plan,
+        limitUsd: planLimitUsd(plan),
+        total,
+        byProvider,
+      });
+      return true;
+    } catch (err) {
+      console.error('[usage] error:', err?.stack || err);
+      sendJson(req, res, 500, { error: 'usage_failed' });
+      return true;
+    }
+  }
+
+  sendJson(req, res, 404, { error: 'not_found' });
+  return true;
+}
+
 async function handleCoachApi(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (!url.pathname.startsWith('/api/coach')) return false;
@@ -979,6 +1046,25 @@ async function handleCoachApi(req, res) {
         });
         const replyText =
           llmReply.text || 'I could not generate a reply right now. Try again in a moment.';
+
+        // Aggregate spend/tokens only (never message text). Failures must not break chat.
+        try {
+          const {
+            periodStartKey,
+            billableProvider,
+          } = require('./llm/usage.cjs');
+          await dbProvider.incrementLlmUsage(uid, periodStartKey(), {
+            provider: billableProvider(llmReply),
+            costUsd: llmReply.costUsd,
+            inputTokens: llmReply.usage?.inputTokens,
+            outputTokens: llmReply.usage?.outputTokens,
+          });
+        } catch (usageErr) {
+          console.warn(
+            `[coach/message] usage increment failed uid=${uid}:`,
+            String(usageErr?.message || usageErr).slice(0, 200)
+          );
+        }
 
         await dbProvider.appendMessage(uid, sessionId, {
           role: 'model',
@@ -1397,6 +1483,7 @@ const server = http.createServer(async (req, res) => {
 
   if (await handleDevicesApi(req, res)) return;
   if (await handleOtaApi(req, res)) return;
+  if (await handleUsageApi(req, res)) return;
   if (await handleCoachApi(req, res)) return;
 
   res.writeHead(200, {

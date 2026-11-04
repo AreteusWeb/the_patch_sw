@@ -58,6 +58,49 @@ async function getUser(uid) {
   return usersByUid.get(uid) ?? null;
 }
 
+/** users/{uid}/usage/{periodStart} — in-memory stand-in for local mode. */
+const usageByUid = new Map();
+
+function usageBucket(uid, periodStart) {
+  if (!usageByUid.has(uid)) usageByUid.set(uid, new Map());
+  const byPeriod = usageByUid.get(uid);
+  if (!byPeriod.has(periodStart)) {
+    byPeriod.set(periodStart, {
+      periodStart,
+      total: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+      openai: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+      gemini: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+      deepseek: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+    });
+  }
+  return byPeriod.get(periodStart);
+}
+
+async function incrementLlmUsage(uid, periodStart, { provider, costUsd, inputTokens, outputTokens }) {
+  const doc = usageBucket(uid, periodStart);
+  const p = ['openai', 'gemini', 'deepseek'].includes(provider) ? provider : 'openai';
+  if (!doc[p]) doc[p] = { costUsd: 0, inputTokens: 0, outputTokens: 0 };
+  const inTok = Math.max(0, Number(inputTokens) || 0);
+  const outTok = Math.max(0, Number(outputTokens) || 0);
+  doc[p].inputTokens += inTok;
+  doc[p].outputTokens += outTok;
+  doc.total.inputTokens += inTok;
+  doc.total.outputTokens += outTok;
+  if (costUsd != null && Number.isFinite(Number(costUsd))) {
+    const c = Number(costUsd);
+    doc[p].costUsd += c;
+    doc.total.costUsd += c;
+  }
+  doc.updatedAt = Date.now();
+}
+
+async function getLlmUsage(uid, periodStart) {
+  const byPeriod = usageByUid.get(uid);
+  if (!byPeriod) return null;
+  const doc = byPeriod.get(periodStart);
+  return doc ? { ...doc } : null;
+}
+
 async function setUserOtaTriggered(uid, fields) {
   usersByUid.set(uid, { ...(usersByUid.get(uid) || {}), ...fields });
 }
@@ -443,6 +486,8 @@ module.exports = {
   createDevice,
   deleteDevice,
   getUser,
+  incrementLlmUsage,
+  getLlmUsage,
   setUserOtaTriggered,
   getActiveSession,
   getMostRecentSession,

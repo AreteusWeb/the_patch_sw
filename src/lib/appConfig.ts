@@ -41,6 +41,10 @@ export const GENERAL_MODE_ENABLED =
 export const LOW_COST_MODEL_ENABLED =
   import.meta.env.VITE_ENABLE_LOW_COST_MODEL === 'true';
 
+// Usage panel on the standalone AI Agent. Off unless explicitly enabled.
+export const USAGE_PANEL_ENABLED =
+  import.meta.env.VITE_ENABLE_USAGE_PANEL === 'true';
+
 /**
  * Staging / local-cloud auto-login (real Firebase email+password).
  * Only active when BOTH are set. Leave unset in production builds so

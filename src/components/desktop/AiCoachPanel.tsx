@@ -1544,6 +1544,22 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
             ? (typeof data.message === 'string' && data.message.trim()
               ? data.message
               : 'Low cost model is not enabled.') :
+          data?.error === 'quota_exceeded'
+            ? (() => {
+                const raw =
+                  typeof data.resetAt === 'string' ? data.resetAt.trim() : '';
+                if (raw) {
+                  const d = new Date(raw);
+                  if (!Number.isNaN(d.getTime())) {
+                    const local = d.toLocaleString(undefined, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    });
+                    return `Llegaste a tu límite de uso. Se renueva el ${local}`;
+                  }
+                }
+                return 'Llegaste a tu límite de uso.';
+              })() :
           data?.error === 'coach_failed' ? 'Coach could not reply. Try again.' :
           'Could not reach the AI Coach.';
         setError(msg);

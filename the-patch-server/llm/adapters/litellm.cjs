@@ -225,14 +225,55 @@ function isBudgetExceededError(err) {
   return /budget_exceeded/i.test(blob);
 }
 
-function quotaExceededError(cause) {
+function quotaExceededError(cause, resetAt) {
   const e = new Error(
     'AI usage quota for this period has been reached. Try again later or upgrade your plan.'
   );
   e.code = 'quota_exceeded';
   e.status = 429;
+  if (resetAt) e.resetAt = resetAt;
   if (cause) e.cause = cause;
   return e;
+}
+
+/** Normalize LiteLLM budget_reset_at to ISO-8601, or null. */
+function toIsoResetAt(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  const d = new Date(String(raw));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * GET /customer/info?end_user_id=<uid> → litellm_budget_table.budget_reset_at.
+ * Failures return null (caller still returns 429 without resetAt).
+ */
+async function fetchBudgetResetAt(uid) {
+  const userId = String(uid || '').trim();
+  if (!userId) return null;
+  try {
+    const headers = await adminHeaders();
+    if (!headers) return null;
+    const url =
+      `${gatewayRoot()}/customer/info?end_user_id=${encodeURIComponent(userId)}`;
+    const doFetch = _fetchImpl || fetch;
+    const res = await doFetch(url, { method: 'GET', headers });
+    if (!res.ok) return null;
+    const text = await res.text().catch(() => '');
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { return null; }
+    const raw =
+      data?.litellm_budget_table?.budget_reset_at ??
+      data?.budget_reset_at ??
+      null;
+    return toIsoResetAt(raw);
+  } catch {
+    return null;
+  }
 }
 
 /** Customer provisioning failed while a budget limit is required — do not call the model. */
@@ -460,7 +501,17 @@ async function generate({
       signal ? { signal } : undefined
     );
   } catch (err) {
-    if (isBudgetExceededError(err)) throw quotaExceededError(err);
+    if (isBudgetExceededError(err)) {
+      let resetAt = null;
+      if (uid) {
+        try {
+          resetAt = await fetchBudgetResetAt(uid);
+        } catch (_) {
+          resetAt = null;
+        }
+      }
+      throw quotaExceededError(err, resetAt || undefined);
+    }
     throw err;
   }
   const text = (res.choices?.[0]?.message?.content || '').trim();
@@ -491,6 +542,8 @@ module.exports = {
   quotaExceededError,
   quotaUnavailableError,
   assertCustomerReady,
+  fetchBudgetResetAt,
+  toIsoResetAt,
   _setFetch,
   _resetCustomerCache,
 };

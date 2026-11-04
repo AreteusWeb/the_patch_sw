@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { Cpu, LogOut, User } from 'lucide-react';
 import useStore from '../store/useStore';
 import { logout } from '../hooks/useAuth';
-import { AUTO_LOGIN_ENABLED, GENERAL_MODE_ENABLED, LOW_COST_MODEL_ENABLED } from '../lib/appConfig';
+import {
+  AUTO_LOGIN_ENABLED,
+  GENERAL_MODE_ENABLED,
+  LOW_COST_MODEL_ENABLED,
+  USAGE_PANEL_ENABLED,
+} from '../lib/appConfig';
 import { AGENT_PRODUCT_NAME, DEVELOPMENT_DISCLAIMER } from '../lib/agent';
 import AiCoachPanel from './desktop/AiCoachPanel';
+import UsagePanel from './UsagePanel';
 import ProfileDrawer from './ProfileDrawer';
 import { cn } from '../utils/cn';
 
@@ -81,6 +87,12 @@ export default function StandaloneAgentScreen() {
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-teal-900/15 blur-[140px] rounded-full" />
       </div>
+
+      {USAGE_PANEL_ENABLED && (
+        <div className="relative flex-shrink-0 px-3 sm:px-5 pt-2">
+          <UsagePanel className="max-w-3xl mx-auto" />
+        </div>
+      )}
 
       <main className="relative flex-1 min-h-0">
         <AiCoachPanel

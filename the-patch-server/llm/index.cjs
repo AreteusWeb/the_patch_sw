@@ -94,6 +94,9 @@ function httpErrorFromLlm(err) {
         message:
           err.message ||
           'Your AI usage quota for this period has been reached. Try again later or upgrade your plan.',
+        ...(typeof err.resetAt === 'string' && err.resetAt
+          ? { resetAt: err.resetAt }
+          : {}),
       },
     };
   }

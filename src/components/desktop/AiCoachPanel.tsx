@@ -1555,10 +1555,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                       dateStyle: 'medium',
                       timeStyle: 'short',
                     });
-                    return `Llegaste a tu límite de uso. Se renueva el ${local}`;
+                    return `You've reached your usage limit. It resets on ${local}`;
                   }
                 }
-                return 'Llegaste a tu límite de uso.';
+                return "You've reached your usage limit.";
               })() :
           data?.error === 'coach_failed' ? 'Coach could not reply. Try again.' :
           'Could not reach the AI Coach.';

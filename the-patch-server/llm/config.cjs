@@ -46,6 +46,49 @@ if (USE_LITELLM) {
 }
 
 /**
+ * LiteLLM proxy alias → real upstream model id (for MODEL_PRICES / usage bucketing).
+ * Alias keys follow LITELLM_MODEL_GENERAL_*; upstream ids are overridable via
+ * LITELLM_UPSTREAM_* so gateway renames don't break costUsd.
+ */
+const LITELLM_ALIAS_TO_MODEL = {
+  [env('LITELLM_MODEL_GENERAL_OPENAI', 'general-openai')]:
+    env('LITELLM_UPSTREAM_GENERAL_OPENAI', 'gpt-6-luna'),
+  [env('LITELLM_MODEL_GENERAL_GEMINI', 'general-gemini')]:
+    env('LITELLM_UPSTREAM_GENERAL_GEMINI', 'gemini-3.8-flash'),
+  [env('LITELLM_MODEL_GENERAL_DEEPSEEK', 'general-deepseek')]:
+    env('LITELLM_UPSTREAM_GENERAL_DEEPSEEK', 'deepseek-v4-flash'),
+};
+
+/** Real model id → openai | gemini | deepseek for usage aggregation. */
+const REAL_MODEL_TO_PROVIDER = {
+  'gpt-6-luna': 'openai',
+  'gemini-3.8-flash': 'gemini',
+  'gemini-3.1-flash-lite': 'gemini',
+  'deepseek-v4-flash': 'deepseek',
+};
+
+/** Map a LiteLLM alias (or passthrough id) to the upstream model used for pricing. */
+function resolveLitellmUpstream(aliasOrModel) {
+  const id = String(aliasOrModel || '').trim();
+  if (!id) return null;
+  if (Object.prototype.hasOwnProperty.call(LITELLM_ALIAS_TO_MODEL, id)) {
+    return LITELLM_ALIAS_TO_MODEL[id];
+  }
+  return id;
+}
+
+/** Billable provider bucket from a real model or LiteLLM alias. */
+function billableProviderForModel(aliasOrModel) {
+  const real = resolveLitellmUpstream(aliasOrModel);
+  if (!real) return null;
+  if (REAL_MODEL_TO_PROVIDER[real]) return REAL_MODEL_TO_PROVIDER[real];
+  if (/deepseek/i.test(real)) return 'deepseek';
+  if (/gemini/i.test(real)) return 'gemini';
+  if (/gpt|openai|luna/i.test(real)) return 'openai';
+  return null;
+}
+
+/**
  * USD per 1,000,000 tokens. FILL THESE IN from each provider's pricing page.
  * Left null on purpose: until filled, costUsd is reported as null (not a wrong number).
  * Example reference list prices seen in Sep 2026 trackers (VERIFY before using):
@@ -146,5 +189,9 @@ module.exports = {
   DEEPSEEK_ENABLED,
   PLAN_BUDGETS,
   BUDGET_DURATION,
+  LITELLM_ALIAS_TO_MODEL,
+  REAL_MODEL_TO_PROVIDER,
+  resolveLitellmUpstream,
+  billableProviderForModel,
   env,
 };

@@ -15,9 +15,21 @@
  */
 const {
   MODELS, PRICES, MODEL_PRICES, TIMEOUT_MS, DEADLINE_MS, OTHER, USE_LITELLM,
-  DEEPSEEK_ENABLED,
+  DEEPSEEK_ENABLED, resolveLitellmUpstream,
 } = require('./config.cjs');
 const { route } = require('./router.cjs');
+
+/** Models already warned for missing MODEL_PRICES (one log line per id per process). */
+const _missingPriceWarned = new Set();
+function warnMissingPriceOnce(model) {
+  const key = String(model || '').trim();
+  if (!key || _missingPriceWarned.has(key)) return;
+  _missingPriceWarned.add(key);
+  console.warn(
+    `[llm] no priced MODEL_PRICES entry for "${key}" — costUsd will be null`
+  );
+}
+function _resetMissingPriceWarnings() { _missingPriceWarned.clear(); }
 
 if (USE_LITELLM) {
   const base = String(process.env.LITELLM_BASE_URL || '').trim();
@@ -127,10 +139,18 @@ function httpErrorFromLlm(err) {
  * priced separately when the price entry has them (they're part of inputTokens,
  * not on top of it); otherwise they fall back to the normal input rate.
  */
+function hasPricedEntry(modelId) {
+  const e = modelId && MODEL_PRICES[modelId];
+  return !!(e && e.in != null && e.out != null);
+}
+
 function computeCost(provider, model, tier, usage) {
   const base = MODEL_PRICES[model] || PRICES[`${provider}:${tier}`];
   // An entry with null rates is a placeholder waiting for official prices.
-  if (!base || base.in == null || base.out == null) return null;
+  if (!base || base.in == null || base.out == null) {
+    warnMissingPriceOnce(model || `${provider}:${tier}`);
+    return null;
+  }
   const p = base.long && base.long.in != null && base.longContextAbove && usage.inputTokens > base.longContextAbove
     ? base.long : base;
   const cached = usage.cachedInputTokens || 0;
@@ -144,16 +164,31 @@ function computeCost(provider, model, tier, usage) {
   ) / 1e6;
 }
 
-/** Prefer the upstream model id for pricing (LiteLLM aliases are not in MODEL_PRICES). */
+/**
+ * Prefer a model id that exists in MODEL_PRICES. LiteLLM aliases
+ * (general-openai / general-gemini / general-deepseek) are mapped to upstream
+ * ids via LITELLM_ALIAS_TO_MODEL before lookup.
+ */
 function priceModelId(result, underlyingProvider, tier) {
-  if (result.responseModel && MODEL_PRICES[result.responseModel]) {
-    return result.responseModel;
-  }
-  if (result.responseModel) return result.responseModel;
+  const candidates = [];
+  if (result && result.responseModel) candidates.push(result.responseModel);
+  if (result && result.model) candidates.push(result.model);
   if (underlyingProvider && MODELS[underlyingProvider] && MODELS[underlyingProvider][tier]) {
-    return MODELS[underlyingProvider][tier];
+    candidates.push(MODELS[underlyingProvider][tier]);
   }
-  return result.model;
+  if (MODELS.litellm && MODELS.litellm[tier]) {
+    candidates.push(MODELS.litellm[tier]);
+  }
+
+  for (const raw of candidates) {
+    if (hasPricedEntry(raw)) return raw;
+    const upstream = resolveLitellmUpstream(raw);
+    if (upstream && hasPricedEntry(upstream)) return upstream;
+  }
+
+  // Nothing priced — return best-effort resolved id (costUsd will be null + warn).
+  const fallbackRaw = (result && (result.responseModel || result.model)) || null;
+  return resolveLitellmUpstream(fallbackRaw) || fallbackRaw || result?.model;
 }
 
 async function callOnce(provider, tier, args, state) {
@@ -310,13 +345,19 @@ async function generate(args) {
   }
 
   // Price + log the provider/tier that actually answered (e.g. openai:economy after a low fallback).
+  // LiteLLM: resolve alias → real model (gpt-6-luna / gemini-3.8-flash / deepseek-v4-flash).
   const usedTier = result.tier || tier;
   const pricedModel = priceModelId(
     result,
     result.provider === 'litellm' ? resolved.underlying : result.provider,
     usedTier
   );
-  const costProvider = result.provider === 'litellm' ? resolved.underlying : result.provider;
+  const costProvider =
+    result.provider === 'litellm'
+      ? (resolved.underlying === 'deepseek'
+        ? 'deepseek'
+        : resolved.underlying || 'openai')
+      : result.provider;
   const costUsd = computeCost(costProvider, pricedModel, usedTier, result.usage);
   const rec = {
     userId, conversationId, purpose, provider: result.provider, model: result.model,
@@ -347,4 +388,6 @@ module.exports = {
   priceModelId,
   httpErrorFromLlm,
   updateUserPlan,
+  resolveLitellmUpstream,
+  _resetMissingPriceWarnings,
 };

@@ -13,7 +13,19 @@ const db = require('../providers/db-provider.local.cjs');
   assert.strictEqual(usage.billableProvider({ provider: 'openai', tier: 'economy' }), 'openai');
   assert.strictEqual(usage.billableProvider({ provider: 'gemini', tier: 'mid' }), 'gemini');
   assert.strictEqual(usage.billableProvider({ provider: 'litellm', tier: 'low', model: 'general-deepseek' }), 'deepseek');
+  assert.strictEqual(usage.billableProvider({ provider: 'litellm', tier: 'economy', model: 'general-openai' }), 'openai');
+  assert.strictEqual(usage.billableProvider({ provider: 'litellm', tier: 'mid', model: 'general-gemini' }), 'gemini');
+  assert.strictEqual(usage.billableProvider({
+    provider: 'litellm',
+    model: 'general-openai',
+    responseModel: 'gpt-6-luna',
+  }), 'openai');
   assert.strictEqual(usage.billableProvider({ provider: 'openai', tier: 'economy', fellBack: true }), 'openai');
+  // Never bucket as 'litellm'
+  assert.notStrictEqual(
+    usage.billableProvider({ provider: 'litellm', model: 'general-openai' }),
+    'litellm'
+  );
 
   const key = usage.periodStartKey(new Date('2026-11-15T12:00:00Z'));
   assert.strictEqual(key, '2026-11-01');

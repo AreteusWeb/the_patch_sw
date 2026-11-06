@@ -3,7 +3,7 @@
  * Helpers for aggregating General-mode LLM spend into users/{uid}/usage/{periodStart}.
  * Period = UTC calendar month (doc id YYYY-MM-01). No message content here.
  */
-const { PLAN_BUDGETS } = require('./config.cjs');
+const { PLAN_BUDGETS, billableProviderForModel } = require('./config.cjs');
 
 const PROVIDERS = ['openai', 'gemini', 'deepseek'];
 
@@ -35,28 +35,26 @@ function planLimitUsd(plan) {
 
 /**
  * Map llm.generate() result → openai | gemini | deepseek for the usage doc.
- * Uses the provider/tier that actually answered (after fallback).
+ * Prefer the real upstream model (alias map); never bucket as 'litellm'.
  */
 function billableProvider(reply) {
   if (!reply || typeof reply !== 'object') return 'openai';
+
+  for (const id of [reply.responseModel, reply.model]) {
+    const fromModel = billableProviderForModel(id);
+    if (fromModel) return fromModel;
+  }
+
   const tier = String(reply.tier || '');
-  const model = String(reply.model || '');
-  const responseModel = String(reply.responseModel || '');
   const provider = String(reply.provider || '');
 
-  if (
-    tier === 'low' ||
-    /deepseek/i.test(model) ||
-    /deepseek/i.test(responseModel)
-  ) {
-    return 'deepseek';
-  }
-  if (provider === 'gemini' || tier === 'mid' || /gemini/i.test(model)) {
-    return 'gemini';
-  }
+  if (tier === 'low') return 'deepseek';
+  if (provider === 'gemini' || tier === 'mid') return 'gemini';
   if (provider === 'openai' || tier === 'economy') return 'openai';
   if (provider === 'litellm') {
-    if (/gemini/i.test(model)) return 'gemini';
+    // Alias unresolved — tier is the best signal left.
+    if (tier === 'mid') return 'gemini';
+    if (tier === 'low') return 'deepseek';
     return 'openai';
   }
   return 'openai';

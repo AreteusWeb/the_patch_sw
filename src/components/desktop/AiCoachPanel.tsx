@@ -66,7 +66,7 @@ const GENERAL_PROVIDER_OPTIONS: ReadonlyArray<{
   {
     id: 'openai',
     label: 'OpenAI',
-    hint: 'Uses OpenAI via the LiteLLM gateway (default).',
+    hint: 'Uses OpenAI (default).',
   },
   {
     id: 'deepseek',
@@ -77,7 +77,7 @@ const GENERAL_PROVIDER_OPTIONS: ReadonlyArray<{
   {
     id: 'gemini',
     label: 'Gemini',
-    hint: 'Uses Google Gemini via the LiteLLM gateway.',
+    hint: 'Uses Google Gemini.',
   },
 ];
 

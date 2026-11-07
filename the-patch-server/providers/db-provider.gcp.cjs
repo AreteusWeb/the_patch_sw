@@ -95,20 +95,33 @@ async function setUserOtaTriggered(uid, fields) {
   await db.collection('users').doc(uid).set(fields, { merge: true });
 }
 
+/** Session chat mode. Missing/unknown → 'coach' (legacy docs). */
+function normalizeCoachSessionMode(raw) {
+  return raw === 'general' ? 'general' : 'coach';
+}
+
+function sessionModeFromData(data) {
+  return normalizeCoachSessionMode(data?.mode);
+}
+
 /**
  * Returns the active (open + not idle) coach session, or null.
  * Does not create or close sessions — server.cjs owns that orchestration
  * so summaries can be generated via ai-provider before close.
- * @returns {Promise<{ sessionId: string, startedAt: number, lastMessageAt: number, closedAt: null, summary: string|null, metricsAtStart: object|null }|null>}
+ * @param {{ mode?: 'coach'|'general' }} [opts] — filter by mode (default coach).
+ * @returns {Promise<{ sessionId: string, startedAt: number, lastMessageAt: number, closedAt: null, summary: string|null, metricsAtStart: object|null, mode: 'coach'|'general' }|null>}
  */
-async function getActiveSession(uid) {
+async function getActiveSession(uid, opts = {}) {
+  const wanted = normalizeCoachSessionMode(opts?.mode);
   const now = Date.now();
   const openSnap = await coachSessionsRef(uid).where('closedAt', '==', null).get();
-  const openDocs = openSnap.docs.sort((a, b) => {
-    const aAt = a.data().lastMessageAt ?? a.data().startedAt ?? 0;
-    const bAt = b.data().lastMessageAt ?? b.data().startedAt ?? 0;
-    return bAt - aAt;
-  });
+  const openDocs = openSnap.docs
+    .filter((d) => sessionModeFromData(d.data()) === wanted)
+    .sort((a, b) => {
+      const aAt = a.data().lastMessageAt ?? a.data().startedAt ?? 0;
+      const bAt = b.data().lastMessageAt ?? b.data().startedAt ?? 0;
+      return bAt - aAt;
+    });
 
   if (openDocs.length === 0) return null;
 
@@ -124,21 +137,26 @@ async function getActiveSession(uid) {
     closedAt: null,
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
+    mode: sessionModeFromData(data),
   };
 }
 
 /**
  * Most recent coach session for the user (open or closed), by lastMessageAt.
- * @returns {Promise<{ sessionId: string, startedAt: number|null, lastMessageAt: number|null, closedAt: number|null, summary: string|null, metricsAtStart: object|null }|null>}
+ * Filters in memory so legacy docs without `mode` still count as coach.
+ * @param {{ mode?: 'coach'|'general' }} [opts] — filter by mode (default coach).
+ * @returns {Promise<{ sessionId: string, startedAt: number|null, lastMessageAt: number|null, closedAt: number|null, summary: string|null, metricsAtStart: object|null, mode: 'coach'|'general' }|null>}
  */
-async function getMostRecentSession(uid) {
+async function getMostRecentSession(uid, opts = {}) {
+  const wanted = normalizeCoachSessionMode(opts?.mode);
+  // Scan a recent page — mode is not always indexed (legacy docs omit it).
   const snap = await coachSessionsRef(uid)
     .orderBy('lastMessageAt', 'desc')
-    .limit(1)
+    .limit(50)
     .get();
 
-  if (snap.empty) return null;
-  const doc = snap.docs[0];
+  const doc = snap.docs.find((d) => sessionModeFromData(d.data()) === wanted);
+  if (!doc) return null;
   const data = doc.data();
   return {
     sessionId: doc.id,
@@ -147,6 +165,7 @@ async function getMostRecentSession(uid) {
     closedAt: data.closedAt ?? null,
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
+    mode: sessionModeFromData(data),
   };
 }
 
@@ -174,11 +193,13 @@ async function closeSession(uid, sessionId, summary) {
 /**
  * Create a new open coach session.
  * @param {object|null} metricsAtStart
- * @returns {Promise<{ sessionId: string, startedAt: number, lastMessageAt: number, closedAt: null, summary: null, metricsAtStart: object|null }>}
+ * @param {{ mode?: 'coach'|'general' }} [opts]
+ * @returns {Promise<{ sessionId: string, startedAt: number, lastMessageAt: number, closedAt: null, summary: null, metricsAtStart: object|null, mode: 'coach'|'general' }>}
  */
-async function createSession(uid, metricsAtStart = null) {
+async function createSession(uid, metricsAtStart = null, opts = {}) {
   const now = Date.now();
   const newRef = coachSessionsRef(uid).doc();
+  const mode = normalizeCoachSessionMode(opts?.mode);
   const payload = {
     startedAt: now,
     lastMessageAt: now,
@@ -186,6 +207,7 @@ async function createSession(uid, metricsAtStart = null) {
     summary: null,
     metricsAtStart: metricsAtStart ?? null,
     messageCount: 0,
+    mode,
   };
   await newRef.set(payload);
   return { sessionId: newRef.id, ...payload };
@@ -229,25 +251,36 @@ async function getCoachSession(uid, sessionId) {
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
     messageCount,
+    mode: sessionModeFromData(data),
   };
 }
 
 /**
  * Paginated session list for the history sidebar (newest first).
- * @param {{ limit?: number, before?: number|null }} opts
+ * @param {{ limit?: number, before?: number|null, mode?: 'coach'|'general'|null }} opts
  *   before = lastMessageAt cursor (exclusive) for "load more"
+ *   mode = optional filter; omit/null = all modes (filter in memory for legacy docs).
  */
-async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
+async function listCoachSessions(uid, { limit = 20, before = null, mode = null } = {}) {
   const pageSize = Math.min(50, Math.max(1, Number(limit) || 20));
+  const modeFilter =
+    mode === 'general' || mode === 'coach' ? normalizeCoachSessionMode(mode) : null;
+  // Over-fetch when filtering by mode so legacy docs (no mode field) still work.
+  const fetchLimit = modeFilter ? Math.min(100, pageSize * 4 + 1) : pageSize + 1;
   let q = coachSessionsRef(uid).orderBy('lastMessageAt', 'desc');
   if (typeof before === 'number' && Number.isFinite(before)) {
     q = q.where('lastMessageAt', '<', before);
   }
-  const snap = await q.limit(pageSize + 1).get();
-  const docs = snap.docs.slice(0, pageSize);
+  const snap = await q.limit(fetchLimit).get();
+  let docs = snap.docs;
+  if (modeFilter) {
+    docs = docs.filter((d) => sessionModeFromData(d.data()) === modeFilter);
+  }
+  const pageDocs = docs.slice(0, pageSize);
+  const hasMore = docs.length > pageSize || snap.docs.length >= fetchLimit;
 
   const sessions = [];
-  for (const doc of docs) {
+  for (const doc of pageDocs) {
     const data = doc.data() || {};
     let messageCount =
       typeof data.messageCount === 'number' ? data.messageCount : null;
@@ -262,10 +295,10 @@ async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
       closedAt: data.closedAt ?? null,
       summary: data.summary ?? null,
       messageCount,
+      mode: sessionModeFromData(data),
     });
   }
 
-  const hasMore = snap.docs.length > pageSize;
   const nextBefore =
     hasMore && sessions.length > 0
       ? sessions[sessions.length - 1].lastMessageAt

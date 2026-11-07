@@ -9,6 +9,8 @@ export interface CoachSessionListItem {
   closedAt: number | null;
   summary: string | null;
   messageCount: number;
+  /** 'coach' | 'general'; legacy rows without mode count as coach. */
+  mode?: 'coach' | 'general';
 }
 
 interface CoachHistorySidebarProps {

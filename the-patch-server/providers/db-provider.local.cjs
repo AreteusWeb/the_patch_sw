@@ -105,14 +105,25 @@ async function setUserOtaTriggered(uid, fields) {
   usersByUid.set(uid, { ...(usersByUid.get(uid) || {}), ...fields });
 }
 
+/** Session chat mode. Missing/unknown → 'coach' (legacy docs). */
+function normalizeCoachSessionMode(raw) {
+  return raw === 'general' ? 'general' : 'coach';
+}
+
+function sessionModeFromData(data) {
+  return normalizeCoachSessionMode(data?.mode);
+}
+
 /**
  * Returns the active (open + not idle) coach session, or null.
  * Does not create or close sessions — server.cjs owns that orchestration.
+ * @param {{ mode?: 'coach'|'general' }} [opts] — filter by mode (default coach).
  */
-async function getActiveSession(uid) {
+async function getActiveSession(uid, opts = {}) {
+  const wanted = normalizeCoachSessionMode(opts?.mode);
   const now = Date.now();
   const open = [...sessionsFor(uid).entries()]
-    .filter(([, s]) => s.closedAt == null)
+    .filter(([, s]) => s.closedAt == null && sessionModeFromData(s) === wanted)
     .sort((a, b) => (b[1].lastMessageAt ?? 0) - (a[1].lastMessageAt ?? 0));
 
   if (open.length === 0) return null;
@@ -128,14 +139,18 @@ async function getActiveSession(uid) {
     closedAt: null,
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
+    mode: sessionModeFromData(data),
   };
 }
 
 /**
  * Most recent coach session for the user (open or closed), by lastMessageAt.
+ * @param {{ mode?: 'coach'|'general' }} [opts] — filter by mode (default coach).
  */
-async function getMostRecentSession(uid) {
+async function getMostRecentSession(uid, opts = {}) {
+  const wanted = normalizeCoachSessionMode(opts?.mode);
   const all = [...sessionsFor(uid).entries()]
+    .filter(([, s]) => sessionModeFromData(s) === wanted)
     .sort((a, b) => (b[1].lastMessageAt ?? 0) - (a[1].lastMessageAt ?? 0));
 
   if (all.length === 0) return null;
@@ -147,6 +162,7 @@ async function getMostRecentSession(uid) {
     closedAt: data.closedAt ?? null,
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
+    mode: sessionModeFromData(data),
   };
 }
 
@@ -168,10 +184,13 @@ async function closeSession(uid, sessionId, summary) {
 
 /**
  * Create a new open coach session.
+ * @param {object|null} metricsAtStart
+ * @param {{ mode?: 'coach'|'general' }} [opts]
  */
-async function createSession(uid, metricsAtStart = null) {
+async function createSession(uid, metricsAtStart = null, opts = {}) {
   const now = Date.now();
   const sessionId = nextLocalId('coach');
+  const mode = normalizeCoachSessionMode(opts?.mode);
   const payload = {
     startedAt: now,
     lastMessageAt: now,
@@ -179,6 +198,7 @@ async function createSession(uid, metricsAtStart = null) {
     summary: null,
     metricsAtStart: metricsAtStart ?? null,
     messageCount: 0,
+    mode,
   };
   sessionsFor(uid).set(sessionId, payload);
   return { sessionId, ...payload };
@@ -238,18 +258,25 @@ async function getCoachSession(uid, sessionId) {
     summary: data.summary ?? null,
     metricsAtStart: data.metricsAtStart ?? null,
     messageCount,
+    mode: sessionModeFromData(data),
   };
 }
 
 /**
  * Paginated session list (newest first).
- * @param {{ limit?: number, before?: number|null }} opts
+ * @param {{ limit?: number, before?: number|null, mode?: 'coach'|'general'|null }} opts
+ *   mode = optional filter; omit/null = all modes (legacy clients).
  */
-async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
+async function listCoachSessions(uid, { limit = 20, before = null, mode = null } = {}) {
   const pageSize = Math.min(50, Math.max(1, Number(limit) || 20));
+  const modeFilter =
+    mode === 'general' || mode === 'coach' ? normalizeCoachSessionMode(mode) : null;
   let all = [...sessionsFor(uid).entries()].sort(
     (a, b) => (b[1].lastMessageAt ?? 0) - (a[1].lastMessageAt ?? 0)
   );
+  if (modeFilter) {
+    all = all.filter(([, s]) => sessionModeFromData(s) === modeFilter);
+  }
   if (typeof before === 'number' && Number.isFinite(before)) {
     all = all.filter(([, s]) => (s.lastMessageAt ?? 0) < before);
   }
@@ -264,6 +291,7 @@ async function listCoachSessions(uid, { limit = 20, before = null } = {}) {
       typeof data.messageCount === 'number'
         ? data.messageCount
         : messagesFor(uid, sessionId).length,
+    mode: sessionModeFromData(data),
   }));
   const hasMore = all.length > pageSize;
   const nextBefore =

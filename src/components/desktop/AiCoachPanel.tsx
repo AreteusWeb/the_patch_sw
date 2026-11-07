@@ -55,6 +55,27 @@ type CoachInteractionMode = 'text' | 'live';
 type CoachChatMode = 'coach' | 'general';
 type GeneralAiModel = 'standard' | 'low';
 
+const AI_AGENT_MODE_KEY = 'aiAgentMode';
+
+function readStoredAiAgentMode(generalEnabled: boolean): CoachChatMode {
+  if (!generalEnabled) return 'coach';
+  try {
+    const raw = localStorage.getItem(AI_AGENT_MODE_KEY);
+    if (raw === 'general' || raw === 'coach') return raw;
+  } catch {
+    /* private mode / blocked storage */
+  }
+  return 'coach';
+}
+
+function writeStoredAiAgentMode(mode: CoachChatMode) {
+  try {
+    localStorage.setItem(AI_AGENT_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 type CoachRole = 'user' | 'model';
 
 interface CoachImageAttachment {
@@ -881,7 +902,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
   const [interactionMode, setInteractionMode] =
     useState<CoachInteractionMode>('text');
-  const [chatMode, setChatMode] = useState<CoachChatMode>('coach');
+  const [chatMode, setChatMode] = useState<CoachChatMode>(() =>
+    readStoredAiAgentMode(enableGeneralMode)
+  );
   const isGeneral = enableGeneralMode && chatMode === 'general';
   const [generalAiModel, setGeneralAiModel] = useState<GeneralAiModel>('standard');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -933,6 +956,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   useEffect(() => {
     if (!isGeneral || !enableLowCostModel) setModelMenuOpen(false);
   }, [isGeneral, enableLowCostModel]);
+
+  // Persist Coach/General across reloads. Flag off → always coach.
+  useEffect(() => {
+    if (!enableGeneralMode) {
+      if (chatMode !== 'coach') setChatMode('coach');
+      return;
+    }
+    writeStoredAiAgentMode(chatMode);
+  }, [chatMode, enableGeneralMode]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -987,7 +1019,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     return { Authorization: `Bearer ${token}` };
   };
 
-  const refreshSessionList = async (opts?: { append?: boolean }) => {
+  const refreshSessionList = async (opts?: {
+    append?: boolean;
+    mode?: CoachChatMode;
+  }) => {
     const append = opts?.append === true;
     const headers = await authHeaders();
     if (!headers) return;
@@ -1000,7 +1035,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     }
 
     try {
-      const qs = new URLSearchParams({ limit: '20' });
+      const listMode =
+        opts?.mode ??
+        (enableGeneralMode && chatMode === 'general' ? 'general' : 'coach');
+      const qs = new URLSearchParams({ limit: '20', mode: listMode });
       if (append && sessionListNextBefore != null) {
         qs.set('before', String(sessionListNextBefore));
       }
@@ -1088,10 +1126,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   };
 
   /**
-   * Bootstrap: on mount, ask the server for the active coach session (same
-   * getActiveSession / idle rules as /message). Hydrate messages if present;
-   * on null / failure, leave the chat empty — never block sending.
-   * History sidebar is loaded in parallel (does not replace bootstrap).
+   * Bootstrap: restore Coach/General from localStorage, then load the most
+   * recent session for that mode. History sidebar loads in parallel (same mode).
    */
   useEffect(() => {
     let cancelled = false;
@@ -1102,12 +1138,16 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         return;
       }
 
+      const restoredMode = readStoredAiAgentMode(enableGeneralMode);
+      if (!cancelled) setChatMode(restoredMode);
+
       setHistoryLoading(true);
-      void refreshSessionList();
+      void refreshSessionList({ mode: restoredMode });
 
       try {
         const token = await currentUser.getIdToken();
-        const res = await fetch(`${API_BASE}/api/coach/session`, {
+        const qs = new URLSearchParams({ mode: restoredMode });
+        const res = await fetch(`${API_BASE}/api/coach/session?${qs}`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -1122,7 +1162,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
 
         const session = data?.session;
         if (!session || typeof session.sessionId !== 'string') {
-          // No active session (idle closed / never started) — empty chat.
+          // No session for this mode yet — empty chat.
           return;
         }
 
@@ -1143,8 +1183,8 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / uid only
-  }, [currentUser?.uid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount / uid / flag only
+  }, [currentUser?.uid, enableGeneralMode]);
 
   const scrollChatToBottom = () => {
     const el = listRef.current;
@@ -1330,7 +1370,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ metricsSnapshot: buildMetricsSnapshot() }),
+        body: JSON.stringify({
+          metricsSnapshot: buildMetricsSnapshot(),
+          ...(isGeneral ? { mode: 'general' } : { mode: 'coach' }),
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -1382,10 +1425,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   const selectChatMode = (mode: CoachChatMode) => {
     if (mode === chatMode || busy) return;
     setChatMode(mode);
+    if (enableGeneralMode) writeStoredAiAgentMode(mode);
     setError(null);
     setVoiceMode(false);
     voiceModeRef.current = false;
     enterDraftConversation();
+    void refreshSessionList({ mode });
   };
 
   /**

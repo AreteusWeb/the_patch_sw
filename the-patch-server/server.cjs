@@ -753,25 +753,27 @@ async function handleCoachApi(req, res) {
     return true;
   }
 
-  // ── Bootstrap active session + messages for the coach panel UI ───────────
-  // Reuses getActiveSession (same idle window as /message) and getRecentMessages.
+  // ── Bootstrap most-recent session + messages for the coach panel UI ──────
+  // ?mode=coach|general (default coach). Missing mode on legacy docs = coach.
   if (req.method === 'GET' && url.pathname === '/api/coach/session') {
     try {
-      const active = await dbProvider.getActiveSession(uid);
-      if (!active) {
+      const mode = url.searchParams.get('mode') === 'general' ? 'general' : 'coach';
+      const recent = await dbProvider.getMostRecentSession(uid, { mode });
+      if (!recent) {
         sendJson(req, res, 200, { session: null });
         return true;
       }
 
       const rawMessages = await dbProvider.getRecentMessages(
         uid,
-        active.sessionId,
+        recent.sessionId,
         MAX_MESSAGES_PER_SESSION
       );
 
       sendJson(req, res, 200, {
         session: {
-          sessionId: active.sessionId,
+          sessionId: recent.sessionId,
+          mode: recent.mode || mode,
           messages: rawMessages.map(toCoachUiMessage),
         },
       });
@@ -785,6 +787,7 @@ async function handleCoachApi(req, res) {
 
   // ── History sidebar: paginated list of past conversations ────────────────
   // Ownership: queries only under users/{uid}/coachSessions.
+  // Optional ?mode=coach|general filters the list to that chat mode.
   if (req.method === 'GET' && url.pathname === '/api/coach/sessions') {
     try {
       const limitRaw = Number.parseInt(url.searchParams.get('limit') || '20', 10);
@@ -793,9 +796,13 @@ async function handleCoachApi(req, res) {
         beforeRaw != null && beforeRaw !== ''
           ? Number.parseInt(beforeRaw, 10)
           : null;
+      const modeParam = url.searchParams.get('mode');
+      const mode =
+        modeParam === 'general' || modeParam === 'coach' ? modeParam : null;
       const result = await dbProvider.listCoachSessions(uid, {
         limit: Number.isFinite(limitRaw) ? limitRaw : 20,
         before: Number.isFinite(before) ? before : null,
+        mode,
       });
       sendJson(req, res, 200, result);
       return true;
@@ -831,6 +838,7 @@ async function handleCoachApi(req, res) {
             closedAt: owned.closedAt,
             summary: owned.summary,
             messageCount: owned.messageCount,
+            mode: owned.mode === 'general' ? 'general' : 'coach',
             messages: rawMessages.map(toCoachUiMessage),
           },
         });
@@ -889,14 +897,16 @@ async function handleCoachApi(req, res) {
     catch (err) { sendJsonBodyError(req, res, err); return true; }
 
     const metricsSnapshot = sanitizeCoachMetricsSnapshot(body.metricsSnapshot);
+    const mode =
+      body.mode === 'general' && isMultiProviderEnabledFor(uid) ? 'general' : 'coach';
 
     try {
-      const active = await dbProvider.getActiveSession(uid);
+      const active = await dbProvider.getActiveSession(uid, { mode });
       if (active) {
         await closeSessionWithSummary(uid, active.sessionId);
       }
-      const session = await dbProvider.createSession(uid, metricsSnapshot);
-      sendJson(req, res, 200, { sessionId: session.sessionId });
+      const session = await dbProvider.createSession(uid, metricsSnapshot, { mode });
+      sendJson(req, res, 200, { sessionId: session.sessionId, mode: session.mode });
       return true;
     } catch (err) {
       console.error('[coach/new-session] error:', err?.stack || err);
@@ -955,9 +965,12 @@ async function handleCoachApi(req, res) {
 
     try {
       let sessionId;
+      const sessionMode = useGeneralAssistant ? 'general' : 'coach';
 
       if (wantsNewSession) {
-        const created = await dbProvider.createSession(uid, metricsSnapshot);
+        const created = await dbProvider.createSession(uid, metricsSnapshot, {
+          mode: sessionMode,
+        });
         sessionId = created.sessionId;
       } else if (explicitSessionId) {
         const owned = await dbProvider.getCoachSession(uid, explicitSessionId);
@@ -971,14 +984,18 @@ async function handleCoachApi(req, res) {
         }
         sessionId = explicitSessionId;
       } else {
-        // Legacy / no open thread in UI: idle-aware active session (unchanged).
-        let session = await dbProvider.getActiveSession(uid);
+        // Legacy / no open thread in UI: idle-aware active session for this mode.
+        let session = await dbProvider.getActiveSession(uid, { mode: sessionMode });
         if (!session) {
-          const expiredSession = await dbProvider.getMostRecentSession(uid);
+          const expiredSession = await dbProvider.getMostRecentSession(uid, {
+            mode: sessionMode,
+          });
           if (expiredSession && !expiredSession.closedAt) {
             await closeSessionWithSummary(uid, expiredSession.sessionId);
           }
-          session = await dbProvider.createSession(uid, metricsSnapshot);
+          session = await dbProvider.createSession(uid, metricsSnapshot, {
+            mode: sessionMode,
+          });
         }
         sessionId = session.sessionId;
       }

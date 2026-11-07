@@ -24,6 +24,7 @@ import LiveCoachSessionView from './LiveCoachSessionView';
 import CoachHistorySidebar, {
   type CoachSessionListItem,
 } from './CoachHistorySidebar';
+import { requestUsageRefresh } from '../UsagePanel';
 
 interface AiCoachPanelProps {
   /** Omit to hide the close button (standalone agent page). */
@@ -40,7 +41,7 @@ interface AiCoachPanelProps {
   noDevice?: boolean;
   /** Shows the Coach / General switch; switching opens a fresh conversation. */
   enableGeneralMode?: boolean;
-  /** General-only Standard / Low cost selector. Sends aiModel with the message. */
+  /** General-only: show DeepSeek (low cost) in the provider selector. */
   enableLowCostModel?: boolean;
   /** Header title (defaults to "AI Coach"). */
   title?: string;
@@ -53,7 +54,32 @@ interface AiCoachPanelProps {
 type CoachInteractionMode = 'text' | 'live';
 
 type CoachChatMode = 'coach' | 'general';
-type GeneralAiModel = 'standard' | 'low';
+/** Canonical General providers (server also accepts aliases standard|low). */
+type GeneralAiModel = 'openai' | 'deepseek' | 'gemini';
+
+const GENERAL_PROVIDER_OPTIONS: ReadonlyArray<{
+  id: GeneralAiModel;
+  label: string;
+  hint: string;
+  requiresLowCost?: boolean;
+}> = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    hint: 'Uses OpenAI via the LiteLLM gateway (default).',
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek (low cost)',
+    hint: 'Uses DeepSeek — cheaper replies; quality may differ.',
+    requiresLowCost: true,
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    hint: 'Uses Google Gemini via the LiteLLM gateway.',
+  },
+];
 
 const AI_AGENT_MODE_KEY = 'aiAgentMode';
 
@@ -906,7 +932,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
     readStoredAiAgentMode(enableGeneralMode)
   );
   const isGeneral = enableGeneralMode && chatMode === 'general';
-  const [generalAiModel, setGeneralAiModel] = useState<GeneralAiModel>('standard');
+  const [generalAiModel, setGeneralAiModel] = useState<GeneralAiModel>('openai');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<CoachChatMessage[]>([]);
@@ -954,8 +980,15 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
   }, [historyOpen, historyInline]);
 
   useEffect(() => {
-    if (!isGeneral || !enableLowCostModel) setModelMenuOpen(false);
-  }, [isGeneral, enableLowCostModel]);
+    if (!isGeneral) setModelMenuOpen(false);
+  }, [isGeneral]);
+
+  // DeepSeek option is gated by the low-cost flag — fall back to OpenAI if hidden.
+  useEffect(() => {
+    if (!enableLowCostModel && generalAiModel === 'deepseek') {
+      setGeneralAiModel('openai');
+    }
+  }, [enableLowCostModel, generalAiModel]);
 
   // Persist Coach/General across reloads. Flag off → always coach.
   useEffect(() => {
@@ -1547,8 +1580,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           // so the server appends to that doc instead of idle auto-pick.
           ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
           ...(startsNewSession ? { newSession: true } : {}),
-          ...(isGeneral ? { mode: 'general' } : {}),
-          ...(isGeneral && enableLowCostModel ? { aiModel: generalAiModel } : {}),
+          ...(isGeneral ? { mode: 'general', aiModel: generalAiModel } : {}),
         }),
       });
 
@@ -1579,6 +1611,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           setVoiceMode(false);
           voiceModeRef.current = false;
           return;
+        }
+
+        if (isGeneral && data?.error === 'quota_exceeded') {
+          requestUsageRefresh();
         }
 
         const msg =
@@ -1749,6 +1785,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
       ]);
 
       void refreshSessionList();
+      if (isGeneral) requestUsageRefresh();
 
       if (voiceModeRef.current) {
         const started = speak(replyText);
@@ -2321,7 +2358,17 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   : 'gap-2.5'
               )}
             >
-              {isGeneral && enableLowCostModel && (
+              {!isGeneral && (
+                <div
+                  className="h-11 px-2.5 rounded-2xl inline-flex items-center shrink-0 bg-black border border-white/10"
+                  title="Coach uses Google Gemini"
+                >
+                  <span className="text-[12px] font-semibold text-[#A0A0A8] leading-none">
+                    Gemini
+                  </span>
+                </div>
+              )}
+              {isGeneral && (
                 <div
                   ref={modelMenuRef}
                   className="relative shrink-0"
@@ -2331,7 +2378,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                     disabled={busy}
                     aria-haspopup="listbox"
                     aria-expanded={modelMenuOpen}
-                    aria-label="Select model"
+                    aria-label="Select AI provider"
                     onClick={() => setModelMenuOpen((open) => !open)}
                     className={cn(
                       'h-11 min-w-[6.5rem] px-2.5 rounded-2xl inline-flex items-center justify-center gap-1',
@@ -2342,8 +2389,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                       modelMenuOpen && 'border-teal-400/60'
                     )}
                   >
-                    <span className="text-[12px] font-semibold text-[#F5F5F5] leading-none">
-                      {generalAiModel === 'low' ? 'Low' : 'Standard'}
+                    <span className="text-[12px] font-semibold text-[#F5F5F5] leading-none truncate max-w-[7.5rem]">
+                      {GENERAL_PROVIDER_OPTIONS.find((o) => o.id === generalAiModel)?.label
+                        ?? 'OpenAI'}
                     </span>
                     <ChevronDown
                       size={12}
@@ -2357,13 +2405,12 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   {modelMenuOpen && (
                     <ul
                       role="listbox"
-                      aria-label="Model"
-                      className="absolute bottom-full left-0 mb-1.5 z-40 min-w-full py-1 rounded-xl bg-black border border-teal-500/30 shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
+                      aria-label="AI provider"
+                      className="absolute bottom-full left-0 mb-1.5 z-40 w-56 py-1 rounded-xl bg-black border border-teal-500/30 shadow-[0_12px_32px_rgba(0,0,0,0.65)]"
                     >
-                      {([
-                        { id: 'standard', label: 'Standard' },
-                        { id: 'low', label: 'Low' },
-                      ] as const).map((opt) => {
+                      {GENERAL_PROVIDER_OPTIONS.filter(
+                        (opt) => !opt.requiresLowCost || enableLowCostModel
+                      ).map((opt) => {
                         const selected = generalAiModel === opt.id;
                         return (
                           <li key={opt.id} role="none">
@@ -2376,13 +2423,18 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                                 setModelMenuOpen(false);
                               }}
                               className={cn(
-                                'w-full text-left px-3 py-2 text-[12px] font-medium transition-colors',
+                                'w-full text-left px-3 py-2 transition-colors',
                                 selected
                                   ? 'bg-teal-500/15 text-teal-200'
                                   : 'text-[#F5F5F5] hover:bg-white/5 hover:text-teal-200'
                               )}
                             >
-                              {opt.label}
+                              <span className="block text-[12px] font-medium leading-tight">
+                                {opt.label}
+                              </span>
+                              <span className="block text-[9px] text-[#6B7280] leading-snug mt-0.5">
+                                {opt.hint}
+                              </span>
                             </button>
                           </li>
                         );
@@ -2500,9 +2552,10 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                 <Send size={16} strokeWidth={2.5} />
               </button>
             </div>
-            {isGeneral && enableLowCostModel && generalAiModel === 'low' && (
+            {isGeneral && (
               <p className={cn('text-[9px] text-[#6B7280] leading-snug mt-1.5', isPage && 'px-2')}>
-                Low uses an external provider. Replies may differ from Standard.
+                {GENERAL_PROVIDER_OPTIONS.find((o) => o.id === generalAiModel)?.hint
+                  ?? GENERAL_PROVIDER_OPTIONS[0].hint}
               </p>
             )}
           </div>

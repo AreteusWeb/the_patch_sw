@@ -36,8 +36,8 @@ export const STANDALONE_AGENT_ENABLED =
 export const GENERAL_MODE_ENABLED =
   import.meta.env.VITE_ENABLE_GENERAL_MODE === 'true';
 
-// General-mode "Standard / Low cost" selector. Off unless explicitly enabled.
-// Low cost also needs DEEPSEEK_ENABLED=true on the server or the API returns 400.
+// General-mode "DeepSeek (low cost)" option in the provider selector.
+// Off unless explicitly enabled. Also needs DEEPSEEK_ENABLED=true on the server.
 export const LOW_COST_MODEL_ENABLED =
   import.meta.env.VITE_ENABLE_LOW_COST_MODEL === 'true';
 

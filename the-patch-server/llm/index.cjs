@@ -6,7 +6,9 @@
  * - One retry on 429 / 5xx / timeout, then fallback:
  *     LLM_USE_LITELLM off → the other provider (same tier), unchanged.
  *     LLM_USE_LITELLM on  → LiteLLM first, then the direct adapter for the same logical provider.
- *     aiModel='low' (DEEPSEEK_ENABLED) → LiteLLM general-deepseek, then OpenAI economy.
+ *     aiModel='low'|'deepseek' (DEEPSEEK_ENABLED) → LiteLLM general-deepseek, then OpenAI economy.
+ *     aiModel='gemini' → LiteLLM general-gemini (reasoning_effort none), then direct gemini.
+ *     aiModel='openai'|'standard' → LiteLLM general-openai / OpenAI economy.
  *   Any other error (400, auth, missing config) is thrown without fallback.
  *   LiteLLM 422 budget_exceeded → code 'quota_exceeded' (no retry, no fallback).
  * - Overall deadline (LLM_DEADLINE_MS, default 30 s) across all attempts; a timed-out
@@ -15,7 +17,7 @@
  */
 const {
   MODELS, PRICES, MODEL_PRICES, TIMEOUT_MS, DEADLINE_MS, OTHER, USE_LITELLM,
-  DEEPSEEK_ENABLED, resolveLitellmUpstream,
+  DEEPSEEK_ENABLED, normalizeGeneralAiModel, resolveLitellmUpstream,
 } = require('./config.cjs');
 const { route } = require('./router.cjs');
 
@@ -231,27 +233,80 @@ async function tryProvider(provider, tier, args, state) {
  * the direct adapter for the routed provider (openai/gemini). Flag off: unchanged.
  */
 function resolveProviders(args, messages) {
-  if (args.aiModel === 'low') {
-    if (!DEEPSEEK_ENABLED) {
-      const e = new Error('aiModel "low" is not enabled (set DEEPSEEK_ENABLED=true)');
+  // Explicit General provider choice (openai|deepseek|gemini; aliases standard|low).
+  if (args.aiModel != null && args.aiModel !== '') {
+    const choice = normalizeGeneralAiModel(args.aiModel);
+    if (!choice) {
+      const e = new Error('aiModel must be "openai", "deepseek", or "gemini"');
       e.status = 400;
-      e.code = 'ai_model_unavailable';
+      e.code = 'invalid_ai_model';
       throw e;
     }
-    if (!USE_LITELLM || !(MODELS.litellm && MODELS.litellm.low)) {
-      const e = new Error('aiModel "low" requires LiteLLM (LLM_USE_LITELLM and alias general-deepseek)');
-      e.status = 400;
-      e.code = 'ai_model_unavailable';
-      throw e;
+
+    if (choice === 'deepseek') {
+      if (!DEEPSEEK_ENABLED) {
+        const e = new Error('aiModel "deepseek" is not enabled (set DEEPSEEK_ENABLED=true)');
+        e.status = 400;
+        e.code = 'ai_model_unavailable';
+        throw e;
+      }
+      if (!USE_LITELLM || !(MODELS.litellm && MODELS.litellm.low)) {
+        const e = new Error(
+          'aiModel "deepseek" requires LiteLLM (LLM_USE_LITELLM and alias general-deepseek)'
+        );
+        e.status = 400;
+        e.code = 'ai_model_unavailable';
+        throw e;
+      }
+      // DeepSeek / low = LiteLLM general-deepseek; 429/5xx/timeout → OpenAI economy.
+      return {
+        primary: 'litellm',
+        fallback: 'openai',
+        fallbackTier: 'economy',
+        tier: 'low',
+        reason: 'mode=general+aiModel=deepseek',
+        underlying: 'deepseek',
+      };
     }
-    // Low = LiteLLM general-deepseek; 429/5xx/timeout fall back to standard OpenAI.
+
+    if (choice === 'gemini') {
+      // LiteLLM general-gemini (adapter sets reasoning_effort none); fallback direct gemini.
+      if (USE_LITELLM && MODELS.litellm && MODELS.litellm.mid) {
+        return {
+          primary: 'litellm',
+          fallback: 'gemini',
+          fallbackTier: 'mid',
+          tier: 'mid',
+          reason: 'mode=general+aiModel=gemini',
+          underlying: 'gemini',
+        };
+      }
+      return {
+        primary: 'gemini',
+        fallback: OTHER.gemini || null,
+        tier: 'mid',
+        reason: 'mode=general+aiModel=gemini',
+        underlying: 'gemini',
+      };
+    }
+
+    // choice === 'openai' (includes alias 'standard')
+    if (USE_LITELLM && MODELS.litellm && MODELS.litellm.economy) {
+      return {
+        primary: 'litellm',
+        fallback: 'openai',
+        fallbackTier: 'economy',
+        tier: 'economy',
+        reason: 'mode=general+aiModel=openai',
+        underlying: 'openai',
+      };
+    }
     return {
-      primary: 'litellm',
-      fallback: 'openai',
-      fallbackTier: 'economy',
-      tier: 'low',
-      reason: 'mode=general+aiModel=low',
-      underlying: 'deepseek',
+      primary: 'openai',
+      fallback: OTHER.openai || null,
+      tier: 'economy',
+      reason: 'mode=general+aiModel=openai',
+      underlying: 'openai',
     };
   }
 

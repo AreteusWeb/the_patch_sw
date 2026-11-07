@@ -13,9 +13,25 @@ function env(name, fallback = null) {
 const USE_LITELLM =
   String(process.env.LLM_USE_LITELLM || '').trim().toLowerCase() === 'true';
 
-/** Opt-in: General aiModel='low' (LiteLLM alias general-deepseek). Off by default. */
+/** Opt-in: General aiModel='low'|'deepseek' (LiteLLM alias general-deepseek). Off by default. */
 const DEEPSEEK_ENABLED =
   String(process.env.DEEPSEEK_ENABLED || '').trim().toLowerCase() === 'true';
+
+/**
+ * Accepted aiModel values for mode=general (client may send aliases).
+ * Canonical: openai | deepseek | gemini. Aliases: standard→openai, low→deepseek.
+ */
+const GENERAL_AI_MODELS = ['openai', 'deepseek', 'gemini', 'standard', 'low'];
+
+/** Map raw aiModel → canonical provider choice. Unknown → null. Empty/omit → 'openai'. */
+function normalizeGeneralAiModel(raw) {
+  if (raw == null || raw === '') return 'openai';
+  const key = String(raw).trim().toLowerCase();
+  if (key === 'openai' || key === 'standard') return 'openai';
+  if (key === 'deepseek' || key === 'low') return 'deepseek';
+  if (key === 'gemini') return 'gemini';
+  return null;
+}
 
 const MODELS = {
   gemini: {
@@ -187,6 +203,8 @@ module.exports = {
   OTHER,
   USE_LITELLM,
   DEEPSEEK_ENABLED,
+  GENERAL_AI_MODELS,
+  normalizeGeneralAiModel,
   PLAN_BUDGETS,
   BUDGET_DURATION,
   LITELLM_ALIAS_TO_MODEL,

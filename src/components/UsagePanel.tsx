@@ -1,8 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { API_BASE } from '../lib/appConfig';
 import { cn } from '../utils/cn';
+
+/** AiCoachPanel dispatches this after a General reply / quota_exceeded so UsagePanel refetches. */
+export const USAGE_REFRESH_EVENT = 'the-patch:usage-refresh';
+
+export function requestUsageRefresh() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(USAGE_REFRESH_EVENT));
+}
 
 type UsageBucket = {
   costUsd: number;
@@ -47,16 +55,17 @@ export default function UsagePanel({ className }: { className?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  const fetchUsage = useCallback(
+    async (opts?: { silent?: boolean }) => {
       if (!currentUser || typeof currentUser.getIdToken !== 'function') {
         setLoading(false);
         setError('Sign in required');
         return;
       }
-      setLoading(true);
-      setError(null);
+      if (!opts?.silent) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         const token = await currentUser.getIdToken();
         const res = await fetch(`${API_BASE}/api/usage`, {
@@ -70,20 +79,36 @@ export default function UsagePanel({ className }: { className?: string }) {
               : 'Could not load usage'
           );
         }
-        if (!cancelled) setData(body as UsageResponse);
+        setData(body as UsageResponse);
+        setError(null);
       } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Could not load usage');
-          setData(null);
-        }
+        setError(e instanceof Error ? e.message : 'Could not load usage');
+        if (!opts?.silent) setData(null);
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
+    },
+    [currentUser]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchUsage();
     })();
     return () => {
       cancelled = true;
     };
-  }, [currentUser]);
+  }, [fetchUsage]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void fetchUsage({ silent: true });
+    };
+    window.addEventListener(USAGE_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(USAGE_REFRESH_EVENT, onRefresh);
+  }, [fetchUsage]);
 
   const spent = data?.total?.costUsd ?? 0;
   const limit = data?.limitUsd;

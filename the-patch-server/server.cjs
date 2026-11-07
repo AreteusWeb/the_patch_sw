@@ -65,9 +65,11 @@ const COACH_MULTI_PROVIDER_UIDS = new Set(
 
 /** Input cap for mode='general' (paid per token; the coach path has no cap today). */
 const GENERAL_ASSISTANT_MAX_MESSAGE_CHARS = 8000;
-const GENERAL_AI_MODELS = ['standard', 'low'];
-const DEEPSEEK_ENABLED =
-  String(process.env.DEEPSEEK_ENABLED || '').trim().toLowerCase() === 'true';
+const {
+  GENERAL_AI_MODELS,
+  normalizeGeneralAiModel,
+  DEEPSEEK_ENABLED,
+} = require('./llm/config.cjs');
 
 function isMultiProviderEnabledFor(uid) {
   return COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.has(uid);
@@ -944,17 +946,26 @@ async function handleCoachApi(req, res) {
       return true;
     }
 
-    let generalAiModel = 'standard';
+    // Canonical: openai | deepseek | gemini. Aliases: standard→openai, low→deepseek.
+    let generalAiModel = 'openai';
     if (useGeneralAssistant && body.aiModel != null && body.aiModel !== '') {
       if (typeof body.aiModel !== 'string' || !GENERAL_AI_MODELS.includes(body.aiModel)) {
         sendJson(req, res, 400, {
           error: 'invalid_ai_model',
-          message: 'aiModel must be "standard" or "low".',
+          message: 'aiModel must be "openai", "deepseek", or "gemini".',
         });
         return true;
       }
-      generalAiModel = body.aiModel;
-      if (generalAiModel === 'low' && !DEEPSEEK_ENABLED) {
+      const normalized = normalizeGeneralAiModel(body.aiModel);
+      if (!normalized) {
+        sendJson(req, res, 400, {
+          error: 'invalid_ai_model',
+          message: 'aiModel must be "openai", "deepseek", or "gemini".',
+        });
+        return true;
+      }
+      generalAiModel = normalized;
+      if (generalAiModel === 'deepseek' && !DEEPSEEK_ENABLED) {
         sendJson(req, res, 400, {
           error: 'ai_model_unavailable',
           message: 'Low cost model is not enabled.',
@@ -1045,7 +1056,7 @@ async function handleCoachApi(req, res) {
         }
         const llmReply = await getLlm().generate({
           mode: 'general',
-          ...(generalAiModel === 'low' ? { aiModel: 'low' } : {}),
+          aiModel: generalAiModel,
           system: GENERAL_ASSISTANT_SYSTEM_PROMPT,
           messages: [
             ...history
@@ -1064,7 +1075,7 @@ async function handleCoachApi(req, res) {
         const replyText =
           llmReply.text || 'I could not generate a reply right now. Try again in a moment.';
 
-        // Aggregate spend/tokens only (never message text). Failures must not break chat.
+        // Await usage write BEFORE the HTTP response. Failures must not break chat.
         try {
           const {
             periodStartKey,

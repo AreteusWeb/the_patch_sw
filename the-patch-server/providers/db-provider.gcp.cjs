@@ -53,25 +53,37 @@ function usageDocRef(uid, periodStart) {
 /**
  * Atomically add cost/tokens for one General-mode LLM call.
  * Does not store message content. costUsd skipped when null.
+ *
+ * Writes nested maps (total: { costUsd }, openai: { … }) via set+merge.
+ * Avoid dotted string keys in set() — Firestore stores those as literal
+ * "total.costUsd" fields, which normalizeUsageDoc would miss.
  */
 async function incrementLlmUsage(uid, periodStart, { provider, costUsd, inputTokens, outputTokens }) {
   const p = String(provider || 'openai');
   const inTok = Math.max(0, Number(inputTokens) || 0);
   const outTok = Math.max(0, Number(outputTokens) || 0);
-  const updates = {
-    periodStart: String(periodStart),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    [`${p}.inputTokens`]: admin.firestore.FieldValue.increment(inTok),
-    [`${p}.outputTokens`]: admin.firestore.FieldValue.increment(outTok),
-    'total.inputTokens': admin.firestore.FieldValue.increment(inTok),
-    'total.outputTokens': admin.firestore.FieldValue.increment(outTok),
+  const providerBucket = {
+    inputTokens: admin.firestore.FieldValue.increment(inTok),
+    outputTokens: admin.firestore.FieldValue.increment(outTok),
+  };
+  const totalBucket = {
+    inputTokens: admin.firestore.FieldValue.increment(inTok),
+    outputTokens: admin.firestore.FieldValue.increment(outTok),
   };
   if (costUsd != null && Number.isFinite(Number(costUsd))) {
     const c = Number(costUsd);
-    updates[`${p}.costUsd`] = admin.firestore.FieldValue.increment(c);
-    updates['total.costUsd'] = admin.firestore.FieldValue.increment(c);
+    providerBucket.costUsd = admin.firestore.FieldValue.increment(c);
+    totalBucket.costUsd = admin.firestore.FieldValue.increment(c);
   }
-  await usageDocRef(uid, periodStart).set(updates, { merge: true });
+  await usageDocRef(uid, periodStart).set(
+    {
+      periodStart: String(periodStart),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      [p]: providerBucket,
+      total: totalBucket,
+    },
+    { merge: true }
+  );
 }
 
 async function getLlmUsage(uid, periodStart) {

@@ -59,6 +59,54 @@ const db = require('../providers/db-provider.local.cjs');
   assert.strictEqual(raw.message, undefined);
   assert.strictEqual(raw.text, undefined);
 
+  // Nested shape (correct set+merge maps) — what local db and fixed gcp write.
+  const nestedDoc = {
+    periodStart: key,
+    total: { costUsd: 1.25, inputTokens: 900, outputTokens: 100 },
+    openai: { costUsd: 1.0, inputTokens: 700, outputTokens: 80 },
+    gemini: { costUsd: 0.25, inputTokens: 200, outputTokens: 20 },
+    deepseek: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+  };
+  let n = usage.normalizeUsageDoc(nestedDoc);
+  assert.ok(Math.abs(n.total.costUsd - 1.25) < 1e-12);
+  assert.strictEqual(n.total.inputTokens, 900);
+  assert.ok(Math.abs(n.byProvider.openai.costUsd - 1.0) < 1e-12);
+  assert.ok(Math.abs(n.byProvider.gemini.costUsd - 0.25) < 1e-12);
+
+  // Flat dotted keys — what Firestore set({'total.costUsd': n}) stored before the fix.
+  const flatDoc = {
+    periodStart: key,
+    'total.costUsd': 2.5,
+    'total.inputTokens': 400,
+    'total.outputTokens': 50,
+    'deepseek.costUsd': 2.5,
+    'deepseek.inputTokens': 400,
+    'deepseek.outputTokens': 50,
+    'openai.costUsd': 0,
+    'openai.inputTokens': 0,
+    'openai.outputTokens': 0,
+    'gemini.costUsd': 0,
+    'gemini.inputTokens': 0,
+    'gemini.outputTokens': 0,
+  };
+  n = usage.normalizeUsageDoc(flatDoc);
+  assert.ok(Math.abs(n.total.costUsd - 2.5) < 1e-12);
+  assert.strictEqual(n.total.inputTokens, 400);
+  assert.strictEqual(n.total.outputTokens, 50);
+  assert.ok(Math.abs(n.byProvider.deepseek.costUsd - 2.5) < 1e-12);
+  assert.strictEqual(n.byProvider.deepseek.inputTokens, 400);
+  assert.strictEqual(n.byProvider.openai.costUsd, 0);
+
+  // Nested wins when both shapes are present for the same field.
+  n = usage.normalizeUsageDoc({
+    total: { costUsd: 9 },
+    'total.costUsd': 1,
+    openai: { inputTokens: 11 },
+    'openai.inputTokens': 99,
+  });
+  assert.strictEqual(n.total.costUsd, 9);
+  assert.strictEqual(n.byProvider.openai.inputTokens, 11);
+
   console.log('ALL USAGE MOCK TESTS PASSED');
 })().catch((e) => {
   console.error('FAILED', e);

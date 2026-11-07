@@ -64,19 +64,39 @@ function emptyBucket() {
   return { costUsd: 0, inputTokens: 0, outputTokens: 0 };
 }
 
-function normalizeUsageDoc(data) {
-  const total = {
-    costUsd: Number(data?.total?.costUsd) || 0,
-    inputTokens: Number(data?.total?.inputTokens) || 0,
-    outputTokens: Number(data?.total?.outputTokens) || 0,
+/**
+ * Read one numeric field from a usage doc.
+ * Prefer nested maps (total.costUsd → data.total.costUsd); fall back to flat
+ * dotted keys as Firestore set({'total.costUsd': n}) used to store them.
+ */
+function readUsageField(data, prefix, field) {
+  if (!data || typeof data !== 'object') return 0;
+  const nested = data[prefix];
+  if (nested && typeof nested === 'object' && !Array.isArray(nested) && nested[field] != null) {
+    const n = Number(nested[field]);
+    return Number.isFinite(n) ? n : 0;
+  }
+  const flat = data[`${prefix}.${field}`];
+  if (flat != null) {
+    const n = Number(flat);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function readUsageBucket(data, prefix) {
+  return {
+    costUsd: readUsageField(data, prefix, 'costUsd'),
+    inputTokens: readUsageField(data, prefix, 'inputTokens'),
+    outputTokens: readUsageField(data, prefix, 'outputTokens'),
   };
+}
+
+function normalizeUsageDoc(data) {
+  const total = readUsageBucket(data, 'total');
   const byProvider = {};
   for (const p of PROVIDERS) {
-    byProvider[p] = {
-      costUsd: Number(data?.[p]?.costUsd) || 0,
-      inputTokens: Number(data?.[p]?.inputTokens) || 0,
-      outputTokens: Number(data?.[p]?.outputTokens) || 0,
-    };
+    byProvider[p] = readUsageBucket(data, p);
   }
   return { total, byProvider };
 }
@@ -88,5 +108,7 @@ module.exports = {
   planLimitUsd,
   billableProvider,
   emptyBucket,
+  readUsageField,
+  readUsageBucket,
   normalizeUsageDoc,
 };

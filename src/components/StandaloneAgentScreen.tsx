@@ -88,11 +88,7 @@ export default function StandaloneAgentScreen() {
         <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[900px] h-[600px] bg-teal-900/15 blur-[140px] rounded-full" />
       </div>
 
-      {USAGE_PANEL_ENABLED && (
-        <div className="relative flex-shrink-0 px-3 sm:px-5 pt-2">
-          <UsagePanel className="max-w-3xl mx-auto" />
-        </div>
-      )}
+      {USAGE_PANEL_ENABLED && <UsagePanel />}
 
       <main className="relative flex-1 min-h-0">
         <AiCoachPanel

@@ -30,6 +30,12 @@ export const DEV_SHOW_ANY_DEVICE =
 export const STANDALONE_AGENT_ENABLED =
   import.meta.env.VITE_ENABLE_STANDALONE_AGENT === 'true';
 
+// AI-first home: after login, open the standalone agent instead of My Devices
+// when no device is selected this session. Requires STANDALONE_AGENT_ENABLED.
+// Off unless explicitly enabled — default flow stays My Devices.
+export const AI_FIRST_HOME =
+  import.meta.env.VITE_AI_FIRST_HOME === 'true';
+
 // Coach / General switch in the standalone agent. General replies only when
 // the server also has COACH_MULTI_PROVIDER on for this user; otherwise the
 // server silently answers with the health coach.

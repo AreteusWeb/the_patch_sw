@@ -14,7 +14,11 @@ import DesktopApp from './components/desktop/DesktopApp';
 import DeviceSelectionScreen from './components/DeviceSelectionScreen';
 import LiveCoachPOC from './pages/LiveCoachPOC';
 import StandaloneAgentScreen from './components/StandaloneAgentScreen';
-import { DEV_SHOW_ANY_DEVICE, STANDALONE_AGENT_ENABLED } from './lib/appConfig';
+import {
+  AI_FIRST_HOME,
+  DEV_SHOW_ANY_DEVICE,
+  STANDALONE_AGENT_ENABLED,
+} from './lib/appConfig';
 import PwaUpdateBanner from './components/PwaUpdateBanner';
 
 /**
@@ -33,12 +37,22 @@ export default function App() {
   const authLoading = useStore(s => s.authLoading);
   const isDeviceSelected = useStore(s => s.isDeviceSelected);
   const standaloneAgentActive = useStore(s => s.standaloneAgentActive);
+  const suppressAiFirstHome = useStore(s => s.suppressAiFirstHome);
   useFirestore();
 
   const isDesktop = useIsDesktop();
   const isLivePoc =
     typeof window !== 'undefined' &&
     window.location.pathname.replace(/\/$/, '') === '/live-coach-poc';
+
+  // AI-first home (VITE_AI_FIRST_HOME): open the agent instead of My Devices when
+  // no device is selected. Requires STANDALONE_AGENT. Off → exact legacy gate.
+  // suppressAiFirstHome is set when the user taps Connect Patch (session only).
+  const openStandaloneAgent =
+    STANDALONE_AGENT_ENABLED &&
+    !isDeviceSelected &&
+    (standaloneAgentActive ||
+      (AI_FIRST_HOME && !suppressAiFirstHome && !DEV_SHOW_ANY_DEVICE));
 
   let body: React.ReactNode;
 
@@ -63,8 +77,8 @@ export default function App() {
   } else if (isLivePoc) {
     // Isolated Live POC — skip device selection / dashboard entirely.
     body = <LiveCoachPOC />;
-  } else if (STANDALONE_AGENT_ENABLED && standaloneAgentActive && !isDeviceSelected) {
-    // Chosen from "My Devices" for this page load only (not persisted).
+  } else if (openStandaloneAgent) {
+    // Chosen from "My Devices", or AI-first home (flag on) for this page load.
     body = <StandaloneAgentScreen />;
   } else if (!isDeviceSelected && !DEV_SHOW_ANY_DEVICE) {
     body = <DeviceSelectionScreen />;

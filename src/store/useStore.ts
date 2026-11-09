@@ -71,6 +71,11 @@ interface AuthState {
   /** User chose the AI agent without a device. In-memory only — never persisted. */
   standaloneAgentActive: boolean;
   /**
+   * Session-only: user left the AI-first home for My Devices (Connect Patch).
+   * Prevents VITE_AI_FIRST_HOME from reopening the agent until next login.
+   */
+  suppressAiFirstHome: boolean;
+  /**
    * users/{uid}.createdAt — account creation, used as the only available
    * monitoring start until a real session.startDate exists.
    */
@@ -87,6 +92,7 @@ interface AuthActions {
   setAuthLoading: (loading: boolean) => void;
   setIsDeviceSelected: (selected: boolean) => void;
   setStandaloneAgentActive: (active: boolean) => void;
+  setSuppressAiFirstHome: (suppress: boolean) => void;
   setAccountCreatedAt: (ms: number | null) => void;
   setBodyWeightKg: (kg: number | null) => void;
 }
@@ -207,6 +213,7 @@ const useStore = create<
   authLoading: true,
   isDeviceSelected: false,
   standaloneAgentActive: false,
+  suppressAiFirstHome: false,
 
   // ── Base Actions ───────────────────────────────────────────────────────────
 
@@ -365,6 +372,7 @@ const useStore = create<
         ? {
             isDeviceSelected: false,
             standaloneAgentActive: false,
+            suppressAiFirstHome: false,
             deviceMac: null,
             accountCreatedAt: null,
             bodyWeightKg: null,
@@ -388,7 +396,14 @@ const useStore = create<
     set({ isDeviceSelected: selected }),
 
   setStandaloneAgentActive: (active) =>
-    set({ standaloneAgentActive: active }),
+    set({
+      standaloneAgentActive: active,
+      // Leaving the agent for My Devices — don't auto-reopen AI-first this session.
+      ...(active === false ? { suppressAiFirstHome: true } : {}),
+    }),
+
+  setSuppressAiFirstHome: (suppress) =>
+    set({ suppressAiFirstHome: suppress }),
 
   setActivityType: (type) =>
     set((state) => ({

@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "main": "server.cjs",
   "scripts": {
-    "start": "node server.cjs"
+    "start": "node server.cjs",
+    "test:email": "node --test email/*.test.cjs"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.12.0",
     "@google/genai": "^2.16.0",
     "dotenv": "^17.4.2",
     "firebase-admin": "^13.10.0",
+    "imapflow": "^2.11.0",
     "openai": "^6.49.0",
     "ws": "^8.20.1"
   },

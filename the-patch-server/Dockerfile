@@ -8,5 +8,6 @@ COPY server.cjs .
 COPY providers ./providers
 COPY llm ./llm
 COPY prompts ./prompts
+COPY email ./email
 EXPOSE 8080
 CMD ["node", "server.cjs"]

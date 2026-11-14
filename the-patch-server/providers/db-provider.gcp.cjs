@@ -638,6 +638,36 @@ async function getRecentAlerts(uid, { limit = 10 } = {}) {
   });
 }
 
+function emailAccountRef(uid) {
+  return db.collection('users').doc(uid).collection('emailAccounts').doc('primary');
+}
+
+function emailMonitorSettingsRef(uid) {
+  return db.collection('users').doc(uid).collection('emailMonitor').doc('settings');
+}
+
+async function getEmailAccount(uid) {
+  const snap = await emailAccountRef(uid).get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function setEmailAccount(uid, data) {
+  await emailAccountRef(uid).set(data || {}, { merge: false });
+}
+
+async function deleteEmailAccount(uid) {
+  await emailAccountRef(uid).delete();
+}
+
+async function getEmailMonitorSettings(uid) {
+  const snap = await emailMonitorSettingsRef(uid).get();
+  return snap.exists ? snap.data() : null;
+}
+
+async function setEmailMonitorSettings(uid, data) {
+  await emailMonitorSettingsRef(uid).set(data || {}, { merge: true });
+}
+
 module.exports = {
   getDevicesByOwner,
   getDeviceByMac,
@@ -664,4 +694,9 @@ module.exports = {
   getMetricTrend,
   getRecentAlerts,
   isNotFoundError,
+  getEmailAccount,
+  setEmailAccount,
+  deleteEmailAccount,
+  getEmailMonitorSettings,
+  setEmailMonitorSettings,
 };

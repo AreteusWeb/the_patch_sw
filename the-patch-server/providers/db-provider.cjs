@@ -45,4 +45,9 @@ module.exports = {
   getMetricTrend: impl.getMetricTrend,
   getRecentAlerts: impl.getRecentAlerts,
   isNotFoundError: impl.isNotFoundError,
+  getEmailAccount: impl.getEmailAccount,
+  setEmailAccount: impl.setEmailAccount,
+  deleteEmailAccount: impl.deleteEmailAccount,
+  getEmailMonitorSettings: impl.getEmailMonitorSettings,
+  setEmailMonitorSettings: impl.setEmailMonitorSettings,
 };

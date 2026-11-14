@@ -49,3 +49,17 @@ describe('matchKeywords', () => {
     );
   });
 });
+
+describe('validateKeywords', () => {
+  const { validateKeywords } = require('./keywordMatcher.cjs');
+
+  it('accepts trimmed unique keywords', () => {
+    const r = validateKeywords(['  ok  ', 'bien']);
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.keywords, ['ok', 'bien']);
+  });
+
+  it('rejects duplicates after accent normalize', () => {
+    assert.equal(validateKeywords(['niño', 'NINO']).ok, false);
+  });
+});

@@ -35,7 +35,62 @@ function matchKeywords(message, keywords) {
   return hits;
 }
 
+const { KEYWORD_LIMITS } = require('./config.cjs');
+
+/**
+ * Validate + normalize a keywords array for storage.
+ * @param {unknown} raw
+ * @returns {{ ok: true, keywords: string[] } | { ok: false, error: string, message: string }}
+ */
+function validateKeywords(raw) {
+  if (!Array.isArray(raw)) {
+    return {
+      ok: false,
+      error: 'invalid_keywords',
+      message: 'keywords must be an array of strings',
+    };
+  }
+  if (raw.length > KEYWORD_LIMITS.maxCount) {
+    return {
+      ok: false,
+      error: 'invalid_keywords',
+      message: `At most ${KEYWORD_LIMITS.maxCount} keywords allowed`,
+    };
+  }
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    if (typeof item !== 'string') {
+      return {
+        ok: false,
+        error: 'invalid_keywords',
+        message: 'Each keyword must be a string',
+      };
+    }
+    const trimmed = item.trim();
+    if (trimmed.length < KEYWORD_LIMITS.minLen || trimmed.length > KEYWORD_LIMITS.maxLen) {
+      return {
+        ok: false,
+        error: 'invalid_keywords',
+        message: `Each keyword must be ${KEYWORD_LIMITS.minLen}-${KEYWORD_LIMITS.maxLen} characters`,
+      };
+    }
+    const norm = normalizeText(trimmed);
+    if (seen.has(norm)) {
+      return {
+        ok: false,
+        error: 'invalid_keywords',
+        message: 'Duplicate keywords are not allowed',
+      };
+    }
+    seen.add(norm);
+    out.push(trimmed);
+  }
+  return { ok: true, keywords: out };
+}
+
 module.exports = {
   normalizeText,
   matchKeywords,
+  validateKeywords,
 };

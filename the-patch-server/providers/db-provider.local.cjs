@@ -508,6 +508,39 @@ async function getRecentAlerts(_uid, { limit: _limit = 10 } = {}) {
   return [];
 }
 
+/** users/{uid}/emailAccounts/primary — in-memory */
+const emailAccountsByUid = new Map();
+/** users/{uid}/emailMonitor/settings — in-memory */
+const emailMonitorSettingsByUid = new Map();
+
+async function getEmailAccount(uid) {
+  const doc = emailAccountsByUid.get(uid);
+  return doc ? { ...doc } : null;
+}
+
+async function setEmailAccount(uid, data) {
+  emailAccountsByUid.set(uid, { ...(data || {}) });
+}
+
+async function deleteEmailAccount(uid) {
+  emailAccountsByUid.delete(uid);
+}
+
+async function getEmailMonitorSettings(uid) {
+  const doc = emailMonitorSettingsByUid.get(uid);
+  return doc ? { ...doc } : null;
+}
+
+async function setEmailMonitorSettings(uid, data) {
+  emailMonitorSettingsByUid.set(uid, { ...(data || {}) });
+}
+
+/** Test helper — clear email docs. */
+function _resetEmailStore() {
+  emailAccountsByUid.clear();
+  emailMonitorSettingsByUid.clear();
+}
+
 module.exports = {
   getDevicesByOwner,
   getDeviceByMac,
@@ -534,4 +567,10 @@ module.exports = {
   getMetricTrend,
   getRecentAlerts,
   isNotFoundError,
+  getEmailAccount,
+  setEmailAccount,
+  deleteEmailAccount,
+  getEmailMonitorSettings,
+  setEmailMonitorSettings,
+  _resetEmailStore,
 };

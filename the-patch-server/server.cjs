@@ -150,6 +150,17 @@ if (COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.size > 0) {
   );
 }
 
+// Email monitor API (/api/email/*) — off by default; routes loaded lazily when on.
+const EMAIL_MONITOR_ENABLED =
+  String(process.env.EMAIL_MONITOR_ENABLED || '').trim().toLowerCase() === 'true';
+let emailApiHandler = null;
+if (EMAIL_MONITOR_ENABLED) {
+  const { EMAIL_MONITOR_UIDS } = require('./email/config.cjs');
+  console.log(
+    `[BOOT] Email monitor API enabled for ${EMAIL_MONITOR_UIDS.size} allowlisted uid(s)`
+  );
+}
+
 /**
  * Cap for JSON request bodies (coach message / new-session / insights, devices,
  * OTA trigger). Real payloads are a chat message plus a <1 KB metrics snapshot,
@@ -314,7 +325,7 @@ async function verifyAuthHeader(req) {
  */
 function corsHeaders(req) {
   const headers = {
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
   const origin = req?.headers?.origin;
@@ -1498,6 +1509,25 @@ async function handleCoachApi(req, res) {
   return true;
 }
 
+/**
+ * /api/email/* — only when EMAIL_MONITOR_ENABLED=true.
+ * Flag off → always false (server identical to pre-email builds).
+ */
+async function handleEmailApi(req, res) {
+  if (!EMAIL_MONITOR_ENABLED) return false;
+  if (!emailApiHandler) {
+    const { createEmailApiHandler } = require('./email/api.cjs');
+    emailApiHandler = createEmailApiHandler({
+      verifyAuthHeader,
+      sendJson,
+      sendJsonBodyError,
+      readJsonBody,
+      dbProvider,
+    });
+  }
+  return emailApiHandler(req, res);
+}
+
 // Plain HTTP server — responds to simple requests (Cloud Run health checks,
 // browser, etc). Real WebSocket connections are "upgraded" from this same
 // server.
@@ -1513,6 +1543,8 @@ const server = http.createServer(async (req, res) => {
   if (await handleOtaApi(req, res)) return;
   if (await handleUsageApi(req, res)) return;
   if (await handleCoachApi(req, res)) return;
+  // Email monitor API — only registered when EMAIL_MONITOR_ENABLED=true.
+  if (await handleEmailApi(req, res)) return;
 
   res.writeHead(200, {
     'Content-Type': 'text/plain',

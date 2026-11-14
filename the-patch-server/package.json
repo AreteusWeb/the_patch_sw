@@ -4,7 +4,7 @@
   "main": "server.cjs",
   "scripts": {
     "start": "node server.cjs",
-    "test:email": "node --test email/*.test.cjs"
+    "test:email": "node --test email/keywordMatcher.test.cjs email/credentialCrypto.test.cjs email/api.test.cjs"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.12.0",

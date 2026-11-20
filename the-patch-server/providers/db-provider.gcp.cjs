@@ -668,6 +668,125 @@ async function setEmailMonitorSettings(uid, data) {
   await emailMonitorSettingsRef(uid).set(data || {}, { merge: true });
 }
 
+// ─── Email poll job (Phase 3) ────────────────────────────────────────────────
+
+/**
+ * Per-account lock via Firestore transaction. Returns the fresh account doc
+ * (with lockUntil/lockToken set) or null if missing / a live lock exists.
+ * @returns {Promise<object|null>}
+ */
+async function acquireEmailLock(uid, { token, now, lockMs }) {
+  const ref = emailAccountRef(uid);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const data = snap.data();
+    if (typeof data.lockUntil === 'number' && data.lockUntil > now) return null;
+    const lock = { lockUntil: now + lockMs, lockToken: token };
+    tx.update(ref, lock);
+    return { ...data, ...lock };
+  });
+}
+
+/**
+ * Patch the account only while we still hold the lock (token matches).
+ * A reconnect (set merge:false) wipes lockToken, so a stale poll can't
+ * overwrite the new cursor. Returns true if written.
+ */
+async function updateEmailAccountIfLocked(uid, token, patch) {
+  const ref = emailAccountRef(uid);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+    if (snap.data().lockToken !== token) return false;
+    tx.update(ref, patch || {});
+    return true;
+  });
+}
+
+function emailAlertsRef(uid) {
+  return db.collection('users').doc(uid).collection('emailAlerts');
+}
+
+/**
+ * Create-only write. Returns true if created, false if the id already exists.
+ */
+async function createEmailAlert(uid, alertId, data) {
+  try {
+    await emailAlertsRef(uid).doc(alertId).create(data || {});
+    return true;
+  } catch (err) {
+    if (err && (err.code === 6 || /already exists/i.test(String(err.message || '')))) {
+      return false;
+    }
+    throw err;
+  }
+}
+
+function tsToMillis(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  return null;
+}
+
+/** Newest first. Single-field orderBy → no composite index. */
+async function listEmailAlerts(uid, { limit = 20 } = {}) {
+  const snap = await emailAlertsRef(uid)
+    .orderBy('createdAt', 'desc')
+    .limit(limit)
+    .get();
+  return snap.docs.map((d) => {
+    const x = d.data();
+    return {
+      id: d.id,
+      kind: x.kind ?? 'match',
+      from: x.from ?? '',
+      subject: x.subject ?? '',
+      date: tsToMillis(x.date),
+      matchedKeywords: Array.isArray(x.matchedKeywords) ? x.matchedKeywords : [],
+      matchCount: x.matchCount ?? null,
+      createdAt: tsToMillis(x.createdAt),
+      read: x.read === true,
+    };
+  });
+}
+
+/**
+ * Mark alerts read. { ids } updates only existing ids; { all: true } updates
+ * unread alerts (equality filter only → no composite index). Returns count.
+ */
+async function markEmailAlertsRead(uid, { ids, all } = {}) {
+  const col = emailAlertsRef(uid);
+  let updated = 0;
+  if (all === true) {
+    for (let i = 0; i < 10; i++) {
+      const snap = await col.where('read', '==', false).limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+      await batch.commit();
+      updated += snap.size;
+      if (snap.size < 400) break;
+    }
+    return updated;
+  }
+  const list = Array.isArray(ids) ? ids : [];
+  if (list.length === 0) return 0;
+  const refs = list.map((id) => col.doc(id));
+  const snaps = await db.getAll(...refs);
+  const batch = db.batch();
+  for (const s of snaps) {
+    if (s.exists && s.data().read !== true) {
+      batch.update(s.ref, { read: true });
+      updated += 1;
+    }
+  }
+  if (updated > 0) await batch.commit();
+  return updated;
+}
+
 module.exports = {
   getDevicesByOwner,
   getDeviceByMac,
@@ -699,4 +818,9 @@ module.exports = {
   deleteEmailAccount,
   getEmailMonitorSettings,
   setEmailMonitorSettings,
+  acquireEmailLock,
+  updateEmailAccountIfLocked,
+  createEmailAlert,
+  listEmailAlerts,
+  markEmailAlertsRead,
 };

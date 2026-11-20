@@ -535,10 +535,86 @@ async function setEmailMonitorSettings(uid, data) {
   emailMonitorSettingsByUid.set(uid, { ...(data || {}) });
 }
 
+/** users/{uid}/emailAlerts/{id} — in-memory (uid → Map<id, doc>) */
+const emailAlertsByUid = new Map();
+
+function alertsFor(uid) {
+  let m = emailAlertsByUid.get(uid);
+  if (!m) {
+    m = new Map();
+    emailAlertsByUid.set(uid, m);
+  }
+  return m;
+}
+
+// No awaits between read and write → atomic in the single-threaded event loop.
+async function acquireEmailLock(uid, { token, now, lockMs }) {
+  const doc = emailAccountsByUid.get(uid);
+  if (!doc) return null;
+  if (typeof doc.lockUntil === 'number' && doc.lockUntil > now) return null;
+  doc.lockUntil = now + lockMs;
+  doc.lockToken = token;
+  return { ...doc };
+}
+
+async function updateEmailAccountIfLocked(uid, token, patch) {
+  const doc = emailAccountsByUid.get(uid);
+  if (!doc) return false;
+  if (doc.lockToken !== token) return false;
+  Object.assign(doc, patch || {});
+  return true;
+}
+
+async function createEmailAlert(uid, alertId, data) {
+  const m = alertsFor(uid);
+  if (m.has(alertId)) return false;
+  m.set(alertId, { ...(data || {}) });
+  return true;
+}
+
+function toMillis(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return v;
+  if (v instanceof Date) return v.getTime();
+  return null;
+}
+
+async function listEmailAlerts(uid, { limit = 20 } = {}) {
+  return [...alertsFor(uid).entries()]
+    .map(([id, x]) => ({
+      id,
+      kind: x.kind ?? 'match',
+      from: x.from ?? '',
+      subject: x.subject ?? '',
+      date: toMillis(x.date),
+      matchedKeywords: Array.isArray(x.matchedKeywords) ? x.matchedKeywords : [],
+      matchCount: x.matchCount ?? null,
+      createdAt: toMillis(x.createdAt),
+      read: x.read === true,
+    }))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .slice(0, limit);
+}
+
+async function markEmailAlertsRead(uid, { ids, all } = {}) {
+  const m = alertsFor(uid);
+  let updated = 0;
+  const targets = all === true ? [...m.keys()] : Array.isArray(ids) ? ids : [];
+  for (const id of targets) {
+    const x = m.get(id);
+    if (x && x.read !== true) {
+      x.read = true;
+      updated += 1;
+    }
+  }
+  return updated;
+}
+
 /** Test helper — clear email docs. */
 function _resetEmailStore() {
   emailAccountsByUid.clear();
   emailMonitorSettingsByUid.clear();
+  emailAlertsByUid.clear();
 }
 
 module.exports = {
@@ -572,5 +648,10 @@ module.exports = {
   deleteEmailAccount,
   getEmailMonitorSettings,
   setEmailMonitorSettings,
+  acquireEmailLock,
+  updateEmailAccountIfLocked,
+  createEmailAlert,
+  listEmailAlerts,
+  markEmailAlertsRead,
   _resetEmailStore,
 };

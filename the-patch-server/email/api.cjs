@@ -1,6 +1,6 @@
 'use strict';
 /**
- * HTTP handlers for /api/email/* (Phase 2 — no poll job).
+ * HTTP handlers for /api/email/* (the poll job lives in poller.cjs / pollHandler.cjs).
  * Wired from server.cjs only when EMAIL_MONITOR_ENABLED is true.
  *
  * Never log passwords, subjects, or senders — only uid, event, error codes.
@@ -14,6 +14,11 @@ const {
   checkConnectRateLimit,
   recordConnectAttempt,
 } = require('./connectRateLimit.cjs');
+
+const ALERTS_DEFAULT_LIMIT = 20;
+const ALERTS_MAX_LIMIT = 50;
+/** Alert ids are `${uidValidity}_${uid}` or `summary_...` — no slashes (doc path safety). */
+const ALERT_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
 
 function logEmailEvent(event, fields) {
   console.log(
@@ -147,9 +152,12 @@ function createEmailApiHandler(deps) {
           credEnc,
           lastUid: cursor.lastUid ?? null,
           uidValidity: cursor.uidValidity ?? null,
+          // Reconnect always re-enables polling (clears auth_failed / backoff).
           status: 'ok',
           lastCheckedAt: now,
           lastError: null,
+          consecutiveFailures: 0,
+          nextCheckAt: null,
           createdAt:
             existing && typeof existing.createdAt === 'number'
               ? existing.createdAt
@@ -266,6 +274,60 @@ function createEmailApiHandler(deps) {
       } catch (err) {
         logEmailEvent('email_account_delete_failed', { uid });
         sendJson(req, res, 500, { error: 'delete_failed' });
+        return true;
+      }
+    }
+
+    // ── GET /api/email/alerts?limit=20 (max 50) ───────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/email/alerts') {
+      const parsed = Number.parseInt(url.searchParams.get('limit') || '', 10);
+      const limit = Number.isFinite(parsed)
+        ? Math.min(ALERTS_MAX_LIMIT, Math.max(1, parsed))
+        : ALERTS_DEFAULT_LIMIT;
+      try {
+        const alerts = await dbProvider.listEmailAlerts(uid, { limit });
+        sendJson(req, res, 200, { alerts });
+        return true;
+      } catch (err) {
+        logEmailEvent('email_alerts_list_failed', { uid, code: 'ALERTS_FAILED' });
+        sendJson(req, res, 500, { error: 'alerts_failed' });
+        return true;
+      }
+    }
+
+    // ── POST /api/email/alerts/read  { ids: [...] } | { all: true } ───────
+    if (req.method === 'POST' && url.pathname === '/api/email/alerts/read') {
+      let body = {};
+      try {
+        body = await readJsonBody(req);
+      } catch (err) {
+        sendJsonBodyError(req, res, err);
+        return true;
+      }
+      const all = body && body.all === true;
+      const ids = body && body.ids;
+      const idsValid =
+        Array.isArray(ids) &&
+        ids.length > 0 &&
+        ids.length <= ALERTS_MAX_LIMIT &&
+        ids.every((id) => typeof id === 'string' && ALERT_ID_RE.test(id));
+      if (!all && !idsValid) {
+        sendJson(req, res, 400, {
+          error: 'invalid_request',
+          message: `Send { all: true } or { ids: [1-${ALERTS_MAX_LIMIT} alert ids] }`,
+        });
+        return true;
+      }
+      try {
+        const updated = await dbProvider.markEmailAlertsRead(
+          uid,
+          all ? { all: true } : { ids }
+        );
+        sendJson(req, res, 200, { ok: true, updated });
+        return true;
+      } catch (err) {
+        logEmailEvent('email_alerts_read_failed', { uid, code: 'ALERTS_FAILED' });
+        sendJson(req, res, 500, { error: 'alerts_failed' });
         return true;
       }
     }

@@ -154,11 +154,18 @@ if (COACH_MULTI_PROVIDER || COACH_MULTI_PROVIDER_UIDS.size > 0) {
 const EMAIL_MONITOR_ENABLED =
   String(process.env.EMAIL_MONITOR_ENABLED || '').trim().toLowerCase() === 'true';
 let emailApiHandler = null;
+let emailPollHandler = null;
 if (EMAIL_MONITOR_ENABLED) {
-  const { EMAIL_MONITOR_UIDS } = require('./email/config.cjs');
+  const { EMAIL_MONITOR_UIDS, getEmailPollConfig } = require('./email/config.cjs');
   console.log(
     `[BOOT] Email monitor API enabled for ${EMAIL_MONITOR_UIDS.size} allowlisted uid(s)`
   );
+  const pollCfg = getEmailPollConfig();
+  if (pollCfg.audiences.length === 0 || !pollCfg.serviceAccount) {
+    console.warn(
+      '[BOOT] Email poll endpoint will reject all requests: set EMAIL_POLL_SA and EMAIL_POLL_AUDIENCES'
+    );
+  }
 }
 
 /**
@@ -1528,6 +1535,19 @@ async function handleEmailApi(req, res) {
   return emailApiHandler(req, res);
 }
 
+/**
+ * POST /internal/email/poll (Cloud Scheduler, OIDC-authenticated) — only when
+ * EMAIL_MONITOR_ENABLED=true. Flag off → always false (route does not exist).
+ */
+async function handleEmailPollApi(req, res) {
+  if (!EMAIL_MONITOR_ENABLED) return false;
+  if (!emailPollHandler) {
+    const { createEmailPollHandler } = require('./email/pollHandler.cjs');
+    emailPollHandler = createEmailPollHandler({ sendJson });
+  }
+  return emailPollHandler(req, res);
+}
+
 // Plain HTTP server — responds to simple requests (Cloud Run health checks,
 // browser, etc). Real WebSocket connections are "upgraded" from this same
 // server.
@@ -1545,6 +1565,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleCoachApi(req, res)) return;
   // Email monitor API — only registered when EMAIL_MONITOR_ENABLED=true.
   if (await handleEmailApi(req, res)) return;
+  if (await handleEmailPollApi(req, res)) return;
 
   res.writeHead(200, {
     'Content-Type': 'text/plain',

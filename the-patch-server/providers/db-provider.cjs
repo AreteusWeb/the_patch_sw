@@ -50,4 +50,9 @@ module.exports = {
   deleteEmailAccount: impl.deleteEmailAccount,
   getEmailMonitorSettings: impl.getEmailMonitorSettings,
   setEmailMonitorSettings: impl.setEmailMonitorSettings,
+  acquireEmailLock: impl.acquireEmailLock,
+  updateEmailAccountIfLocked: impl.updateEmailAccountIfLocked,
+  createEmailAlert: impl.createEmailAlert,
+  listEmailAlerts: impl.listEmailAlerts,
+  markEmailAlertsRead: impl.markEmailAlertsRead,
 };

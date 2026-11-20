@@ -41,6 +41,39 @@ const KEYWORD_LIMITS = Object.freeze({
   maxLen: 50,
 });
 
+/** Phase 3 poll job limits (Cloud Scheduler → POST /internal/email/poll). */
+const POLL_LIMITS = Object.freeze({
+  concurrency: 5,
+  maxAccountsPerRun: 50,
+  /** Stop starting new accounts after this (ms); in-flight accounts finish. */
+  deadlineMs: 50 * 1000,
+  lockMs: 2 * 60 * 1000,
+  maxMessagesPerAccount: 200,
+  maxAlertsPerAccount: 20,
+  alertTtlMs: 30 * 24 * 60 * 60 * 1000,
+  subjectMaxLen: 200,
+  /** Backoff minutes after consecutive CONNECTION_FAILED / TIMEOUT. */
+  backoffBaseMin: 5,
+  backoffMaxMin: 60,
+});
+
+/**
+ * OIDC verification settings for the internal poll endpoint.
+ * Read at call time (not module load) so tests / env changes are honored.
+ * Missing either value → caller must reject everything (fail closed).
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ audiences: string[], serviceAccount: string }}
+ */
+function getEmailPollConfig(env = process.env) {
+  const audiences = String(env.EMAIL_POLL_AUDIENCES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const serviceAccount = String(env.EMAIL_POLL_SA || '').trim();
+  return { audiences, serviceAccount };
+}
+
 function isEmailMonitorUidAllowed(uid) {
   if (!uid) return false;
   return EMAIL_MONITOR_UIDS.has(String(uid));
@@ -61,6 +94,8 @@ module.exports = {
   EMAIL_PROVIDERS,
   CONNECT_RATE_LIMIT,
   KEYWORD_LIMITS,
+  POLL_LIMITS,
+  getEmailPollConfig,
   isEmailMonitorUidAllowed,
   resolveEmailProvider,
 };

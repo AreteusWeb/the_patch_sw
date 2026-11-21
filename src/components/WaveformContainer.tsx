@@ -1,11 +1,13 @@
 import React from 'react';
 import useStore from '../store/useStore';
 import WaveformCanvas from './WaveformCanvas';
+import SweepChart from './SweepChart';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { CH_RANGES, LEADS, LEAD_CHANNEL_INDEX } from '../hooks/useWebSocket';
 import { useDataFreshness } from '../hooks/useDataFreshness';
 import DataFreshnessBadge from './DataFreshnessBadge';
+import { resolveWaveformMode, type WaveformDrawMode } from '../lib/appConfig';
 
 // CHANGE: fixed indices for Resp/PPG, matching useWebSocket.ts's 11-slot
 // layout (0-7 ECG leads, 8 Resp, 9 PPG, 10 Temp-reserved). Named constants
@@ -17,6 +19,12 @@ const PPG_WAVEFORM_INDEX = 9;
 interface WaveformContainerProps {
   /** Scrubbed waveform windows from the parent useWebSocket() instance. */
   waveforms: number[][];
+  /**
+   * `sweep` draws the hospital cursor. `scroll` keeps the current strip.
+   * Omit to follow VITE_ENABLE_SWEEP_GRAPH (off by default).
+   * Scrubbing history always uses scroll — the sweep ring is live-edge only.
+   */
+  mode?: WaveformDrawMode;
 }
 
 /**
@@ -24,8 +32,9 @@ interface WaveformContainerProps {
  * Contains and coordinates multiple biological waveform display panels (ECG leads, Respiration, SpO2).
  * Operates in either Normal (single lead overlay) or Advanced (multi-lead array + Resp + SpO2 tracking grids) view modes.
  */
-const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
+const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }) => {
   const viewMode = useStore(state => state.viewMode);
+  const historyOffset = useStore(state => state.historyOffset);
   const selectedLeadIndex = useStore(state => state.selectedLeadIndex);
   const setSelectedLeadIndex = useStore(state => state.setSelectedLeadIndex);
   const isEcgExpanded = useStore(state => state.isEcgExpanded);
@@ -36,6 +45,37 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
   const frozen = !isLiveData;
   const liveColor = '#2dd4bf';
   const liveRespColor = '#5eead4';
+  const sweepLive = resolveWaveformMode(mode) === 'sweep' && historyOffset === 0;
+
+  const renderWave = (
+    channel: number,
+    heightPx: number,
+    color: string,
+    lineWidth: number,
+    gridLines: boolean,
+  ) => sweepLive ? (
+    <SweepChart
+      channel={channel}
+      height={heightPx}
+      color={color}
+      min={CH_RANGES[channel][0]}
+      max={CH_RANGES[channel][1]}
+      lineWidth={lineWidth}
+      grid={gridLines}
+      frozen={frozen}
+    />
+  ) : (
+    <WaveformCanvas
+      data={waveforms[channel]}
+      height={heightPx}
+      color={color}
+      min={CH_RANGES[channel][0]}
+      max={CH_RANGES[channel][1]}
+      lineWidth={lineWidth}
+      gridLines={gridLines}
+      frozen={frozen}
+    />
+  );
 
   // CHANGE: `leads` now comes from the shared LEADS export (no 'Lead III',
   // matches useWebSocket.ts exactly) instead of a locally hardcoded array.
@@ -93,15 +133,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
             style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}
           />
-          <WaveformCanvas
-            data={waveforms[wIdx]}
-            height={isEcgExpanded ? 500 : 96}
-            color={liveColor}
-            min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
-            lineWidth={isEcgExpanded ? 2.5 : 1.5}
-            gridLines={isEcgExpanded}
-            frozen={frozen}
-          />
+          {renderWave(wIdx, isEcgExpanded ? 500 : 96, liveColor, isEcgExpanded ? 2.5 : 1.5, isEcgExpanded)}
         </div>
       </div>
     );
@@ -158,15 +190,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
             return (
               <div key={label} className="relative bg-slate-900/10 rounded-sm border-b border-slate-900/10">
                 <div className="absolute left-1 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">{label}</div>
-                <WaveformCanvas
-                  data={waveforms[wIdx]}
-                  height={28}
-                  color={liveColor}
-                  min={CH_RANGES[wIdx][0]} max={CH_RANGES[wIdx][1]}
-                  gridLines={false}
-                  lineWidth={1}
-                  frozen={frozen}
-                />
+                {renderWave(wIdx, 28, liveColor, 1, false)}
               </div>
             );
           })
@@ -184,15 +208,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
             >
               {isEcgExpanded ? '< COLLAPSE' : 'EXPAND >'}
             </button>
-            <WaveformCanvas
-              data={waveforms[singleLeadWIdx]}
-              height={isEcgExpanded ? 300 : 144}
-              color={liveColor}
-              min={CH_RANGES[singleLeadWIdx][0]} max={CH_RANGES[singleLeadWIdx][1]}
-              gridLines={true}
-              lineWidth={2}
-              frozen={frozen}
-            />
+            {renderWave(singleLeadWIdx, isEcgExpanded ? 300 : 144, liveColor, 2, true)}
           </div>
         )}
       </div>
@@ -203,15 +219,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">Resp Tracking</h4>
         </div>
         <div className="bg-slate-950/40 rounded border border-white/5 h-8">
-          <WaveformCanvas
-            data={waveforms[RESP_WAVEFORM_INDEX]}
-            height={32}
-            color={liveRespColor}
-            min={CH_RANGES[RESP_WAVEFORM_INDEX][0]} max={CH_RANGES[RESP_WAVEFORM_INDEX][1]}
-            gridLines={false}
-            lineWidth={1}
-            frozen={frozen}
-          />
+          {renderWave(RESP_WAVEFORM_INDEX, 32, liveRespColor, 1, false)}
         </div>
       </div>
 
@@ -220,18 +228,24 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms }) => {
         <div className="flex items-center justify-between px-1 mb-0.5">
           <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">SpO2 Tracking</h4>
         </div>
-        <div className="flex items-end gap-[0.5px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/40 rounded border border-white/5">
-          {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
-            <div
-              key={i}
-              className={cn(
-                'w-[2px] rounded-t-[1px] flex-shrink-0',
-                frozen ? 'bg-slate-500/35' : 'bg-teal-500/20'
-              )}
-              style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
-            />
-          ))}
-        </div>
+        {sweepLive ? (
+          <div className="h-10 overflow-hidden bg-slate-950/40 rounded border border-white/5">
+            {renderWave(PPG_WAVEFORM_INDEX, 40, '#5eead4', 1.25, false)}
+          </div>
+        ) : (
+          <div className="flex items-end gap-[0.5px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/40 rounded border border-white/5">
+            {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
+              <div
+                key={i}
+                className={cn(
+                  'w-[2px] rounded-t-[1px] flex-shrink-0',
+                  frozen ? 'bg-slate-500/35' : 'bg-teal-500/20'
+                )}
+                style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
 

@@ -43,6 +43,25 @@ export const AUTO_LOGIN_ENABLED =
   AUTO_LOGIN_EMAIL.length > 0 &&
   AUTO_LOGIN_PASSWORD.length > 0;
 
+// "Gemini" chip beside the coach composer. Off unless explicitly enabled.
+// The coach still uses the same backend; this only hides the label.
+export const COACH_MODEL_BADGE_ENABLED =
+  import.meta.env.VITE_SHOW_COACH_MODEL_BADGE === 'true';
+
+// Hospital-style sweep trace (cursor moves left → right; the strip does not
+// scroll). Off unless explicitly enabled — live charts keep the current
+// right-to-left scroll until Jason signs off.
+export const SWEEP_GRAPH_ENABLED =
+  import.meta.env.VITE_ENABLE_SWEEP_GRAPH === 'true';
+
+export type WaveformDrawMode = 'sweep' | 'scroll';
+
+/** Explicit `mode` wins. With no prop, the env flag chooses. */
+export function resolveWaveformMode(explicit?: WaveformDrawMode | null): WaveformDrawMode {
+  if (explicit === 'sweep' || explicit === 'scroll') return explicit;
+  return SWEEP_GRAPH_ENABLED ? 'sweep' : 'scroll';
+}
+
 // ─── The Patch server WebSocket ───────────────────────────────────────────────
 
 // This URL used to be hard-coded inside useWebSocket.ts pointing always at

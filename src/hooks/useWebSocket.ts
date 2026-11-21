@@ -49,7 +49,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import useStore from '../store/useStore';
 import type { EventType } from '../store/useStore';
 import { auth } from '../lib/firebase';
-import { WS_URL, IS_LOCAL_MODE } from '../lib/appConfig';
+import { WS_URL, IS_LOCAL_MODE, SWEEP_GRAPH_ENABLED } from '../lib/appConfig';
+import { sweepFeed } from '../lib/sweepFeed';
+import { SWEEP_SAMPLE_PERIOD_MS, resolvePacketStartMs } from '../lib/sweepGeometry';
 import {
   EMPTY_VITALS_TREND,
   TREND_HISTORY_EXPOSED_SEC,
@@ -404,6 +406,13 @@ export const useWebSocket = () => {
     notchFilters.current.forEach(f => f.reset());
   }, [notchFilterEnabled]);
 
+  // New device: drop the previous patient's sweep so it cannot linger for one
+  // window. A quiet stream does NOT clear — the cursor just pauses.
+  useEffect(() => {
+    if (!SWEEP_GRAPH_ENABLED) return;
+    sweepFeed.reset();
+  }, [deviceMac]);
+
   const LEAD_II_SLOT = LEAD_CHANNEL_INDEX['Lead II'];
 
   const closeSampleSession = useCallback(() => {
@@ -429,6 +438,35 @@ export const useWebSocket = () => {
     let receivedSamples = false;
     let leadIIPts = 0;
 
+    // Sweep feed is written only when the flag is on, so the scroll path's
+    // sample loop stays a ring push. Timestamps are the packet clock (first
+    // sample) plus index / 250 Hz — the charts never see this array.
+    let sweepStartMs: number | null = null;
+    let sweepPerf = 0;
+    if (SWEEP_GRAPH_ENABLED) {
+      let sampleCount = 0;
+      const chs = packet.channels;
+      for (let i = 0; i < chs.length; i++) {
+        const entry = chs[i] as { samples?: unknown[] } | unknown[] | null;
+        if (!entry) continue;
+        const len = Array.isArray(entry)
+          ? entry.length
+          : Array.isArray(entry.samples) ? entry.samples.length : 0;
+        if (len > sampleCount) sampleCount = len;
+      }
+      if (sampleCount > 0) {
+        const anchor = resolvePacketStartMs(
+          packet.timestamp,
+          SWEEP_SAMPLE_PERIOD_MS,
+          Date.now(),
+          sweepFeed.lastSampleTimeMs,
+        );
+        if (anchor.reset) sweepFeed.reset();
+        sweepStartMs = anchor.startMs;
+        sweepPerf = performance.now();
+      }
+    }
+
     packet.channels.forEach((ch, i) => {
       // ── Real format (server.cjs / device): { index, name, samples } ────────
       if (ch && typeof ch === 'object' && !Array.isArray(ch) && 'name' in (ch as any)) {
@@ -437,9 +475,14 @@ export const useWebSocket = () => {
         if (slot === undefined || !Array.isArray(named.samples)) return; // unknown/unsent channel
         const ring = rings.current[slot];
         const filter = notchFilters.current[slot];
-        for (const raw of named.samples) {
-          const mv = rawToMv(raw);
-          ring.push(notchOn ? filter.process(mv) : mv);
+        const samples = named.samples;
+        for (let si = 0; si < samples.length; si++) {
+          const mv = rawToMv(samples[si]);
+          const filtered = notchOn ? filter.process(mv) : mv;
+          ring.push(filtered);
+          if (sweepStartMs != null) {
+            sweepFeed.write(slot, sweepStartMs + si * SWEEP_SAMPLE_PERIOD_MS, filtered, sweepPerf);
+          }
         }
         if (named.samples.length > 0) receivedSamples = true;
         if (slot === LEAD_II_SLOT) leadIIPts += named.samples.length;
@@ -465,7 +508,13 @@ export const useWebSocket = () => {
         if (slot === undefined) return; // ch7 (fake bp) has no real slot — ignored
         const ring = rings.current[slot];
         const filter = notchFilters.current[slot];
-        for (const v of ch) ring.push(notchOn ? filter.process(v) : v);
+        for (let si = 0; si < ch.length; si++) {
+          const filtered = notchOn ? filter.process(ch[si]) : ch[si];
+          ring.push(filtered);
+          if (sweepStartMs != null) {
+            sweepFeed.write(slot, sweepStartMs + si * SWEEP_SAMPLE_PERIOD_MS, filtered, sweepPerf);
+          }
+        }
         if (ch.length > 0) receivedSamples = true;
         if (slot === LEAD_II_SLOT) leadIIPts += ch.length;
       }

@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
 import EcgPaperControls from './EcgPaperControls';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
+import MultiChannelSweepCanvas from './MultiChannelSweepCanvas';
+import { resolveWaveformMode, type WaveformDrawMode } from '../../lib/appConfig';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import { cn } from '../../utils/cn';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
@@ -14,6 +16,8 @@ interface DesktopCentralAreaProps {
   waveforms: number[][];
   /** Seconds of waveform history actually held in the ring buffers. */
   bufferedSeconds: number;
+  /** Omit to follow VITE_ENABLE_SWEEP_GRAPH. History scrubbing stays on scroll. */
+  mode?: WaveformDrawMode;
 }
 
 function formatBufferedDuration(totalSeconds: number): string {
@@ -26,7 +30,7 @@ function formatBufferedDuration(totalSeconds: number): string {
 /**
  * DesktopCentralArea — compact single-canvas multi-channel monitor + scrubber.
  */
-const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, bufferedSeconds }) => {
+const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, bufferedSeconds, mode }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
@@ -37,6 +41,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, buff
 
   const paperGrid = ecgGridEnabled ? 'clinical' : 'off';
   const isLive = historyOffset === 0;
+  const showSweep = resolveWaveformMode(mode) === 'sweep' && isLive;
   const { freshness, dimmed, staleAgeLabel, isLiveData } = useDataFreshness();
   const lastRealDataAt = useStore(s => s.lastRealDataAt);
 
@@ -91,16 +96,25 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, buff
             dimmed && 'opacity-50',
             ecgGridEnabled ? 'flex-shrink-0' : 'flex-1 min-h-[320px]'
           )}>
-            <MultiChannelWaveformCanvas
-              waveforms={waveforms}
-              channels={DESKTOP_WAVEFORM_CHANNELS}
-              fill
-              minHeight={320}
-              paperGrid={paperGrid}
-              paperSpeed={ecgPaperSpeed}
-              gain={ecgGain}
-              frozen={!isLiveData}
-            />
+            {showSweep ? (
+              <MultiChannelSweepCanvas
+                channels={DESKTOP_WAVEFORM_CHANNELS}
+                fill
+                minHeight={320}
+                frozen={!isLiveData}
+              />
+            ) : (
+              <MultiChannelWaveformCanvas
+                waveforms={waveforms}
+                channels={DESKTOP_WAVEFORM_CHANNELS}
+                fill
+                minHeight={320}
+                paperGrid={paperGrid}
+                paperSpeed={ecgPaperSpeed}
+                gain={ecgGain}
+                frozen={!isLiveData}
+              />
+            )}
           </div>
 
           {/* Non-waveform sensors — numeric only until hardware sends traces */}

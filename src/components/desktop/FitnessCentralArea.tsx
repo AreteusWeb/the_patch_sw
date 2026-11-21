@@ -2,6 +2,8 @@ import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
+import MultiChannelSweepCanvas from './MultiChannelSweepCanvas';
+import { resolveWaveformMode, type WaveformDrawMode } from '../../lib/appConfig';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import EcgPaperControls from './EcgPaperControls';
 import { formatSessionClock, getHrZone } from '../../utils/fitnessMetrics';
@@ -15,13 +17,15 @@ const MAX_HISTORY_SECONDS = 3600;
 
 interface FitnessCentralAreaProps {
   waveforms: number[][];
+  /** Omit to follow VITE_ENABLE_SWEEP_GRAPH. History scrubbing stays on scroll. */
+  mode?: WaveformDrawMode;
 }
 
 /**
  * Fitness center: live multi-channel waveforms + training session strip + scrubber.
  * Placeholder panels (fake intensity / map / zone bars) were removed — they had no real data.
  */
-const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) => {
+const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms, mode }) => {
   const historyOffset = useStore(s => s.historyOffset);
   const setHistoryOffset = useStore(s => s.setHistoryOffset);
   const vitals = useStore(s => s.vitals);
@@ -31,6 +35,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
   const paperGrid = ecgGridEnabled ? 'subtle' : 'off';
 
   const isLive = historyOffset === 0;
+  const showSweep = resolveWaveformMode(mode) === 'sweep' && isLive;
   const { freshness, dimmed, isLiveData, staleAgeLabel } = useDataFreshness();
   const hr = vitals.heartRate.value;
   const zone = getHrZone(hr);
@@ -103,17 +108,27 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms }) =>
             )}
             style={channelsCanvasHeight != null ? { height: channelsCanvasHeight } : undefined}
           >
-            <MultiChannelWaveformCanvas
-              waveforms={waveforms}
-              channels={DESKTOP_WAVEFORM_CHANNELS}
-              fill={ecgGridEnabled}
-              height={channelsCanvasHeight ?? 420}
-              minHeight={channelsCanvasHeight ?? 420}
-              paperGrid={paperGrid}
-              paperSpeed={ecgPaperSpeed}
-              gain={ecgGain}
-              frozen={!isLiveData}
-            />
+            {showSweep ? (
+              <MultiChannelSweepCanvas
+                channels={DESKTOP_WAVEFORM_CHANNELS}
+                fill={ecgGridEnabled}
+                height={channelsCanvasHeight ?? 420}
+                minHeight={channelsCanvasHeight ?? 420}
+                frozen={!isLiveData}
+              />
+            ) : (
+              <MultiChannelWaveformCanvas
+                waveforms={waveforms}
+                channels={DESKTOP_WAVEFORM_CHANNELS}
+                fill={ecgGridEnabled}
+                height={channelsCanvasHeight ?? 420}
+                minHeight={channelsCanvasHeight ?? 420}
+                paperGrid={paperGrid}
+                paperSpeed={ecgPaperSpeed}
+                gain={ecgGain}
+                frozen={!isLiveData}
+              />
+            )}
           </div>
         </section>
 

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:sweep": "node --import tsx --test src/lib/sweepGeometry.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

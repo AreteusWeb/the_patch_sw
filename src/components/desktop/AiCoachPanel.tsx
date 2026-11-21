@@ -14,7 +14,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
-import { API_BASE } from '../../lib/appConfig';
+import { API_BASE, COACH_MODEL_BADGE_ENABLED } from '../../lib/appConfig';
 import { GENERAL_MESSAGE_MAX_CHARS } from '../../lib/agent';
 import { buildTrainingLoadSnapshot } from '../../lib/trainingLoad';
 import { cn } from '../../utils/cn';
@@ -2358,7 +2358,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
                   : 'gap-2.5'
               )}
             >
-              {!isGeneral && (
+              {!isGeneral && COACH_MODEL_BADGE_ENABLED && (
                 <div
                   className="h-11 px-2.5 rounded-2xl inline-flex items-center shrink-0 bg-black border border-white/10"
                   title="Coach uses Google Gemini"

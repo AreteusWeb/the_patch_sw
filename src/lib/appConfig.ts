@@ -39,8 +39,14 @@ export const AI_FIRST_HOME =
 // Coach / General switch in the standalone agent. General replies only when
 // the server also has COACH_MULTI_PROVIDER on for this user; otherwise the
 // server silently answers with the health coach.
+// Off unless explicitly enabled — the shipping coach is coach-only.
 export const GENERAL_MODE_ENABLED =
   import.meta.env.VITE_ENABLE_GENERAL_MODE === 'true';
+
+// "Gemini" chip beside the coach composer. Off unless explicitly enabled.
+// The coach still uses the same backend; this only hides the label.
+export const COACH_MODEL_BADGE_ENABLED =
+  import.meta.env.VITE_SHOW_COACH_MODEL_BADGE === 'true';
 
 // General-mode "DeepSeek (low cost)" option in the provider selector.
 // Off unless explicitly enabled. Also needs DEEPSEEK_ENABLED=true on the server.
@@ -50,6 +56,20 @@ export const LOW_COST_MODEL_ENABLED =
 // Usage panel on the standalone AI Agent. Off unless explicitly enabled.
 export const USAGE_PANEL_ENABLED =
   import.meta.env.VITE_ENABLE_USAGE_PANEL === 'true';
+
+// Hospital-style sweep trace (cursor moves left → right; the strip does not
+// scroll). Off unless explicitly enabled — live charts keep the current
+// right-to-left scroll until Jason signs off.
+export const SWEEP_GRAPH_ENABLED =
+  import.meta.env.VITE_ENABLE_SWEEP_GRAPH === 'true';
+
+export type WaveformDrawMode = 'sweep' | 'scroll';
+
+/** Explicit `mode` wins. With no prop, the env flag chooses. */
+export function resolveWaveformMode(explicit?: WaveformDrawMode | null): WaveformDrawMode {
+  if (explicit === 'sweep' || explicit === 'scroll') return explicit;
+  return SWEEP_GRAPH_ENABLED ? 'sweep' : 'scroll';
+}
 
 /**
  * Staging / local-cloud auto-login (real Firebase email+password).

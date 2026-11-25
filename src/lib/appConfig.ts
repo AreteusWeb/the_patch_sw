@@ -48,6 +48,20 @@ export const AUTO_LOGIN_ENABLED =
 export const COACH_MODEL_BADGE_ENABLED =
   import.meta.env.VITE_SHOW_COACH_MODEL_BADGE === 'true';
 
+// Shipping UI hides these until each flag is exactly "true". Missing var = hidden.
+export const SHOW_ACTIVITY_SELECTOR =
+  import.meta.env.VITE_SHOW_ACTIVITY_SELECTOR === 'true';
+export const SHOW_VOICE_VIDEO =
+  import.meta.env.VITE_SHOW_VOICE_VIDEO === 'true';
+export const SHOW_TEMPERATURE =
+  import.meta.env.VITE_SHOW_TEMPERATURE === 'true';
+export const SHOW_BLOOD_PRESSURE =
+  import.meta.env.VITE_SHOW_BLOOD_PRESSURE === 'true';
+export const SHOW_STEPS =
+  import.meta.env.VITE_SHOW_STEPS === 'true';
+export const SHOW_BATTERY =
+  import.meta.env.VITE_SHOW_BATTERY === 'true';
+
 // Hospital-style sweep trace (cursor moves left → right; the strip does not
 // scroll). Off unless explicitly enabled — live charts keep the current
 // right-to-left scroll until Jason signs off.

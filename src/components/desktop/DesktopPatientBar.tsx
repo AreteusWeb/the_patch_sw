@@ -16,6 +16,7 @@ import { formatSessionClock } from '../../utils/fitnessMetrics';
 import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { exportSessionJson } from '../../utils/exportSessionJson';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
+import { SHOW_BATTERY } from '../../lib/appConfig';
 
 /** Calendar day index from account createdAt. Day 1 = the start date. */
 function monitoringDayNumber(startMs: number, now = new Date()): number {
@@ -363,7 +364,7 @@ const DesktopPatientBar: React.FC<DesktopPatientBarProps> = ({
           </span>
           <span className={cn('text-[11px] font-medium tracking-wide leading-tight', patchColor)}>
             {patchLabel}
-            {patchLive && (
+            {patchLive && SHOW_BATTERY && (
               <span className="text-slate-500 font-normal">
                 {' '}
                 •{' '}

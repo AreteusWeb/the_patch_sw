@@ -11,7 +11,7 @@ import {
   PanelLeft,
 } from 'lucide-react';
 import useStore from '../../store/useStore';
-import { API_BASE } from '../../lib/appConfig';
+import { API_BASE, SHOW_VOICE_VIDEO } from '../../lib/appConfig';
 import { buildTrainingLoadSnapshot } from '../../lib/trainingLoad';
 import { cn } from '../../utils/cn';
 import { useVoiceInput } from '../../hooks/useVoiceInput';
@@ -1712,6 +1712,7 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
         </div>
       </div>
 
+      {SHOW_VOICE_VIDEO && (
       <div
         className={cn(
           'flex-shrink-0',
@@ -1749,8 +1750,9 @@ const AiCoachPanel: React.FC<AiCoachPanelProps> = ({
           </button>
         </div>
       </div>
+      )}
 
-      {interactionMode === 'live' ? (
+      {SHOW_VOICE_VIDEO && interactionMode === 'live' ? (
         <div
           className={cn(
             'flex-1 min-h-0 flex flex-col overflow-hidden',

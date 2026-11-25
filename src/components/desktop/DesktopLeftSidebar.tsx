@@ -6,6 +6,12 @@ import type { VitalStatus } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
 import {
+  SHOW_ACTIVITY_SELECTOR,
+  SHOW_BLOOD_PRESSURE,
+  SHOW_STEPS,
+  SHOW_TEMPERATURE,
+} from '../../lib/appConfig';
+import {
   buildTrendBuckets,
   formatTrendSpan,
   QUICK_VITALS_TREND_BARS,
@@ -157,12 +163,14 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ vitalsTrend }) 
           barPercent={spo2Percent}
         />
 
-        {/* No BP sensor → no trend (it used to plot the ECG waveform here). */}
-        <VitalRow
-          label="BP (PTT)"
-          status={vitals.bloodPressure}
-          sparkColor="#94a3b8"
-        />
+        {SHOW_BLOOD_PRESSURE && (
+          /* No BP sensor → no trend (it used to plot the ECG waveform here). */
+          <VitalRow
+            label="BP (PTT)"
+            status={vitals.bloodPressure}
+            sparkColor="#94a3b8"
+          />
+        )}
 
         <VitalRow
           label="Respiration"
@@ -173,24 +181,45 @@ const DesktopLeftSidebar: React.FC<DesktopLeftSidebarProps> = ({ vitalsTrend }) 
           sparkColor="#5eead4"
         />
 
-        <VitalRow
-          label="Temperature"
-          status={vitals.temperature}
-          unit="°C"
-          barPercent={typeof vitals.temperature.value === 'number'
-            ? ((vitals.temperature.value - 35) / 3) * 100
-            : 0}
-        />
+        {SHOW_TEMPERATURE && (
+          <VitalRow
+            label="Temperature"
+            status={vitals.temperature}
+            unit="°C"
+            barPercent={typeof vitals.temperature.value === 'number'
+              ? ((vitals.temperature.value - 35) / 3) * 100
+              : 0}
+          />
+        )}
 
-        <div className={cn('py-3 transition-opacity duration-300', dimmed && 'opacity-50')}>
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
-            Activity
+        {(SHOW_ACTIVITY_SELECTOR || SHOW_STEPS) && (
+          <div className={cn('py-3 transition-opacity duration-300', dimmed && 'opacity-50')}>
+            {SHOW_ACTIVITY_SELECTOR && (
+              <>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
+                  Activity
+                </div>
+                <div className="text-sm text-white font-medium">{activity.activityType}</div>
+              </>
+            )}
+            {SHOW_STEPS && (
+              SHOW_ACTIVITY_SELECTOR ? (
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  {activity.steps.toLocaleString()} steps
+                </div>
+              ) : (
+                <>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
+                    Steps
+                  </div>
+                  <div className="text-sm text-white font-medium">
+                    {activity.steps.toLocaleString()}
+                  </div>
+                </>
+              )
+            )}
           </div>
-          <div className="text-sm text-white font-medium">{activity.activityType}</div>
-          <div className="text-[10px] text-slate-500 mt-0.5">
-            {activity.steps.toLocaleString()} steps
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );

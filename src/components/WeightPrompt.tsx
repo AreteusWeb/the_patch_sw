@@ -9,13 +9,15 @@ import { cn } from '../utils/cn';
 
 interface WeightPromptProps {
   layout: 'bar' | 'stat';
+  /** Stat layout draws a right divider. Off when this cell is the last one. */
+  divider?: boolean;
 }
 
 /**
  * Calories estimate that requires a saved body weight.
  * No weight → "Enter your weight". With weight → number + edit.
  */
-const WeightPrompt: React.FC<WeightPromptProps> = ({ layout }) => {
+const WeightPrompt: React.FC<WeightPromptProps> = ({ layout, divider = true }) => {
   const bodyWeightKg = useStore(s => s.bodyWeightKg);
   const heartRate = useStore(s => s.vitals.heartRate.value);
   const steps = useStore(s => s.activity.steps);
@@ -98,7 +100,10 @@ const WeightPrompt: React.FC<WeightPromptProps> = ({ layout }) => {
           )}
         </span>
       ) : (
-        <div className="flex flex-col items-center border-r border-slate-900 min-w-0 px-1">
+        <div className={cn(
+          'flex flex-col items-center min-w-0 px-1',
+          divider && 'border-r border-slate-900'
+        )}>
           {bodyWeightKg == null || calories == null ? (
             <button
               type="button"

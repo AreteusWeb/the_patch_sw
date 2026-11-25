@@ -4,7 +4,14 @@ import useStore from '../../store/useStore';
 import EcgPaperControls from './EcgPaperControls';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
 import MultiChannelSweepCanvas from './MultiChannelSweepCanvas';
-import { resolveWaveformMode, type WaveformDrawMode } from '../../lib/appConfig';
+import {
+  resolveWaveformMode,
+  SHOW_ACTIVITY_SELECTOR,
+  SHOW_BLOOD_PRESSURE,
+  SHOW_STEPS,
+  SHOW_TEMPERATURE,
+  type WaveformDrawMode,
+} from '../../lib/appConfig';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import { cn } from '../../utils/cn';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
@@ -118,18 +125,41 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, buff
           </div>
 
           {/* Non-waveform sensors — numeric only until hardware sends traces */}
-          <div className="mt-2 flex-shrink-0 grid grid-cols-3 gap-2 text-[10px]">
-            {/* The patch has no BP sensor, so "pending" would imply data is coming. */}
-            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
-              BP Trend <span className="text-slate-600">— no sensor</span>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
-              Temp <span className="text-slate-300 tabular-nums">{tempDisplay}</span>
-            </div>
-            <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
-              Activity <span className="text-slate-300">{activity.activityType} - {activity.steps.toLocaleString()} steps</span>
-            </div>
+          {(SHOW_BLOOD_PRESSURE || SHOW_TEMPERATURE || SHOW_ACTIVITY_SELECTOR || SHOW_STEPS) && (
+          <div className={cn(
+            'mt-2 flex-shrink-0 grid gap-2 text-[10px]',
+            [SHOW_BLOOD_PRESSURE, SHOW_TEMPERATURE, SHOW_ACTIVITY_SELECTOR || SHOW_STEPS]
+              .filter(Boolean).length === 3
+              ? 'grid-cols-3'
+              : [SHOW_BLOOD_PRESSURE, SHOW_TEMPERATURE, SHOW_ACTIVITY_SELECTOR || SHOW_STEPS]
+                .filter(Boolean).length === 2
+                ? 'grid-cols-2'
+                : 'grid-cols-1'
+          )}>
+            {SHOW_BLOOD_PRESSURE && (
+              /* The patch has no BP sensor, so "pending" would imply data is coming. */
+              <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+                BP Trend <span className="text-slate-600">— no sensor</span>
+              </div>
+            )}
+            {SHOW_TEMPERATURE && (
+              <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+                Temp <span className="text-slate-300 tabular-nums">{tempDisplay}</span>
+              </div>
+            )}
+            {(SHOW_ACTIVITY_SELECTOR || SHOW_STEPS) && (
+              <div className="px-2 py-1.5 rounded-lg border border-slate-800/80 bg-slate-950/40 text-slate-500">
+                {SHOW_ACTIVITY_SELECTOR && (
+                  <>Activity <span className="text-slate-300">{activity.activityType}</span></>
+                )}
+                {SHOW_ACTIVITY_SELECTOR && SHOW_STEPS && ' · '}
+                {SHOW_STEPS && (
+                  <span className="text-slate-300">{activity.steps.toLocaleString()} steps</span>
+                )}
+              </div>
+            )}
           </div>
+          )}
         </section>
       </div>
 

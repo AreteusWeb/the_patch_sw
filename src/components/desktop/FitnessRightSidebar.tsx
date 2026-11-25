@@ -9,6 +9,7 @@ import {
 } from '../../lib/trainingLoad';
 import type { CoachInsightsState } from '../../hooks/useCoachInsights';
 import type { Vitals } from '../../types';
+import { SHOW_TEMPERATURE } from '../../lib/appConfig';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import { TREND_MIN_RANGE, type VitalsTrend } from '../../lib/vitalsTrend';
 import SidebarPanelHeader from './SidebarPanelHeader';
@@ -46,7 +47,11 @@ function buildPerformanceNotes(vitals: Vitals, hasRealData: boolean): string[] {
     notes.push('Elevated breathing rate — focus on controlled exhales');
   }
 
-  if (vitals.temperature.trend === 'up' && typeof vitals.temperature.value === 'number') {
+  if (
+    SHOW_TEMPERATURE &&
+    vitals.temperature.trend === 'up' &&
+    typeof vitals.temperature.value === 'number'
+  ) {
     notes.push('Skin temp trending up — hydrate and monitor');
   }
 

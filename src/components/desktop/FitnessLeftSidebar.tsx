@@ -7,6 +7,7 @@ import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import type { VitalStatus } from '../../types';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
+import { SHOW_BLOOD_PRESSURE } from '../../lib/appConfig';
 
 const TrendIcon: React.FC<{ trend: VitalStatus['trend'] }> = ({ trend }) => {
   if (trend === 'up') return <ArrowUp size={10} className="text-amber-400" />;
@@ -147,17 +148,19 @@ const FitnessLeftSidebar: React.FC<FitnessLeftSidebarProps> = ({ waveforms }) =>
           )}
         </div>
 
-        <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
-          <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
-            BP (PTT)
+        {SHOW_BLOOD_PRESSURE && (
+          <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">
+              BP (PTT)
+            </div>
+            <div className={cn(
+              'text-2xl font-light tabular-nums',
+              showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
+            )}>
+              {showDash ? '--' : vitals.bloodPressure.value}
+            </div>
           </div>
-          <div className={cn(
-            'text-2xl font-light tabular-nums',
-            showDash ? 'text-slate-600' : dimmed ? 'text-slate-400' : 'text-white'
-          )}>
-            {showDash ? '--' : vitals.bloodPressure.value}
-          </div>
-        </div>
+        )}
 
         <div className={cn('py-3 border-b border-slate-800/60 transition-opacity duration-300', dimmed && 'opacity-50')}>
           <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1.5">

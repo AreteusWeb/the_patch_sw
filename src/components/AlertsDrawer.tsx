@@ -7,6 +7,7 @@ import { db } from '../lib/firebase';
 import useStore from '../store/useStore';
 import type { ChestEvent } from '../store/useStore';
 import { cn } from '../utils/cn';
+import { SHOW_BLOOD_PRESSURE, SHOW_TEMPERATURE } from '../lib/appConfig';
 
 const EN_LOCALE = 'en-US';
 
@@ -91,9 +92,9 @@ const VitalsRow: React.FC<{ vitals?: VitalsSnap }> = ({ vitals }) => {
   const items = [
     { icon: <Activity size={10} />,    value: vitals.hr   ? `${vitals.hr} BPM` : null },
     { icon: <Droplets size={10} />,    value: vitals.spo2 ? `${vitals.spo2}%`  : null },
-    { icon: <Thermometer size={10} />, value: vitals.temp ? `${vitals.temp}°C` : null },
+    { icon: <Thermometer size={10} />, value: SHOW_TEMPERATURE && vitals.temp ? `${vitals.temp}°C` : null },
     { icon: <Wind size={10} />,        value: vitals.rr   ? `${vitals.rr} rpm` : null },
-    { icon: <Heart size={10} />,       value: vitals.bp   ?? null },
+    { icon: <Heart size={10} />,       value: SHOW_BLOOD_PRESSURE ? (vitals.bp ?? null) : null },
   ].filter(i => i.value !== null);
   if (items.length === 0) return null;
   return (

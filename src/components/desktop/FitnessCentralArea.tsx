@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useStore from '../../store/useStore';
 import MultiChannelWaveformCanvas from './MultiChannelWaveformCanvas';
 import MultiChannelSweepCanvas from './MultiChannelSweepCanvas';
-import { resolveWaveformMode, type WaveformDrawMode } from '../../lib/appConfig';
+import { resolveWaveformMode, SHOW_ECG_CONTROLS, type WaveformDrawMode } from '../../lib/appConfig';
 import { DESKTOP_WAVEFORM_CHANNELS } from './desktopWaveformChannels';
 import EcgPaperControls from './EcgPaperControls';
 import { formatSessionClock, getHrZone } from '../../utils/fitnessMetrics';
@@ -99,7 +99,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms, mode
                 </span>
               </div>
             </div>
-            <EcgPaperControls compact />
+            {SHOW_ECG_CONTROLS && <EcgPaperControls compact />}
           </div>
           <div
             className={cn(

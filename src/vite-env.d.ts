@@ -9,4 +9,5 @@ interface ImportMetaEnv {
   readonly VITE_SHOW_BLOOD_PRESSURE?: string;
   readonly VITE_SHOW_STEPS?: string;
   readonly VITE_SHOW_BATTERY?: string;
+  readonly VITE_SHOW_ECG_CONTROLS?: string;
 }

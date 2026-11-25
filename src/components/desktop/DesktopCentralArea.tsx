@@ -8,6 +8,7 @@ import {
   resolveWaveformMode,
   SHOW_ACTIVITY_SELECTOR,
   SHOW_BLOOD_PRESSURE,
+  SHOW_ECG_CONTROLS,
   SHOW_STEPS,
   SHOW_TEMPERATURE,
   type WaveformDrawMode,
@@ -95,7 +96,7 @@ const DesktopCentralArea: React.FC<DesktopCentralAreaProps> = ({ waveforms, buff
                 compact
               />
             </div>
-            <EcgPaperControls />
+            {SHOW_ECG_CONTROLS && <EcgPaperControls />}
           </div>
 
           <div className={cn(

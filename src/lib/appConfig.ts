@@ -61,6 +61,8 @@ export const SHOW_STEPS =
   import.meta.env.VITE_SHOW_STEPS === 'true';
 export const SHOW_BATTERY =
   import.meta.env.VITE_SHOW_BATTERY === 'true';
+export const SHOW_ECG_CONTROLS =
+  import.meta.env.VITE_SHOW_ECG_CONTROLS === 'true';
 
 // Hospital-style sweep trace (cursor moves left → right; the strip does not
 // scroll). Off unless explicitly enabled — live charts keep the current

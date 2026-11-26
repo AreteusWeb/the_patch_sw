@@ -12,6 +12,7 @@ import { useFitnessSessionElapsed } from '../../hooks/useFitnessSessionElapsed';
 import { cn } from '../../utils/cn';
 import { useDataFreshness } from '../../hooks/useDataFreshness';
 import DataFreshnessBadge from '../DataFreshnessBadge';
+import MockSignalButton from '../MockSignalButton';
 
 const MAX_HISTORY_SECONDS = 3600;
 
@@ -246,6 +247,7 @@ const FitnessCentralArea: React.FC<FitnessCentralAreaProps> = ({ waveforms, mode
       {/* Waveform history scrubber */}
       <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-950/60 px-4 py-3">
         <div className="flex items-center gap-3">
+          <MockSignalButton className="h-8 xl:h-8" />
           <button
             onClick={() => handleSeek('back', 60)}
             className="p-1.5 rounded border border-slate-800 hover:bg-slate-800/50 transition-colors"

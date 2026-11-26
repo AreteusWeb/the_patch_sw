@@ -2,6 +2,7 @@ import React from 'react';
 import { MoreVertical } from 'lucide-react';
 import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
+import MockSignalButton from './MockSignalButton';
 
 interface HeaderProps {
   /** Mobile: open/close AI Coach pane (same control as desktop patient bar). */
@@ -57,6 +58,7 @@ const Header: React.FC<HeaderProps> = ({ coachOpen = false, onToggleCoach }) => 
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        <MockSignalButton />
         {onToggleCoach && (
           <button
             type="button"

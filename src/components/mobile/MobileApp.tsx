@@ -18,6 +18,7 @@ import AiCoachPanel from '../desktop/AiCoachPanel';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useTrainingLoadSync } from '../../hooks/useTrainingLoadSync';
 import useStore from '../../store/useStore';
+import { stopMockPatchSignal } from '../../lib/mockPatchSignal';
 
 /** Soft keyboard usually shrinks the visual viewport by more than this. */
 const KEYBOARD_OPEN_PX = 120;
@@ -42,6 +43,7 @@ export default function MobileApp() {
   useTrainingLoadSync();
   const [coachOpen, setCoachOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => () => stopMockPatchSignal(), []);
 
   // Pin the shell to the visual viewport (iOS offsetTop + Android keyboard).
   useEffect(() => {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -22,6 +22,7 @@ import FitnessLeftSidebar from './FitnessLeftSidebar';
 import FitnessCentralArea from './FitnessCentralArea';
 import FitnessRightSidebar from './FitnessRightSidebar';
 import AiCoachPanel from './AiCoachPanel';
+import { stopMockPatchSignal } from '../../lib/mockPatchSignal';
 
 /**
  * DesktopApp Component.
@@ -39,6 +40,7 @@ export default function DesktopApp() {
   const desktopLayout = useStore(s => s.desktopLayout);
   const isFitness = desktopLayout === 'fitness';
   const [coachOpen, setCoachOpen] = useState(false);
+  useEffect(() => () => stopMockPatchSignal(), []);
 
   const mainContent = isFitness ? (
     <>

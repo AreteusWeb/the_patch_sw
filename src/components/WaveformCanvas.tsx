@@ -39,6 +39,8 @@ interface WaveformCanvasProps {
   sampleRateHz?: number;
   /** STALE / DEMO / NO_DATA — draw slate grey trace + hatch. */
   frozen?: boolean;
+  /** Track the parent height. `height` is only a fallback before layout. */
+  fill?: boolean;
 }
 
 interface MeasureState {
@@ -69,6 +71,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   measureEnabled = false,
   sampleRateHz = ECG_SAMPLE_RATE_HZ,
   frozen = false,
+  fill = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -86,8 +89,10 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+    const wrapRect = wrapRef.current?.getBoundingClientRect();
     const displayWidth = Math.max(1, Math.floor(rect.width));
-    const displayHeight = Math.max(1, Math.floor(height));
+    const measured = fill ? Math.floor(wrapRect?.height ?? 0) : 0;
+    const displayHeight = Math.max(1, measured || Math.floor(height));
 
     if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
       canvas.width = displayWidth * dpr;
@@ -309,7 +314,7 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   }, [
     data, color, lineWidth, height, min, max, label, gridLines, autoScale,
     paperGrid, paperSpeed, gain, showCalibration, measureEnabled, measure, usePaper,
-    frozen,
+    frozen, fill,
   ]);
 
   useEffect(() => {
@@ -351,13 +356,16 @@ const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
   return (
     <div
       ref={wrapRef}
-      className="relative w-full overflow-hidden"
-      style={{ height, cursor: measureEnabled && usePaper ? 'crosshair' : undefined }}
+      className={fill ? 'relative w-full h-full min-h-0 flex-1 overflow-hidden' : 'relative w-full overflow-hidden'}
+      style={{
+        height: fill ? '100%' : height,
+        cursor: measureEnabled && usePaper ? 'crosshair' : undefined,
+      }}
     >
       <canvas
         ref={canvasRef}
         className="w-full block touch-none"
-        style={{ height }}
+        style={{ height: fill ? '100%' : height }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

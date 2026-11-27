@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Activity } from 'lucide-react';
 import useStore from '../store/useStore';
 import { cn } from '../utils/cn';
 import {
@@ -14,7 +15,10 @@ import {
  * device is The Patch Mock (AA:BB:CC:DD:EE:FF). Opening that device does
  * not start the stream.
  */
-const MockSignalButton: React.FC<{ className?: string }> = ({ className }) => {
+const MockSignalButton: React.FC<{ className?: string; compact?: boolean }> = ({
+  className,
+  compact = false,
+}) => {
   const deviceMac = useStore((s) => s.deviceMac);
   const visible = isMockPatchMac(deviceMac);
   const [running, setRunning] = useState(isMockSignalRunning);
@@ -32,20 +36,23 @@ const MockSignalButton: React.FC<{ className?: string }> = ({ className }) => {
       type="button"
       onClick={() => (running ? stopMockPatchSignal() : startMockPatchSignal())}
       aria-pressed={running}
-      title={
-        running
-          ? 'Stop the simulated Patch signal'
-          : 'Send simulated ECG from The Patch Mock'
-      }
+      aria-label={running ? 'Stop mock data' : 'Start mock data'}
+      title={running ? 'Stop mock data' : 'Start mock data'}
       className={cn(
-        'flex items-center justify-center whitespace-nowrap h-7 xl:h-10 px-2 xl:px-3.5 rounded-lg border text-[10px] xl:text-[11px] font-bold uppercase tracking-wider transition-colors',
+        'flex items-center justify-center whitespace-nowrap rounded-lg border font-bold uppercase tracking-wider transition-colors',
+        compact
+          ? 'h-7 gap-1 px-1.5 text-[10px]'
+          : 'h-7 xl:h-10 px-2 xl:px-3.5 text-[10px] xl:text-[11px]',
         running
           ? 'border-rose-500/40 bg-rose-500/15 text-rose-300 hover:text-rose-200'
           : 'border-teal-500/40 bg-teal-500/15 text-teal-300 hover:text-teal-200',
         className
       )}
     >
-      {running ? 'Stop mock data' : 'Start mock data'}
+      {compact && <Activity size={12} />}
+      {compact
+        ? (running ? 'Stop' : 'Mock')
+        : (running ? 'Stop mock data' : 'Start mock data')}
     </button>
   );
 };

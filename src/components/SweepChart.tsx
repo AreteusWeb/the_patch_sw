@@ -25,6 +25,8 @@ export interface SweepChartProps {
   windowMs?: number;
   /** Blank band in front of the cursor, fraction of the width. Default 0.04. */
   gapFraction?: number;
+  /** Track the parent height. `height` is only a fallback before layout. */
+  fill?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ const SweepChart: React.FC<SweepChartProps> = React.memo(function SweepChart({
   theme = 'dark',
   windowMs = SWEEP_WINDOW_MS,
   gapFraction = SWEEP_GAP_FRACTION,
+  fill = false,
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -83,8 +86,9 @@ const SweepChart: React.FC<SweepChartProps> = React.memo(function SweepChart({
   cfg.frozen = frozen;
   cfg.theme = resolvedTheme;
   cfg.grid = grid;
+  cfg.fill = fill;
   cfg.height = height;
-  cfg.minHeight = height;
+  cfg.minHeight = fill ? 1 : height;
 
   useSweepPaint(canvasRef, wrapRef, cfgRef);
 
@@ -93,13 +97,13 @@ const SweepChart: React.FC<SweepChartProps> = React.memo(function SweepChart({
   return (
     <div
       ref={wrapRef}
-      className="relative w-full overflow-hidden"
-      style={{ height, background }}
+      className={fill ? 'relative w-full h-full min-h-0 flex-1 overflow-hidden' : 'relative w-full overflow-hidden'}
+      style={fill ? { background } : { height, background }}
     >
       <canvas
         ref={canvasRef}
         className="w-full block touch-none"
-        style={{ height }}
+        style={{ height: fill ? '100%' : height }}
         role="img"
         aria-label={label ? `${label} sweep waveform` : 'Sweep waveform'}
       />

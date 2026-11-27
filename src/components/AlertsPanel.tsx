@@ -48,7 +48,7 @@ const AlertsPanel: React.FC = () => {
   const alerts = useStore((s) => s.alerts);
 
   return (
-    <div className="flex flex-col w-full px-6 py-3 flex-shrink-0">
+    <div className="flex flex-col w-full px-6 pt-1 pb-2 flex-shrink-0">
       <h3 className="text-[10px] font-semibold text-slate-500 uppercase tracking-[0.2em] mb-2">
         Recent Alerts
       </h3>

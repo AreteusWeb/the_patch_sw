@@ -120,20 +120,24 @@ export default function MobileApp() {
           </motion.div>
         ) : (
           <>
-            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain scrollbar-hide bg-black">
+            <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-black">
               {viewMode === 'Normal' ? (
-                <div className="flex flex-col animate-in fade-in duration-500 pb-3">
+                <div className="flex flex-col">
                   <VitalsDisplay />
                   <ActivityStats />
-                  <AlertsPanel />
                   <WaveformContainer waveforms={waveforms} />
+                  <AlertsPanel />
                 </div>
               ) : (
-                <div className="flex flex-col animate-in fade-in duration-500 pb-3">
-                  <VitalsDisplay compact />
+                <>
+                  <div className="flex h-full min-h-0 flex-col">
+                    <VitalsDisplay compact />
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <WaveformContainer waveforms={waveforms} />
+                    </div>
+                  </div>
                   <AdvancedControls />
-                  <WaveformContainer waveforms={waveforms} />
-                </div>
+                </>
               )}
             </main>
             <div className="flex-shrink-0 bg-black z-20">

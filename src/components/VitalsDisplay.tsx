@@ -270,8 +270,7 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
 
       {/* Top Row: SpO2 + Blood Pressure */}
       <div className={cn(
-        "flex w-full mb-1 transition-all duration-300",
-        SHOW_BLOOD_PRESSURE ? "justify-between" : "justify-start",
+        "flex w-full justify-between mb-1 transition-all duration-300",
         compact ? "px-12" : "px-8"
       )}>
         <VitalCard
@@ -285,18 +284,16 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
           onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['spo2_drop']) : undefined}
           goLiveSignal={goLiveSignal}
         />
-        {SHOW_BLOOD_PRESSURE && (
-          <VitalCard
-            label="Blood Pressure"
-            status={displayVitals.bloodPressure}
-            size={compact ? 'sm' : 'normal'}
-            frozen={isPastScrub}
-            disconnected={!isLiveData}
-            hasData={hasData}
-            onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['hypertension', 'hypotension']) : undefined}
-            goLiveSignal={goLiveSignal}
-          />
-        )}
+        <VitalCard
+          label="Blood Pressure"
+          status={displayVitals.bloodPressure}
+          size={compact ? 'sm' : 'normal'}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={SHOW_BLOOD_PRESSURE && hasData}
+          onAlertTap={SHOW_BLOOD_PRESSURE && isAdvanced && isLiveData ? () => handleAlertTap(['hypertension', 'hypotension']) : undefined}
+          goLiveSignal={goLiveSignal}
+        />
       </div>
 
       {/* Centro: BPM */}
@@ -316,23 +313,20 @@ const VitalsDisplay: React.FC<VitalsDisplayProps> = ({ compact }) => {
 
       {/* Bottom Row: Temp + Resp */}
       <div className={cn(
-        "flex w-full transition-all duration-300",
-        SHOW_TEMPERATURE ? "justify-between" : "justify-end",
+        "flex w-full justify-between transition-all duration-300",
         compact ? "px-12" : "px-8"
       )}>
-        {SHOW_TEMPERATURE && (
-          <VitalCard
-            label="Temperature"
-            status={displayVitals.temperature}
-            color={!isPastScrub && displayVitals.temperature.severity !== 'normal' ? "text-rose-400" : "text-white"}
-            size={compact ? 'sm' : 'normal'}
-            frozen={isPastScrub}
-            disconnected={!isLiveData}
-            hasData={hasData}
-            onAlertTap={isAdvanced && isLiveData ? () => handleAlertTap(['hyperthermia', 'hypothermia']) : undefined}
-            goLiveSignal={goLiveSignal}
-          />
-        )}
+        <VitalCard
+          label="Temperature"
+          status={displayVitals.temperature}
+          color={!isPastScrub && displayVitals.temperature.severity !== 'normal' ? "text-rose-400" : "text-white"}
+          size={compact ? 'sm' : 'normal'}
+          frozen={isPastScrub}
+          disconnected={!isLiveData}
+          hasData={SHOW_TEMPERATURE && hasData}
+          onAlertTap={SHOW_TEMPERATURE && isAdvanced && isLiveData ? () => handleAlertTap(['hyperthermia', 'hypothermia']) : undefined}
+          goLiveSignal={goLiveSignal}
+        />
         <VitalCard
           label="Respiratory Rate"
           status={displayVitals.respirationRate}

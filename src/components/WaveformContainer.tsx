@@ -53,6 +53,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
     color: string,
     lineWidth: number,
     gridLines: boolean,
+    fill = false,
   ) => sweepLive ? (
     <SweepChart
       channel={channel}
@@ -63,6 +64,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
       lineWidth={lineWidth}
       grid={gridLines}
       frozen={frozen}
+      fill={fill}
     />
   ) : (
     <WaveformCanvas
@@ -74,6 +76,7 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
       lineWidth={lineWidth}
       gridLines={gridLines}
       frozen={frozen}
+      fill={fill}
     />
   );
 
@@ -93,8 +96,8 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
   if (viewMode === 'Normal') {
     const wIdx = waveformIndexForLead(selectedLeadIndex);
     return (
-      <div className="flex flex-col p-4 pt-0 bg-transparent flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col bg-transparent">
+        <div className="flex items-center justify-between mb-2 px-4 pt-1 flex-shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-white">ECG Monitoring</span>
             <div className="relative group">
@@ -125,15 +128,17 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
             {isEcgExpanded ? '< Collapse' : 'Expand >'}
           </button>
         </div>
-        <div className={cn(
-          "relative bg-slate-950/40 rounded-xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-300",
-          dimmed && "opacity-50",
-          isEcgExpanded ? "h-[500px]" : "h-24"
-        )}>
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-            style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}
-          />
-          {renderWave(wIdx, isEcgExpanded ? 500 : 96, liveColor, isEcgExpanded ? 2.5 : 1.5, isEcgExpanded)}
+        <div className="px-4 pb-1">
+          <div className={cn(
+            "relative bg-slate-950/40 rounded-xl overflow-hidden border border-white/5 shadow-2xl transition-all duration-300",
+            dimmed && "opacity-50",
+            isEcgExpanded ? "h-[500px]" : "h-24"
+          )}>
+            <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+              style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '15px 15px' }}
+            />
+            {renderWave(wIdx, isEcgExpanded ? 500 : 96, liveColor, isEcgExpanded ? 2.5 : 1.5, isEcgExpanded)}
+          </div>
         </div>
       </div>
     );
@@ -142,8 +147,8 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
   const singleLeadWIdx = waveformIndexForLead(selectedLeadIndex);
 
   return (
-    <div className="flex flex-col p-2 pt-0.5 gap-1 bg-black flex-shrink-0">
-      <div className="flex items-center justify-between px-1">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-1 bg-black">
+      <div className="flex items-center justify-between px-2 pt-0.5 flex-shrink-0">
         <div className="flex items-center gap-4 text-[9px] font-bold uppercase tracking-[0.2em]">
           <button
             onClick={() => setAdvancedEcgMode('Single')}
@@ -182,23 +187,19 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
         )}
       </div>
 
-      {/* Multi-lead or Single-lead ECG */}
-      <div className={cn('flex flex-col gap-0.5 min-h-0 transition-opacity duration-300', dimmed && 'opacity-50')}>
+      <div className={cn('flex flex-1 min-h-0 flex-col gap-0.5 overflow-hidden px-2 pb-1', dimmed && 'opacity-50')}>
         {advancedEcgMode === 'All' ? (
           leads.map((label, i) => {
             const wIdx = waveformIndexForLead(i);
             return (
-              <div key={label} className="relative bg-slate-900/10 rounded-sm border-b border-slate-900/10">
+              <div key={label} className="relative flex min-h-0 flex-col bg-slate-900/10 rounded-sm border-b border-slate-900/10" style={{ flex: '28 1 0%' }}>
                 <div className="absolute left-1 top-0.5 z-10 text-[7px] font-bold text-slate-600 uppercase">{label}</div>
-                {renderWave(wIdx, 28, liveColor, 1, false)}
+                {renderWave(wIdx, 28, liveColor, 1, false, true)}
               </div>
             );
           })
         ) : (
-          <div className={cn(
-            "relative bg-slate-950/60 rounded-lg border border-slate-800 transition-all duration-300",
-            isEcgExpanded ? "h-[300px]" : "h-36"
-          )}>
+          <div className="relative flex min-h-0 flex-col bg-slate-950/60 rounded-lg border border-slate-800" style={{ flex: isEcgExpanded ? '300 1 0%' : '144 1 0%' }}>
             <div className="absolute left-2 top-2 z-10 flex items-center gap-2">
               <span className="text-[10px] font-bold text-slate-300 uppercase">{leads[selectedLeadIndex]}</span>
             </div>
@@ -208,48 +209,35 @@ const WaveformContainer: React.FC<WaveformContainerProps> = ({ waveforms, mode }
             >
               {isEcgExpanded ? '< COLLAPSE' : 'EXPAND >'}
             </button>
-            {renderWave(singleLeadWIdx, isEcgExpanded ? 300 : 144, liveColor, 2, true)}
+            {renderWave(singleLeadWIdx, isEcgExpanded ? 300 : 144, liveColor, 2, true, true)}
           </div>
         )}
-      </div>
 
-      {/* Respiration - Much Narrower */}
-      <div className={cn('flex flex-col mt-0.5 transition-opacity duration-300', dimmed && 'opacity-50')}>
-        <div className="flex items-center justify-between px-1 mb-0.5">
-          <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">Resp Tracking</h4>
+        <div className="relative flex min-h-0 flex-col bg-slate-950/40 rounded border border-white/5" style={{ flex: '32 1 0%' }}>
+          <h4 className="absolute left-1 top-0.5 z-10 text-[8px] font-medium text-white uppercase tracking-widest">Resp Tracking</h4>
+          {renderWave(RESP_WAVEFORM_INDEX, 32, liveRespColor, 1, false, true)}
         </div>
-        <div className="bg-slate-950/40 rounded border border-white/5 h-8">
-          {renderWave(RESP_WAVEFORM_INDEX, 32, liveRespColor, 1, false)}
+
+        <div className="relative flex min-h-0 flex-col bg-slate-950/40 rounded border border-white/5" style={{ flex: '40 1 0%' }}>
+          <h4 className="absolute left-1 top-0.5 z-10 text-[8px] font-medium text-white uppercase tracking-widest">SpO2 Tracking</h4>
+          {sweepLive ? (
+            renderWave(PPG_WAVEFORM_INDEX, 40, '#5eead4', 1.25, false, true)
+          ) : (
+            <div className="flex h-full min-h-0 items-end gap-[0.5px] px-1 pb-1 overflow-hidden">
+              {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'w-[2px] rounded-t-[1px] flex-shrink-0',
+                    frozen ? 'bg-slate-500/35' : 'bg-teal-500/20'
+                  )}
+                  style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* SpO2 Graph - Refined */}
-      <div className={cn('flex flex-col mt-0.5 transition-opacity duration-300', dimmed && 'opacity-50')}>
-        <div className="flex items-center justify-between px-1 mb-0.5">
-          <h4 className="text-[8px] font-medium text-white uppercase tracking-widest">SpO2 Tracking</h4>
-        </div>
-        {sweepLive ? (
-          <div className="h-10 overflow-hidden bg-slate-950/40 rounded border border-white/5">
-            {renderWave(PPG_WAVEFORM_INDEX, 40, '#5eead4', 1.25, false)}
-          </div>
-        ) : (
-          <div className="flex items-end gap-[0.5px] h-10 px-1 pb-1 overflow-hidden bg-slate-950/40 rounded border border-white/5">
-            {waveforms[PPG_WAVEFORM_INDEX].slice(-180).map((val, i) => (
-              <div
-                key={i}
-                className={cn(
-                  'w-[2px] rounded-t-[1px] flex-shrink-0',
-                  frozen ? 'bg-slate-500/35' : 'bg-teal-500/20'
-                )}
-                style={{ height: `${Math.max(3, Math.min(100, (val / CH_RANGES[PPG_WAVEFORM_INDEX][1]) * 100))}%` }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-
-
     </div>
   );
 };

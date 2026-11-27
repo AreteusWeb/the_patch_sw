@@ -41,11 +41,11 @@ const Header: React.FC<HeaderProps> = ({ coachOpen = false, onToggleCoach }) => 
   return (
     <header className="flex justify-between items-center gap-2 px-4 py-3 bg-black relative z-50">
       <div className="flex items-center gap-1 min-w-0 flex-1 text-[10px] font-medium text-slate-300 uppercase tracking-tighter">
-        <span className="truncate flex-shrink-0 text-slate-200">{displayName}</span>
+        <span className="truncate min-w-0 text-slate-200">{displayName}</span>
         <span className="flex-shrink-0 text-slate-600">•</span>
         <span
           className={cn(
-            'truncate',
+            'truncate min-w-0',
             !isConnected
               ? 'text-rose-400'
               : connectionStatus === 'Connecting'
@@ -58,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ coachOpen = false, onToggleCoach }) => 
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        <MockSignalButton />
+        <MockSignalButton compact />
         {onToggleCoach && (
           <button
             type="button"

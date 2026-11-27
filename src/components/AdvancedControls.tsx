@@ -62,7 +62,7 @@ const AdvancedControls: React.FC = () => {
     : Object.keys(EVENT_TYPE_MAP)[filterIndex - 1];
 
   return (
-    <div className="flex flex-col gap-1.5 px-3 py-1.5 bg-black">
+    <div className="flex flex-col gap-1.5 px-3 py-1.5 bg-black flex-shrink-0">
       {/* Ranges + event filters (timeline scrubber lives in MobileLiveBar) */}
       <div className="flex flex-col gap-1.5 p-1.5 bg-slate-900/30 border border-slate-800/50 rounded-xl">
         <div className="flex gap-1 justify-center">
